@@ -330,6 +330,43 @@ food-diary-v2/
 - [ ] V3: автоматический подсчёт КБЖУ (FatSecret / USDA API)
 - [ ] V4: статистика и графики по неделям/месяцам
 
+## Changelog
+
+### [1.2.0] — 2026-06-26
+**feat: отвязка от Telegram-бота, добавление авторизации и зашифрованных секретов**
+- Удалён сервис `bot` (Python/aiogram) из Docker Compose — теперь один сервис `api`
+- Добавлена таблица `users`: username, email, `passwordHash` (bcryptjs, cost 12)
+- Добавлена таблица `secrets`: зашифрованное хранилище ключ-значение на пользователя (AES-256-GCM)
+- Аутентификация через JWT в httpOnly cookie (срок 7 дней, sameSite: lax)
+- Новые эндпоинты: `POST /api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me`
+- Новые эндпоинты: `GET/PUT/DELETE /api/secrets/:name`
+- Middleware `requireAuth` — все маршруты `/api/*` защищены
+- Новая страница фронтенда `AuthPage.tsx` — вкладки входа и регистрации (shadcn/ui)
+- Контекст `AuthProvider` + хук `useAuth` в `client/src/lib/auth.tsx`
+- Кнопка выхода и отображение имени пользователя в шапке `DiaryPage`
+- Обновлён `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN`, `ENCRYPTION_KEY` (без `TELEGRAM_BOT_TOKEN`)
+- `preflight-check.sh` секция 11: валидация Telegram-токена заменена проверкой API health (`GET /api/auth/me`)
+
+### [1.1.0] — 2026-06-25
+**feat: скрипт проверки готовности сервера preflight-check.sh**
+- 11 разделов: ОС, RAM, диск, интернет, Docker, порты, firewall, переменные окружения, образы, синтаксис compose, токен
+- Цветной вывод с box-drawing символами, ✔/✘/⚠
+- Панель SUMMARY с блокерами и цветным вердиктом (зелёный/жёлтый/красный)
+- Режим `--fix`: автоустановка Docker, открытие портов, создание `.env` из шаблона
+- Проверка интернета через `https://hub.docker.com/`
+
+### [1.0.0] — 2026-06-25
+**feat: начальный MVP**
+- Фронтенд: React 18 + Vite + Tailwind CSS v3 + shadcn/ui
+- Бэкенд: Express + TypeScript + Drizzle ORM + SQLite
+- Ввод приёмов пищи: еда, напитки, шкала голода/насыщения (0–10), тип приёма, контекст
+- Навигация по датам (даты в будущем недоступны)
+- Диалог итогов дня: подъём, отбой, спорт, шаги, комментарий
+- Генератор Excel-отчётов (exceljs) — формат врача, 7 колонок, легенда шкалы голода, автоитоги
+- Docker Compose: сервисы `api` (Node.js) + `bot` (Python/aiogram 3)
+- Часовой пояс МСК (UTC+3) — граница дня 00:00–23:59 MSK
+- Двуязычный README (RU/EN) с диаграммой архитектуры и полным гайдом по установке
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
@@ -623,6 +660,43 @@ food-diary-v2/
 - [ ] V2: photo recognition via GigaChat Vision (Sber)
 - [ ] V3: automatic KBJU calculation (FatSecret / USDA API)
 - [ ] V4: weekly/monthly statistics and charts
+
+## Changelog
+
+### [1.2.0] — 2026-06-26
+**feat: remove Telegram bot, add authentication and encrypted secrets**
+- Removed Telegram bot (`bot/` service) from Docker Compose — now single `api` service
+- Added `users` table: username, email, `passwordHash` (bcryptjs cost 12)
+- Added `secrets` table: per-user encrypted key-value storage (AES-256-GCM)
+- Added JWT authentication via httpOnly cookie (7-day expiry, sameSite: lax)
+- New endpoints: `POST /api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me`
+- New endpoints: `GET/PUT/DELETE /api/secrets/:name`
+- `requireAuth` middleware — all `/api/*` routes are now protected
+- New frontend page: `AuthPage.tsx` — login + register tabs (shadcn/ui)
+- `AuthProvider` context + `useAuth` hook in `client/src/lib/auth.tsx`
+- Logout button and username display in `DiaryPage` header
+- Updated `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN`, `ENCRYPTION_KEY` (no `TELEGRAM_BOT_TOKEN`)
+- `preflight-check.sh` section 11: replaced Telegram token validation with API health check (`GET /api/auth/me`)
+
+### [1.1.0] — 2026-06-25
+**feat: preflight-check.sh — server readiness script**
+- 11-section bash script: OS, RAM, disk, internet, Docker, ports, firewall, env vars, Docker images, compose syntax, Telegram token
+- Color output with box-drawing characters, ✔/✘/⚠ symbols
+- SUMMARY panel with blockers list and colored verdict (green/yellow/red)
+- `--fix` mode: auto-installs Docker, opens firewall ports, creates `.env` from template
+- Internet check via `https://hub.docker.com/`
+
+### [1.0.0] — 2026-06-25
+**feat: initial MVP**
+- React 18 + Vite + Tailwind CSS v3 + shadcn/ui frontend
+- Express + TypeScript + Drizzle ORM + SQLite backend
+- Meal logging: food, drink, hunger/satiety scale (0–10), meal type, context
+- Date navigation (no future dates)
+- Day summary dialog: wake time, bedtime, sport, steps, comment
+- Excel report generator (exceljs) — doctor format, 7 columns, hunger scale legend, auto-totals
+- Docker Compose: `api` (Node.js) + `bot` (Python/aiogram 3) services
+- MSK timezone (UTC+3) — day boundary at 00:00–23:59 MSK
+- Bilingual README (RU/EN) with architecture diagram and full install guide
 
 ## License
 
