@@ -70,7 +70,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
     { key: "E", width: 30 },  // E: что пил
     { key: "F", width: 16 },  // F: насыщение
     { key: "G", width: 40 },  // G: контекст
-    { key: "H", width: 28 },  // H: КБЖУ
+    { key: "H", width: 34 },  // H: КБЖУ
   ];
 
   let rowNum = 1;
