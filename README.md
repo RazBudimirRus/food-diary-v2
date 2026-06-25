@@ -105,7 +105,7 @@ Food Diary V2 — инструмент для ведения дневника п
 │                         │                                   │
 │  ┌──────────────────────▼───────────────────────────────┐   │
 │  │              data.db  (SQLite)                       │   │
-│  │              /srv/foodbot/data/                      │   │
+│  │              <project-dir>/data/                      │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -134,14 +134,14 @@ Food Diary V2 — инструмент для ведения дневника п
 
 ### Шаг 0. Проверка готовности сервера
 
-Перед установкой обязательно запустите скрипт проверки:
+Скрипт запускается **из папки проекта** (после клонирования на шаге 3). Он автоматически определяет рабочую директорию — захардкоженных путей нет.
 
 ```bash
-wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food-diary-v2/main/preflight-check.sh
+# Выполняется из папки проекта:
 sudo bash preflight-check.sh
 ```
 
-Скрипт проверяет 11 параметров (OS, RAM, диск, сеть, Docker, порты, firewall, переменные окружения, API health) и выводит цветной отчёт. При наличии типовых проблем запустите с флагом `--fix`:
+Скрипт проверяет 11 параметров (OS, RAM, диск, сеть, Docker, порты, firewall, переменные окружения, образы, API health) и выводит цветной отчёт. При наличии типовых проблем запустите с флагом `--fix`:
 
 ```bash
 sudo bash preflight-check.sh --fix
@@ -156,17 +156,19 @@ sudo usermod -aG docker $USER
 newgrp docker   # применить без перелогина
 ```
 
-### Шаг 2. Создание рабочей директории
+### Шаг 2. Выбор рабочей директории
+
+Выберите любую папку на сервере, где будет жить проект:
 
 ```bash
-sudo mkdir -p /srv/foodbot/data
-sudo chown -R $USER:$USER /srv/foodbot
+mkdir -p ~/food-diary && cd ~/food-diary
+# или любой другой путь, например:
+# mkdir -p /srv/foodbot && cd /srv/foodbot
 ```
 
 ### Шаг 3. Клонирование репозитория
 
 ```bash
-cd /srv/foodbot
 git clone https://github.com/RazBudimirRus/food-diary-v2.git .
 ```
 
@@ -242,7 +244,7 @@ caddy_config:
 ### Обновление
 
 ```bash
-cd /srv/foodbot
+cd <папка-проекта>
 git pull
 docker compose up -d --build
 ```
@@ -251,10 +253,10 @@ docker compose up -d --build
 
 ```bash
 # Ручной бэкап
-cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
+cp <project-dir>/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
 
 # Автоматический (cron, ежедневно в 03:00)
-echo "0 3 * * * cp /srv/foodbot/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
+echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
 ```
 
 ## Использование
@@ -436,7 +438,7 @@ Generated in the doctor's agreed format:
 │                         │                                   │
 │  ┌──────────────────────▼───────────────────────────────┐   │
 │  │              data.db  (SQLite)                       │   │
-│  │              /srv/foodbot/data/                      │   │
+│  │              <project-dir>/data/                      │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -465,14 +467,14 @@ Generated in the doctor's agreed format:
 
 ### Step 0. Server readiness check
 
-Run the preflight script before installing:
+Run the preflight script **from the project directory** (after cloning in step 3). It auto-detects its working directory — no hardcoded paths.
 
 ```bash
-wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food-diary-v2/main/preflight-check.sh
+# Run from the project directory:
 sudo bash preflight-check.sh
 ```
 
-The script checks 11 parameters (OS, RAM, disk, network, Docker, ports, firewall, environment variables, API health) and outputs a color-coded report. For automatic fixing of common issues:
+The script checks 11 parameters (OS, RAM, disk, network, Docker, ports, firewall, environment variables, images, API health) and outputs a color-coded report. For automatic fixing of common issues:
 
 ```bash
 sudo bash preflight-check.sh --fix
@@ -487,17 +489,19 @@ sudo usermod -aG docker $USER
 newgrp docker   # apply without re-login
 ```
 
-### Step 2. Create working directory
+### Step 2. Choose working directory
+
+Pick any directory on the server where the project will live:
 
 ```bash
-sudo mkdir -p /srv/foodbot/data
-sudo chown -R $USER:$USER /srv/foodbot
+mkdir -p ~/food-diary && cd ~/food-diary
+# or any other path, e.g.:
+# mkdir -p /srv/foodbot && cd /srv/foodbot
 ```
 
 ### Step 3. Clone the repository
 
 ```bash
-cd /srv/foodbot
 git clone https://github.com/RazBudimirRus/food-diary-v2.git .
 ```
 
@@ -573,7 +577,7 @@ caddy_config:
 ### Update
 
 ```bash
-cd /srv/foodbot
+cd <project-dir>
 git pull
 docker compose up -d --build
 ```
@@ -582,10 +586,10 @@ docker compose up -d --build
 
 ```bash
 # Manual backup
-cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
+cp <project-dir>/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
 
 # Automated (cron, daily at 03:00)
-echo "0 3 * * * cp /srv/foodbot/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
+echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
 ```
 
 ## Usage

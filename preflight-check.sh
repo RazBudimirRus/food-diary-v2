@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  preflight-check.sh — Food Diary V2 pre-install readiness check
-#  Target: Ubuntu 24.04 LTS
-#  Usage:  sudo bash preflight-check.sh [--fix]
+#  Target: Ubuntu 22.04 / 24.04 LTS
+#  Usage:  Run from the project directory (where docker-compose.yml lives)
+#          sudo bash preflight-check.sh [--fix]
 # =============================================================================
 set -euo pipefail
 
@@ -33,8 +34,9 @@ REQ_DISK_GB=5
 APP_PORT=5000
 CADDY_HTTP_PORT=80
 CADDY_HTTPS_PORT=443
-DEPLOY_DIR="/srv/foodbot"
-DATA_DIR="/srv/foodbot/data"
+# Derive paths from CWD — script must be run from the project directory
+DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DATA_DIR="${DEPLOY_DIR}/data"
 
 # ── Output helpers ────────────────────────────────────────────────────────────
 _raw()  { echo -e "$*" | tee -a "$LOG_FILE"; }
@@ -60,6 +62,7 @@ _raw "  ${BOLD}${C}╠═══════════════════�
 _raw "  ${BOLD}${C}║${RST}  ${DIM}Server:  $(hostname -f 2>/dev/null || hostname)${RST}"
 _raw "  ${BOLD}${C}║${RST}  ${DIM}Date:    $(date '+%Y-%m-%d %H:%M:%S %Z')${RST}"
 _raw "  ${BOLD}${C}║${RST}  ${DIM}Log:     $LOG_FILE${RST}"
+_raw "  ${BOLD}${C}║${RST}  ${DIM}Dir:     $DEPLOY_DIR${RST}"
 _raw "  ${BOLD}${C}║${RST}  ${DIM}Fix mode: $([ $FIX_MODE -eq 1 ] && echo "${G}ON (--fix)${RST}" || echo "OFF")${RST}"
 _raw "  ${BOLD}${C}╚══════════════════════════════════════════════════════╝${RST}"
 
@@ -131,13 +134,6 @@ if getent hosts github.com &>/dev/null; then
   ok "DNS resolution" "github.com resolves"
 else
   fail "DNS resolution failed" "getent hosts github.com"
-fi
-
-# Telegram API
-if curl -fsSL --max-time 10 https://api.telegram.org &>/dev/null; then
-  ok "Telegram API" "api.telegram.org reachable"
-else
-  warn "Telegram API unreachable" "check firewall egress rules — bot won't work"
 fi
 
 # Ports
@@ -325,7 +321,7 @@ else
   if [[ -f "$DEPLOY_DIR/.env.example" ]]; then
     info "Fix: cp $DEPLOY_DIR/.env.example $ENV_FILE && nano $ENV_FILE"
   else
-    info "Create $ENV_FILE with TELEGRAM_BOT_TOKEN=<token>"
+    info "Create $ENV_FILE — see .env.example in project root"
   fi
 fi
 
@@ -365,7 +361,7 @@ fi
 section "10" "Docker Image Pull Test"
 # =============================================================================
 
-for image in "node:20-slim" "python:3.12-slim"; do
+for image in "node:20-slim"; do
   skip "Pulling $image..."
   if docker pull "$image" --quiet &>/dev/null; then
     ok "Image: $image" "pull OK"
