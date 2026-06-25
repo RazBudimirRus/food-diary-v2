@@ -14,8 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import {
   Trash2, Download, Plus, ChevronLeft, ChevronRight, Clock,
-  Utensils, Droplets, Activity, Sun, Moon, Footprints
+  Utensils, Droplets, Activity, Sun, Moon, Footprints, LogOut
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ function defaultForm(): AddMealFormData {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function DiaryPage() {
+  const { user, logout } = useAuth();
   const { toast } = useToast();
   const [activeDate, setActiveDate] = useState<string>(mskToday());
   const [showAddForm, setShowAddForm] = useState(false);
@@ -263,10 +265,16 @@ export default function DiaryPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button size="sm" variant="outline" onClick={() => downloadReport(activeDate)} data-testid="btn-download-report">
-            <Download className="h-4 w-4 mr-1" />
-            Отчёт
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => downloadReport(activeDate)} data-testid="btn-download-report">
+              <Download className="h-4 w-4 mr-1" />
+              Отчёт
+            </Button>
+            <span className="text-xs text-muted-foreground hidden sm:block">{user?.displayName || user?.username}</span>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти" data-testid="btn-logout">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 

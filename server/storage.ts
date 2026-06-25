@@ -1,21 +1,30 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { User, InsertUser, Day, InsertDay, Meal, InsertMeal, DaySummary } from "@shared/schema";
-import { days, meals, users } from "@shared/schema";
+import type { User, Day, InsertDay, Meal, InsertMeal, DaySummary, Secret } from "@shared/schema";
+import { users, days, meals, secrets } from "@shared/schema";
 
 const sqlite = new Database("data.db");
 export const db = drizzle(sqlite, { schema });
 
-// Run migrations manually (simple approach)
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tg_user_id TEXT UNIQUE,
-    tg_username TEXT,
-    web_token TEXT UNIQUE,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS secrets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    encrypted_value TEXT NOT NULL,
+    iv TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, key)
   );
   CREATE TABLE IF NOT EXISTS days (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,26 +57,31 @@ sqlite.exec(`
   );
 `);
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ── Time helpers ──────────────────────────────────────────────────────────────
 
-/** Returns MSK date string YYYY-MM-DD for a given UTC timestamp (or now) */
 export function getMskDate(utcMs?: number): string {
-  const d = new Date((utcMs ?? Date.now()) + 3 * 60 * 60 * 1000); // +3h
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const d = new Date((utcMs ?? Date.now()) + 3 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 10);
 }
 
-/** Returns current MSK time HH:MM */
 export function getMskTime(): string {
   const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
   return d.toISOString().slice(11, 16);
 }
 
+// ── Storage interface ─────────────────────────────────────────────────────────
+
 export interface IStorage {
   // Users
-  getUserByToken(token: string): User | undefined;
-  getUserByTgId(tgId: string): User | undefined;
-  createUser(data: InsertUser): User;
-  ensureWebUser(): User; // returns the single web user (token = "web")
+  getUserById(id: number): User | undefined;
+  getUserByUsername(username: string): User | undefined;
+  getUserByEmail(email: string): User | undefined;
+  createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User;
+
+  // Secrets (encrypted in DB)
+  getSecret(userId: number, key: string): Secret | undefined;
+  setSecret(userId: number, key: string, encryptedValue: string, iv: string): Secret;
+  listSecretKeys(userId: number): string[];
 
   // Days
   getDayByDate(userId: number, date: string): Day | undefined;
@@ -76,7 +90,6 @@ export interface IStorage {
 
   // Meals
   getMealsByDay(dayId: number): Meal[];
-  getMealsByDate(userId: number, date: string): Meal[];
   addMeal(data: InsertMeal): Meal;
   updateMeal(id: number, data: Partial<InsertMeal>): Meal | undefined;
   deleteMeal(id: number): void;
@@ -84,25 +97,51 @@ export interface IStorage {
 }
 
 class SqliteStorage implements IStorage {
-  getUserByToken(token: string): User | undefined {
-    return db.select().from(users).where(eq(users.webToken, token)).get();
+  getUserById(id: number) {
+    return db.select().from(users).where(eq(users.id, id)).get();
   }
 
-  getUserByTgId(tgId: string): User | undefined {
-    return db.select().from(users).where(eq(users.tgUserId, tgId)).get();
+  getUserByUsername(username: string) {
+    return db.select().from(users).where(eq(users.username, username)).get();
   }
 
-  createUser(data: InsertUser): User {
-    return db.insert(users).values({ ...data, createdAt: new Date().toISOString() }).returning().get();
+  getUserByEmail(email: string) {
+    return db.select().from(users).where(eq(users.email, email)).get();
   }
 
-  ensureWebUser(): User {
-    const existing = this.getUserByToken("web");
-    if (existing) return existing;
-    return this.createUser({ tgUserId: null, tgUsername: null, webToken: "web" });
+  createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User {
+    return db.insert(users).values({
+      username: data.username,
+      email: data.email,
+      passwordHash: data.passwordHash,
+      displayName: data.displayName ?? null,
+      createdAt: new Date().toISOString(),
+    }).returning().get();
   }
 
-  getDayByDate(userId: number, date: string): Day | undefined {
+  getSecret(userId: number, key: string) {
+    return db.select().from(secrets).where(and(eq(secrets.userId, userId), eq(secrets.key, key))).get();
+  }
+
+  setSecret(userId: number, key: string, encryptedValue: string, iv: string): Secret {
+    // upsert
+    const existing = this.getSecret(userId, key);
+    if (existing) {
+      return db.update(secrets)
+        .set({ encryptedValue, iv, updatedAt: new Date().toISOString() })
+        .where(eq(secrets.id, existing.id))
+        .returning().get();
+    }
+    return db.insert(secrets).values({
+      userId, key, encryptedValue, iv, updatedAt: new Date().toISOString(),
+    }).returning().get();
+  }
+
+  listSecretKeys(userId: number): string[] {
+    return db.select({ key: secrets.key }).from(secrets).where(eq(secrets.userId, userId)).all().map(r => r.key);
+  }
+
+  getDayByDate(userId: number, date: string) {
     return db.select().from(days).where(and(eq(days.userId, userId), eq(days.date, date))).get();
   }
 
@@ -124,25 +163,19 @@ class SqliteStorage implements IStorage {
       .sort((a, b) => a.tsStart.localeCompare(b.tsStart));
   }
 
-  getMealsByDate(userId: number, date: string): Meal[] {
-    const day = this.getDayByDate(userId, date);
-    if (!day) return [];
-    return this.getMealsByDay(day.id);
-  }
-
   addMeal(data: InsertMeal): Meal {
     return db.insert(meals).values({ ...data, createdAt: new Date().toISOString() }).returning().get();
   }
 
-  updateMeal(id: number, data: Partial<InsertMeal>): Meal | undefined {
+  updateMeal(id: number, data: Partial<InsertMeal>) {
     return db.update(meals).set(data).where(eq(meals.id, id)).returning().get();
   }
 
-  deleteMeal(id: number): void {
+  deleteMeal(id: number) {
     db.delete(meals).where(eq(meals.id, id)).run();
   }
 
-  getMeal(id: number): Meal | undefined {
+  getMeal(id: number) {
     return db.select().from(meals).where(eq(meals.id, id)).get();
   }
 }

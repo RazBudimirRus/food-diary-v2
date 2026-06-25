@@ -2,32 +2,58 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// ─── Users ───────────────────────────────────────────────────────────────────
+// ─── Users ────────────────────────────────────────────────────────────────────
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  tgUserId: text("tg_user_id").unique(),   // Telegram user id (string)
-  tgUsername: text("tg_username"),
-  webToken: text("web_token").unique(),     // simple static token for web form
+  username: text("username").notNull().unique(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name"),
   createdAt: text("created_at").notNull().default(""),
 });
 
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, passwordHash: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const registerSchema = z.object({
+  username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/, "Только буквы, цифры и _"),
+  email: z.string().email(),
+  password: z.string().min(8, "Минимум 8 символов"),
+  displayName: z.string().min(1).max(64).optional(),
+});
+
+export const loginSchema = z.object({
+  username: z.string().min(1),
+  password: z.string().min(1),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+
+// ─── App Secrets (encrypted in DB) ───────────────────────────────────────────
+// Arbitrary key-value secrets per user (for future integrations)
+export const secrets = sqliteTable("secrets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  key: text("key").notNull(),
+  encryptedValue: text("encrypted_value").notNull(), // AES-256-GCM encrypted
+  iv: text("iv").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
+});
+
+export type Secret = typeof secrets.$inferSelect;
+
 // ─── Days ─────────────────────────────────────────────────────────────────────
-// One row per calendar day (MSK date: YYYY-MM-DD).
-// Day summary fields collected once before first export.
 export const days = sqliteTable("days", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull(),
   date: text("date").notNull(),             // YYYY-MM-DD MSK
-  // Summary (filled once before report download)
-  wakeTime: text("wake_time"),              // HH:MM
-  sleepTime: text("sleep_time"),            // HH:MM
-  sportActivity: text("sport_activity"),   // free text or "нет"
+  wakeTime: text("wake_time"),
+  sleepTime: text("sleep_time"),
+  sportActivity: text("sport_activity"),
   steps: integer("steps"),
-  dayComment: text("day_comment"),          // общий комментарий дня
+  dayComment: text("day_comment"),
   summaryFilled: integer("summary_filled", { mode: "boolean" }).notNull().default(false),
 });
 
@@ -36,8 +62,8 @@ export type InsertDay = z.infer<typeof insertDaySchema>;
 export type Day = typeof days.$inferSelect;
 
 export const daySummarySchema = z.object({
-  wakeTime: z.string().regex(/^\d{2}:\d{2}$/, "Формат ЧЧ:ММ").optional().or(z.literal("")),
-  sleepTime: z.string().regex(/^\d{2}:\d{2}$/, "Формат ЧЧ:ММ").optional().or(z.literal("")),
+  wakeTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
+  sleepTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
   sportActivity: z.string().optional(),
   steps: z.coerce.number().int().min(0).optional().or(z.literal("")),
   dayComment: z.string().optional(),
@@ -49,18 +75,17 @@ export const meals = sqliteTable("meals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   dayId: integer("day_id").notNull(),
   userId: integer("user_id").notNull(),
-  // Time stored as HH:MM MSK; interval = tsStart + "-" + tsEnd
-  tsStart: text("ts_start").notNull(),      // HH:MM
-  tsEnd: text("ts_end"),                    // HH:MM (optional, can be same)
-  mealType: text("meal_type").notNull(),    // завтрак|обед|перекус|ужин
-  foodText: text("food_text"),              // что ел
-  drinkText: text("drink_text"),            // что пил
-  waterUnits: real("water_units"),          // кол-во "вод" (1 вода = 0.5 л)
-  hungerBefore: integer("hunger_before"),   // 0–10
-  satietyAfter: integer("satiety_after"),   // 0–10
-  contextNote: text("context_note"),        // контекст приёма
-  source: text("source").notNull().default("web"), // web | telegram
-  rawInput: text("raw_input"),              // исходный текст от пользователя
+  tsStart: text("ts_start").notNull(),
+  tsEnd: text("ts_end"),
+  mealType: text("meal_type").notNull(),
+  foodText: text("food_text"),
+  drinkText: text("drink_text"),
+  waterUnits: real("water_units"),
+  hungerBefore: integer("hunger_before"),
+  satietyAfter: integer("satiety_after"),
+  contextNote: text("context_note"),
+  source: text("source").notNull().default("web"),
+  rawInput: text("raw_input"),
   createdAt: text("created_at").notNull().default(""),
 });
 
@@ -68,10 +93,9 @@ export const insertMealSchema = createInsertSchema(meals).omit({ id: true, creat
 export type InsertMeal = z.infer<typeof insertMealSchema>;
 export type Meal = typeof meals.$inferSelect;
 
-// Schema for the quick-add form (no dayId/userId — assigned by backend)
 export const addMealSchema = z.object({
   tsStart: z.string().regex(/^\d{2}:\d{2}$/, "Формат ЧЧ:ММ"),
-  tsEnd: z.string().regex(/^\d{2}:\d{2}$/, "Формат ЧЧ:ММ").optional().or(z.literal("")),
+  tsEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
   mealType: z.enum(["завтрак", "обед", "перекус", "ужин"]),
   foodText: z.string().optional(),
   drinkText: z.string().optional(),
@@ -80,7 +104,6 @@ export const addMealSchema = z.object({
   satietyAfter: z.coerce.number().int().min(0).max(10),
   contextNote: z.string().optional(),
   rawInput: z.string().optional(),
-  // date override for retrospective entry (YYYY-MM-DD MSK, defaults to today)
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 export type AddMeal = z.infer<typeof addMealSchema>;
