@@ -316,6 +316,14 @@ if [[ -f "$ENV_FILE" ]]; then
     fail "  ENCRYPTION_KEY" "not set or placeholder — secrets in DB will be unencryptable"
     info "Generate: openssl rand -hex 32"
   fi
+
+  # DEEPSEEK_API_KEY (optional — КБЖУ analysis feature)
+  DS_VAL=$(grep '^DEEPSEEK_API_KEY=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)
+  if [[ -n "$DS_VAL" && "$DS_VAL" != "your_deepseek_api_key_here" && "$DS_VAL" != *"CHANGE_ME"* ]]; then
+    ok "  DEEPSEEK_API_KEY" "set (КБЖУ analysis enabled)"
+  else
+    skip "  DEEPSEEK_API_KEY not set — КБЖУ analysis button will be hidden (optional)"
+  fi
 else
   fail ".env not found" "$ENV_FILE"
   if [[ -f "$DEPLOY_DIR/.env.example" ]]; then
