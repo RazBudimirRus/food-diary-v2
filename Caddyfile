@@ -1,0 +1,21 @@
+# Caddyfile для VPS 95.163.213.45
+# Использовать с доменом — поменяй 95.163.213.45 на свой домен для автоTLS
+# Пока без домена — HTTP only
+
+:80 {
+    # Веб-форма и API на одном порту
+    reverse_proxy api:5000
+    
+    encode gzip
+    
+    log {
+        output file /var/log/caddy/food_diary.log
+        format json
+    }
+}
+
+# Когда будет домен, раскомментировать:
+# food.example.com {
+#     reverse_proxy api:5000
+#     encode gzip
+# }

@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Food diary palette: warm sage + amber ── */
+    --background: 40 20% 97%;
+    --foreground: 30 15% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 30 15% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 30 15% 15%;
+    --primary: 152 30% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 20% 92%;
+    --secondary-foreground: 30 15% 25%;
+    --muted: 40 15% 93%;
+    --muted-foreground: 30 10% 48%;
+    --accent: 38 85% 55%;
+    --accent-foreground: 30 15% 10%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 15% 87%;
+    --input: 40 15% 87%;
+    --ring: 152 30% 35%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 30 15% 10%;
+    --foreground: 40 20% 90%;
+    --card: 30 12% 13%;
+    --card-foreground: 40 20% 90%;
+    --popover: 30 12% 13%;
+    --popover-foreground: 40 20% 90%;
+    --primary: 152 35% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 12% 18%;
+    --secondary-foreground: 40 15% 80%;
+    --muted: 30 10% 18%;
+    --muted-foreground: 40 10% 56%;
+    --accent: 38 75% 55%;
+    --accent-foreground: 30 15% 10%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 10% 22%;
+    --input: 30 10% 22%;
+    --ring: 152 35% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }

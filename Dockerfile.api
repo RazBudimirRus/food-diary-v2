@@ -1,0 +1,19 @@
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:20-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+# SQLite db will be in /app/data mounted from host
+RUN mkdir -p /app/data
+WORKDIR /app/data
+ENV NODE_ENV=production
+EXPOSE 5000
+CMD ["node", "/app/dist/index.cjs"]

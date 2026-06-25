@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: food_diary_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+    volumes:
+      - data_db:/app/data
+    ports:
+      - "5000:5000"
+    networks:
+      - food_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/now"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile.bot
+    container_name: food_diary_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      API_BASE_URL: http://api:5000
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - food_net
+
+networks:
+  food_net:
+    driver: bridge
+
+volumes:
+  data_db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/foodbot/data
