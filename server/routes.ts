@@ -3,12 +3,13 @@ import type { Server } from "http";
 import cookieParser from "cookie-parser";
 import { storage, getMskDate, getMskTime } from "./storage";
 import { generateDayReport } from "./excel";
-import { addMealSchema, daySummarySchema, registerSchema, loginSchema } from "@shared/schema";
+import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema } from "@shared/schema";
 import {
   hashPassword, verifyPassword, signToken,
   requireAuth, encryptSecret, decryptSecret,
   type AuthRequest,
 } from "./auth";
+import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
@@ -135,6 +136,10 @@ export function registerRoutes(httpServer: Server, app: Express) {
         contextNote: data.contextNote || null,
         source: "web",
         rawInput: data.rawInput || null,
+        calories: data.calories ?? null,
+        protein: data.protein ?? null,
+        fat: data.fat ?? null,
+        carbs: data.carbs ?? null,
       });
       res.json({ meal, day });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -180,7 +185,27 @@ export function registerRoutes(httpServer: Server, app: Express) {
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
-  // ── Misc ───────────────────────────────────────────────────────────────────
+  // ── DeepSeek КБЖУ ─────────────────────────────────────────────────────────────
+
+  /** GET /api/analyze/available — проверяем наличие ключа */
+  app.get("/api/analyze/available", requireAuth, (_req, res) => {
+    res.json({ available: isDeepSeekAvailable() });
+  });
+
+  /** POST /api/analyze — анализ еды/напитков через DeepSeek */
+  app.post("/api/analyze", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const parsed = analyzeSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const result = await analyzeNutrition(parsed.data.foodText, parsed.data.drinkText);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Misc ─────────────────────────────────────────────────────────────
 
   app.get("/api/now", (_req, res) => {
     res.json({ date: getMskDate(), time: getMskTime() });

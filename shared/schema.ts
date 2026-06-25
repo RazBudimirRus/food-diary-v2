@@ -86,6 +86,11 @@ export const meals = sqliteTable("meals", {
   contextNote: text("context_note"),
   source: text("source").notNull().default("web"),
   rawInput: text("raw_input"),
+  // КБЖУ — заполняется через DeepSeek анализ
+  calories: real("calories"),
+  protein: real("protein"),
+  fat: real("fat"),
+  carbs: real("carbs"),
   createdAt: text("created_at").notNull().default(""),
 });
 
@@ -105,5 +110,25 @@ export const addMealSchema = z.object({
   contextNote: z.string().optional(),
   rawInput: z.string().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  // КБЖУ (опционально, если уже посчитано)
+  calories: z.coerce.number().min(0).optional(),
+  protein: z.coerce.number().min(0).optional(),
+  fat: z.coerce.number().min(0).optional(),
+  carbs: z.coerce.number().min(0).optional(),
 });
 export type AddMeal = z.infer<typeof addMealSchema>;
+
+// ─── DeepSeek КБЖУ ────────────────────────────────────────────────────────────
+export const analyzeSchema = z.object({
+  foodText: z.string().optional(),
+  drinkText: z.string().optional(),
+});
+export type AnalyzeInput = z.infer<typeof analyzeSchema>;
+
+export interface NutritionResult {
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  note?: string;
+}

@@ -7,6 +7,8 @@ import type { Day, Meal } from "@shared/schema";
 
 const MEAL_TYPES_ORDER = ["завтрак", "обед", "перекус", "ужин"];
 
+const TOTAL_COLS = 8;
+
 function sortMeals(meals: Meal[]): Meal[] {
   return [...meals].sort((a, b) => {
     const t = a.tsStart.localeCompare(b.tsStart);
@@ -27,8 +29,15 @@ function avg(values: (number | null | undefined)[]): string {
   return (nums.reduce((s, v) => s + v, 0) / nums.length).toFixed(1);
 }
 
-/** Total KCAL/BJU stub — we don't have a nutrient DB in v1; use "—" */
-const STUB = "—";
+/** Sum a nutrient field across meals that have КБЖУ data; returns "—" if none */
+function sumNutrient(meals: Meal[], field: "calories" | "protein" | "fat" | "carbs"): string {
+  const vals = meals
+    .map((m) => m[field])
+    .filter((v): v is number => v != null && !isNaN(v));
+  if (!vals.length) return "—";
+  const total = vals.reduce((s, v) => s + v, 0);
+  return field === "calories" ? String(Math.round(total)) : total.toFixed(1);
+}
 
 const HUNGER_SCALE = [
   { level: 0, title: "Экстремальный голод", desc: "Тошнота, болезненные спазмы в желудке", zone: "red" },
@@ -61,6 +70,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
     { key: "E", width: 30 },  // E: что пил
     { key: "F", width: 16 },  // F: насыщение
     { key: "G", width: 40 },  // G: контекст
+    { key: "H", width: 28 },  // H: КБЖУ
   ];
 
   let rowNum = 1;
@@ -69,7 +79,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   const titleCell = ws.getCell(rowNum, 1);
   titleCell.value = `Дневник питания — ${day.date.split("-").reverse().join(".")}`;
   titleCell.font = { bold: true, size: 14 };
-  ws.mergeCells(rowNum, 1, rowNum, 7);
+  ws.mergeCells(rowNum, 1, rowNum, TOTAL_COLS);
   titleCell.alignment = { horizontal: "center" };
   rowNum++;
   rowNum++; // blank
@@ -83,6 +93,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
     "Что пил\n(1 вода = 0.5 л)",
     "Насыщение после (0–10)",
     "Контекст приёма",
+    "КБЖУ (DeepSeek)\nккал / Б / Ж / У",
   ];
   const hRow = ws.getRow(rowNum);
   headers.forEach((h, i) => {
@@ -103,6 +114,15 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   for (const m of sorted) {
     const interval = m.tsEnd && m.tsEnd !== m.tsStart ? `${m.tsStart}–${m.tsEnd}` : m.tsStart;
     const drinkDisplay = m.drinkText ?? (m.waterUnits ? `вода ${m.waterUnits}` : "");
+
+    let kbjuText = "";
+    if (m.calories != null) {
+      const protein = m.protein != null ? m.protein.toFixed(1) : "—";
+      const fat = m.fat != null ? m.fat.toFixed(1) : "—";
+      const carbs = m.carbs != null ? m.carbs.toFixed(1) : "—";
+      kbjuText = `${Math.round(m.calories)} ккал / Б${protein} / Ж${fat} / У${carbs}`;
+    }
+
     const values = [
       interval,
       m.hungerBefore != null ? String(m.hungerBefore) : "",
@@ -111,6 +131,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
       drinkDisplay,
       m.satietyAfter != null ? String(m.satietyAfter) : "",
       m.contextNote ?? "",
+      kbjuText,
     ];
     const mRow = ws.getRow(rowNum);
     values.forEach((v, i) => {
@@ -128,19 +149,44 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
 
   rowNum++; // blank
 
-  // ── Смузи note ────────────────────────────────────────────────────────────
-  const smoothieCell = ws.getCell(rowNum, 1);
-  smoothieCell.value = "Смузи (банан + черника + голубика + протеин + шпинат) — 1 стакан";
-  smoothieCell.font = { italic: true, color: { argb: "FF666666" } };
-  ws.mergeCells(rowNum, 1, rowNum, 7);
+  // ── КБЖУ итого за день ────────────────────────────────────────────────────
+  const kbjuSectionLabel = ws.getCell(rowNum, 1);
+  kbjuSectionLabel.value = "КБЖУ за день (DeepSeek)";
+  kbjuSectionLabel.font = { bold: true, size: 11, color: { argb: "FF1F497D" } };
+  ws.mergeCells(rowNum, 1, rowNum, TOTAL_COLS);
   rowNum++;
-  rowNum++;
+
+  const kbjuTotals: [string, string][] = [
+    ["Калорийность, ккал", sumNutrient(sorted, "calories")],
+    ["Белки, г", sumNutrient(sorted, "protein")],
+    ["Жиры, г", sumNutrient(sorted, "fat")],
+    ["Углеводы, г", sumNutrient(sorted, "carbs")],
+  ];
+  for (const [label, val] of kbjuTotals) {
+    const r = ws.getRow(rowNum);
+    const lc = r.getCell(1);
+    lc.value = label;
+    lc.font = { bold: true };
+    lc.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+    ws.mergeCells(rowNum, 1, rowNum, 2);
+
+    const vc = r.getCell(3);
+    vc.value = val;
+    vc.alignment = { horizontal: "center" };
+    vc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE8F4FD" } };
+    vc.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+    ws.mergeCells(rowNum, 3, rowNum, TOTAL_COLS);
+
+    rowNum++;
+  }
+
+  rowNum++; // blank
 
   // ── Итоги дня (левая + правая) ────────────────────────────────────────────
   const daySummaryLabel = ws.getCell(rowNum, 1);
   daySummaryLabel.value = "Итоги дня";
   daySummaryLabel.font = { bold: true, size: 12 };
-  ws.mergeCells(rowNum, 1, rowNum, 7);
+  ws.mergeCells(rowNum, 1, rowNum, TOTAL_COLS);
   rowNum++;
 
   const leftFields: [string, string][] = [
@@ -174,7 +220,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
       commentVal.value = day.dayComment ?? "";
       commentVal.alignment = { wrapText: true, vertical: "top" };
       commentVal.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFACD" } };
-      ws.mergeCells(rowNum + 1, 5, rowNum + 3, 7);
+      ws.mergeCells(rowNum + 1, 5, rowNum + 3, TOTAL_COLS);
     }
     rowNum++;
   }
@@ -186,7 +232,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   const totalsLabel = ws.getCell(rowNum, 1);
   totalsLabel.value = "Автоматические итоги за день";
   totalsLabel.font = { bold: true, size: 12 };
-  ws.mergeCells(rowNum, 1, rowNum, 7);
+  ws.mergeCells(rowNum, 1, rowNum, TOTAL_COLS);
   rowNum++;
 
   const totalsHeaders = ["Показатель", "По версии Бота", "По версии Врача"];
@@ -201,14 +247,14 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   });
   ws.mergeCells(rowNum, 1, rowNum, 1);
   ws.mergeCells(rowNum, 2, rowNum, 4);
-  ws.mergeCells(rowNum, 5, rowNum, 7);
+  ws.mergeCells(rowNum, 5, rowNum, TOTAL_COLS);
   rowNum++;
 
   const totalRows: [string, string][] = [
-    ["Калорийность, ккал", STUB],
-    ["Белки, г", STUB],
-    ["Жиры, г", STUB],
-    ["Углеводы, г", STUB],
+    ["Калорийность, ккал", sumNutrient(sorted, "calories")],
+    ["Белки, г", sumNutrient(sorted, "protein")],
+    ["Жиры, г", sumNutrient(sorted, "fat")],
+    ["Углеводы, г", sumNutrient(sorted, "carbs")],
     ["Вода, л", totalWater(meals).toFixed(1)],
     ["Кол-во приёмов пищи", String(meals.length)],
     [`Средний голод (0–10)`, avg(meals.map((m) => m.hungerBefore))],
@@ -230,7 +276,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
     const dc = r.getCell(5);
     dc.value = "";
     dc.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
-    ws.mergeCells(rowNum, 5, rowNum, 7);
+    ws.mergeCells(rowNum, 5, rowNum, TOTAL_COLS);
 
     rowNum++;
   }
@@ -242,7 +288,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   const legendTitle = ws.getCell(rowNum, 1);
   legendTitle.value = "ШКАЛА ГОЛОДА И НАСЫЩЕНИЯ";
   legendTitle.font = { bold: true, size: 11 };
-  ws.mergeCells(rowNum, 1, rowNum, 7);
+  ws.mergeCells(rowNum, 1, rowNum, TOTAL_COLS);
   rowNum++;
 
   const legendHeaders = ["Уровень", "Заголовок", "Описание"];
@@ -256,7 +302,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   });
   ws.mergeCells(rowNum, 1, rowNum, 1);
   ws.mergeCells(rowNum, 2, rowNum, 3);
-  ws.mergeCells(rowNum, 4, rowNum, 7);
+  ws.mergeCells(rowNum, 4, rowNum, TOTAL_COLS);
   rowNum++;
 
   for (const item of HUNGER_SCALE) {
@@ -280,7 +326,7 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
     dc.alignment = { wrapText: true };
     dc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
     dc.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
-    ws.mergeCells(rowNum, 4, rowNum, 7);
+    ws.mergeCells(rowNum, 4, rowNum, TOTAL_COLS);
 
     rowNum++;
   }

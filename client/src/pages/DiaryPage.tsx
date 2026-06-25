@@ -7,14 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import {
   Trash2, Download, Plus, ChevronLeft, ChevronRight, Clock,
-  Utensils, Droplets, Activity, Sun, Moon, Footprints, LogOut
+  Utensils, Droplets, Activity, Sun, Moon, Footprints, LogOut,
+  Calculator, Flame
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
@@ -76,9 +75,19 @@ function hungerColor(v: number): string {
   return "text-red-500";
 }
 
+// ── КБЖУ result type ──────────────────────────────────────────────────────────
+interface NutritionResult {
+  calories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  note?: string;
+}
+
 // ── Add Meal Form ─────────────────────────────────────────────────────────────
 
 interface AddMealFormData {
+  date: string;
   tsStart: string;
   tsEnd: string;
   mealType: MealType;
@@ -92,6 +101,7 @@ interface AddMealFormData {
 
 function defaultForm(): AddMealFormData {
   return {
+    date: mskToday(),
     tsStart: mskNow(),
     tsEnd: "",
     mealType: "перекус",
@@ -117,6 +127,11 @@ export default function DiaryPage() {
   const [pendingDownloadDate, setPendingDownloadDate] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
+  // КБЖУ analysis state
+  const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
+  const [kbjuLoading, setKbjuLoading] = useState(false);
+  const [deepseekAvailable, setDeepseekAvailable] = useState(false);
+
   // Fetch day data
   const { data, isLoading, refetch } = useQuery<{ day: Day; meals: Meal[] }>({
     queryKey: [`/api/days/${activeDate}`],
@@ -124,6 +139,14 @@ export default function DiaryPage() {
 
   const day = data?.day;
   const meals = data?.meals ?? [];
+
+  // Check if DeepSeek is available
+  useEffect(() => {
+    apiRequest("GET", "/api/analyze/available")
+      .then(r => r.json())
+      .then(d => setDeepseekAvailable(!!d.available))
+      .catch(() => setDeepseekAvailable(false));
+  }, []);
 
   // Keep summary form in sync when day loads (pre-fill)
   useEffect(() => {
@@ -138,18 +161,66 @@ export default function DiaryPage() {
     }
   }, [day?.id]);
 
+  // Reset КБЖУ when form food/drink changes
+  useEffect(() => {
+    setKbjuResult(null);
+  }, [form.foodText, form.drinkText]);
+
+  // ── КБЖУ analysis ──────────────────────────────────────────────────────────
+
+  async function analyzeKbju() {
+    if (!form.foodText && !form.drinkText) {
+      toast({ title: "Укажите еду или напитки", variant: "destructive" });
+      return;
+    }
+    setKbjuLoading(true);
+    setKbjuResult(null);
+    try {
+      const res = await apiRequest("POST", "/api/analyze", {
+        foodText: form.foodText,
+        drinkText: form.drinkText,
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || "Ошибка анализа");
+      }
+      const data: NutritionResult = await res.json();
+      setKbjuResult(data);
+    } catch (e: any) {
+      toast({ title: "Ошибка расчёта КБЖУ", description: e.message, variant: "destructive" });
+    } finally {
+      setKbjuLoading(false);
+    }
+  }
+
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const addMealMutation = useMutation({
     mutationFn: async (data: AddMealFormData) => {
-      const res = await apiRequest("POST", "/api/meals", { ...data, date: activeDate });
+      const payload: Record<string, unknown> = {
+        ...data,
+        // date field controls which day the meal is saved to
+      };
+      // Attach КБЖУ if available
+      if (kbjuResult) {
+        payload.calories = kbjuResult.calories;
+        payload.protein = kbjuResult.protein;
+        payload.fat = kbjuResult.fat;
+        payload.carbs = kbjuResult.carbs;
+      }
+      const res = await apiRequest("POST", "/api/meals", payload);
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/days/${variables.date}`] });
+      // Also invalidate activeDate if different
+      if (variables.date !== activeDate) {
+        queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
+      }
       setShowAddForm(false);
       setForm(defaultForm());
+      setKbjuResult(null);
       toast({ title: "Приём добавлен" });
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
@@ -223,6 +294,10 @@ export default function DiaryPage() {
     ? (meals.reduce((s, m) => s + (m.satietyAfter ?? 0), 0) / meals.filter(m => m.satietyAfter != null).length).toFixed(1)
     : "—";
 
+  // Total kcal for stats bar (only meals with calories)
+  const totalKcal = meals.reduce((s, m) => s + (m.calories ?? 0), 0);
+  const hasKcal = meals.some(m => m.calories != null);
+
   const isToday = activeDate === mskToday();
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -253,7 +328,6 @@ export default function DiaryPage() {
               data-testid="btn-date-label"
             >
               {isToday ? "Сегодня" : formatDate(activeDate)}
-              {!isToday && <span className="text-xs text-muted-foreground ml-1">({formatDate(activeDate)})</span>}
               {isToday && <span className="text-xs text-muted-foreground ml-1">({formatDate(activeDate)})</span>}
             </button>
             <Button
@@ -281,7 +355,7 @@ export default function DiaryPage() {
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
         {/* Stats bar */}
         {meals.length > 0 && (
-          <div className="grid grid-cols-3 gap-2 text-sm">
+          <div className={`grid gap-2 text-sm ${hasKcal ? "grid-cols-4" : "grid-cols-3"}`}>
             <div className="flex items-center gap-1.5 bg-card rounded-lg px-3 py-2 border">
               <Utensils className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-muted-foreground">Приёмов:</span>
@@ -297,6 +371,13 @@ export default function DiaryPage() {
               <span className="text-muted-foreground">Сытость:</span>
               <span className="font-medium">{avgSatiety}</span>
             </div>
+            {hasKcal && (
+              <div className="flex items-center gap-1.5 bg-card rounded-lg px-3 py-2 border">
+                <Flame className="h-3.5 w-3.5 text-orange-500" />
+                <span className="text-muted-foreground">Ккал:</span>
+                <span className="font-medium">{Math.round(totalKcal)}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -383,6 +464,16 @@ export default function DiaryPage() {
                 {meal.contextNote && (
                   <p className="text-xs mt-1 text-muted-foreground italic">"{meal.contextNote}"</p>
                 )}
+                {/* КБЖУ badge */}
+                {meal.calories != null && (
+                  <div className="mt-1.5 flex items-center gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 rounded-md px-2 py-1 w-fit">
+                    <Flame className="h-3 w-3" />
+                    <span>{Math.round(meal.calories)} ккал</span>
+                    {meal.protein != null && <span>· Б {meal.protein.toFixed(1)}</span>}
+                    {meal.fat != null && <span>· Ж {meal.fat.toFixed(1)}</span>}
+                    {meal.carbs != null && <span>· У {meal.carbs.toFixed(1)}</span>}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -392,7 +483,7 @@ export default function DiaryPage() {
         {!showAddForm && (
           <Button
             className="w-full" variant="outline"
-            onClick={() => { setForm(defaultForm()); setShowAddForm(true); }}
+            onClick={() => { setForm(defaultForm()); setKbjuResult(null); setShowAddForm(true); }}
             data-testid="btn-add-meal"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -407,6 +498,37 @@ export default function DiaryPage() {
               <CardTitle className="text-base">Новый приём пищи</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
+
+              {/* Date field */}
+              <div className="space-y-1">
+                <Label className="text-xs" htmlFor="mealDate">
+                  Дата записи
+                  {form.date !== mskToday() && (
+                    <span className="ml-2 text-amber-600 font-normal">— прошедший день</span>
+                  )}
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="mealDate"
+                    type="date"
+                    value={form.date}
+                    max={mskToday()}
+                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                    className="w-auto"
+                    data-testid="input-meal-date"
+                  />
+                  {form.date !== mskToday() && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary underline"
+                      onClick={() => setForm(f => ({ ...f, date: mskToday() }))}
+                    >
+                      сегодня
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Time + type row */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -479,6 +601,42 @@ export default function DiaryPage() {
                 </div>
               </div>
 
+              {/* КБЖУ analysis button */}
+              {deepseekAvailable && (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-orange-300 text-orange-700 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950/30"
+                    onClick={analyzeKbju}
+                    disabled={kbjuLoading || (!form.foodText && !form.drinkText)}
+                    data-testid="btn-analyze-kbju"
+                  >
+                    <Calculator className="h-4 w-4 mr-2" />
+                    {kbjuLoading ? "Считаю КБЖУ..." : "Рассчитать КБЖУ"}
+                  </Button>
+
+                  {kbjuResult && (
+                    <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/30 px-3 py-2.5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-sm font-medium text-orange-800 dark:text-orange-300">
+                        <Flame className="h-4 w-4" />
+                        {Math.round(kbjuResult.calories)} ккал
+                      </div>
+                      <div className="flex gap-3 text-xs text-orange-700 dark:text-orange-400">
+                        <span>Белки: <b>{kbjuResult.protein.toFixed(1)} г</b></span>
+                        <span>Жиры: <b>{kbjuResult.fat.toFixed(1)} г</b></span>
+                        <span>Углеводы: <b>{kbjuResult.carbs.toFixed(1)} г</b></span>
+                      </div>
+                      {kbjuResult.note && (
+                        <p className="text-xs text-muted-foreground italic">{kbjuResult.note}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">Будет сохранено вместе с записью</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Hunger slider */}
               <div className="space-y-1.5">
                 <Label className="text-xs">
@@ -527,12 +685,12 @@ export default function DiaryPage() {
                 <Button
                   className="flex-1"
                   onClick={() => addMealMutation.mutate(form)}
-                  disabled={addMealMutation.isPending || !form.tsStart}
+                  disabled={addMealMutation.isPending || !form.tsStart || !form.date}
                   data-testid="btn-save-meal"
                 >
                   {addMealMutation.isPending ? "Сохраняю..." : "Сохранить"}
                 </Button>
-                <Button variant="outline" onClick={() => setShowAddForm(false)} data-testid="btn-cancel-meal">
+                <Button variant="outline" onClick={() => { setShowAddForm(false); setKbjuResult(null); }} data-testid="btn-cancel-meal">
                   Отмена
                 </Button>
               </div>

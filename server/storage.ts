@@ -53,9 +53,22 @@ sqlite.exec(`
     context_note TEXT,
     source TEXT NOT NULL DEFAULT 'web',
     raw_input TEXT,
+    calories REAL,
+    protein REAL,
+    fat REAL,
+    carbs REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+// Миграция: добавляем колонки КБЖУ в уже существующие таблицы
+for (const col of ["calories", "protein", "fat", "carbs"]) {
+  try {
+    sqlite.exec(`ALTER TABLE meals ADD COLUMN ${col} REAL`);
+  } catch {
+    // Колонка уже существует — игнорируем
+  }
+}
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
