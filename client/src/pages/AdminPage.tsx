@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,7 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
-import { LogOut, Shield, ArrowLeft } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { LogOut, Shield, ArrowLeft, Ban } from "lucide-react";
 
 interface AdminSession {
   id: number;
@@ -42,6 +43,29 @@ export default function AdminPage() {
   });
 
   const sessions = data?.sessions ?? [];
+  const revokeSessionMutation = useMutation({
+    mutationFn: async (sessionId: number) => {
+      const res = await apiRequest("POST", `/api/admin/sessions/${sessionId}/revoke`);
+      if (!res.ok) throw new Error(await res.text());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/sessions"] });
+    },
+  });
+  const revokeUserSessionsMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/revoke-sessions`);
+      if (!res.ok) throw new Error(await res.text());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/sessions"] });
+    },
+  });
+
+  function revokeAllUserSessions(userId: number, username: string) {
+    if (!window.confirm(`Отозвать все refresh-сессии пользователя ${username}?`)) return;
+    revokeUserSessionsMutation.mutate(userId);
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -71,7 +95,7 @@ export default function AdminPage() {
           <CardHeader>
             <CardTitle>Активные сессии</CardTitle>
             <CardDescription>
-              Read-only список действующих refresh sessions. Управление сессиями появится в следующем срезе Phase 4.
+              Список действующих refresh sessions. Администратор может отозвать одну сессию или все сессии пользователя.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -90,6 +114,7 @@ export default function AdminPage() {
                     <TableHead>User-Agent</TableHead>
                     <TableHead>Создана</TableHead>
                     <TableHead>Истекает</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -106,6 +131,29 @@ export default function AdminPage() {
                       </TableCell>
                       <TableCell>{formatDateTime(session.createdAt)}</TableCell>
                       <TableCell>{formatDateTime(session.expiresAt)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => revokeSessionMutation.mutate(session.id)}
+                            disabled={revokeSessionMutation.isPending || revokeUserSessionsMutation.isPending}
+                            data-testid={`btn-revoke-session-${session.id}`}
+                          >
+                            <Ban className="h-3.5 w-3.5 mr-1" />
+                            Сессию
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => revokeAllUserSessions(session.userId, session.username)}
+                            disabled={revokeSessionMutation.isPending || revokeUserSessionsMutation.isPending}
+                            data-testid={`btn-revoke-user-sessions-${session.userId}`}
+                          >
+                            Все
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

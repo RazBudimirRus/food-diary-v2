@@ -55,6 +55,7 @@
 - **Phase 1 (код):** Vitest unit/integration tests, Supertest auth/diary coverage, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, GitHub Actions CI
 - **UX-1 (код):** редактирование приёма пищи в карточке, сохранение через `PATCH /api/meals/:id`, обновление TanStack Query cache, integration + E2E add→edit→verify
 - **Phase 4 foundation (код):** `user/admin` роли, `requireAdmin`, bootstrap через `ADMIN_BOOTSTRAP_USERNAME`, read-only `/api/admin/sessions`, guarded `/#/admin`
+- **Phase 4 sessions (код):** admin revoke конкретной refresh-сессии и revoke всех refresh-сессий пользователя, UI actions в `/#/admin`, integration tests
 
 ---
 
@@ -190,6 +191,7 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-27 | Cursor Agent | **Phase 4 sessions:** admin revoke single session / all user sessions, UI actions, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 4 foundation:** роли user/admin, requireAdmin, bootstrap admin, read-only active sessions, guarded admin page |
 | 2026-06-27 | Cursor Agent | **UX-1:** редактирование приёма пищи, PATCH save, Query cache update, integration + E2E add→edit→verify |
 | 2026-06-27 | Cursor Agent | **Phase 1:** Vitest/Supertest tests, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, CI workflow |
@@ -200,4 +202,4 @@ PROJECT24_FOODDIARY2/
 
 ---
 
-*Версия Context.md: 1.5 · Синхронизировать с ROADMAP.md v2.3.0*
+*Версия Context.md: 1.6 · Синхронизировать с ROADMAP.md v2.3.0*

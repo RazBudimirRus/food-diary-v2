@@ -211,4 +211,63 @@ describe("admin routes", () => {
       session.username === auth.user.username && session.role === "admin"
     )).toBe(true);
   });
+
+  it("forbids non-admin users from revoking sessions", async () => {
+    const auth = await registerUser("admin_revoke_forbidden_user");
+
+    await request(app)
+      .post("/api/admin/sessions/1/revoke")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(403);
+  });
+
+  it("allows admins to revoke a single active session", async () => {
+    const admin = await registerUser("admin_revoke_single_user");
+    const target = await registerUser("target_single_session_user");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(admin.user.username);
+
+    const before = await request(app)
+      .get("/api/admin/sessions")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    const targetSession = before.body.sessions.find((session: { username: string; id: number }) =>
+      session.username === target.user.username
+    );
+    expect(targetSession).toBeTruthy();
+
+    await request(app)
+      .post(`/api/admin/sessions/${targetSession.id}/revoke`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    const after = await request(app)
+      .get("/api/admin/sessions")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    expect(after.body.sessions.some((session: { id: number }) => session.id === targetSession.id)).toBe(false);
+  });
+
+  it("allows admins to revoke all active sessions for a user", async () => {
+    const admin = await registerUser("admin_revoke_all_user");
+    const target = await registerUser("target_all_sessions_user");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(admin.user.username);
+
+    await request(app)
+      .post(`/api/admin/users/${target.user.id}/revoke-sessions`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    const after = await request(app)
+      .get("/api/admin/sessions")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    expect(after.body.sessions.some((session: { username: string }) =>
+      session.username === target.user.username
+    )).toBe(false);
+  });
 });

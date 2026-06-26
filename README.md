@@ -65,7 +65,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
-| Основа админ-панели                    | 🚧 P4  |
+| Админ-панель: сессии                   | 🚧 P4  |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -374,11 +374,20 @@ food-diary-v2/
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
-- [ ] Phase 4: admin panel (foundation started: roles + read-only sessions)
+- [ ] Phase 4: admin panel (sessions management started)
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.8.0] — 2026-06-27
+
+**feat: Phase 4 session management**
+
+- Added admin API actions to revoke one refresh session or all sessions for a user
+- Added session management buttons to the guarded admin page
+- Added integration coverage for admin session revoke permissions and behavior
+- Phase 4 still has password reset and DeepSeek dashboard slices pending
 
 ### [1.7.0] — 2026-06-27
 
@@ -502,7 +511,7 @@ The app supports multiple users — each registers through the browser, data is 
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
-| Admin panel foundation                 | 🚧 P4  |
+| Admin panel: sessions                  | 🚧 P4  |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -799,11 +808,20 @@ food-diary-v2/
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
-- [ ] Phase 4: admin panel (foundation started: roles + read-only sessions)
+- [ ] Phase 4: admin panel (sessions management started)
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.8.0] — 2026-06-27
+
+**feat: Phase 4 session management**
+
+- Added admin API actions to revoke one refresh session or all sessions for a user
+- Added session management buttons to the guarded admin page
+- Added integration coverage for admin session revoke permissions and behavior
+- Phase 4 still has password reset and DeepSeek dashboard slices pending
 
 ### [1.7.0] — 2026-06-27
 

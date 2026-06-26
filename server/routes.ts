@@ -309,6 +309,24 @@ export function registerRoutes(httpServer: Server, app: Express) {
     res.json({ sessions: storage.listActiveRefreshSessions() });
   });
 
+  app.post("/api/admin/sessions/:id/revoke", requireAuth, requireAdmin, (req: AuthRequest, res) => {
+    const sessionId = Number(req.params.id);
+    if (!Number.isInteger(sessionId) || sessionId <= 0) return res.status(400).json({ error: "Invalid session id" });
+
+    const revoked = storage.revokeRefreshSessionById(sessionId);
+    if (!revoked) return res.status(404).json({ error: "Session not found" });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/users/:id/revoke-sessions", requireAuth, requireAdmin, (req: AuthRequest, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "Invalid user id" });
+    if (!storage.getUserById(userId)) return res.status(404).json({ error: "User not found" });
+
+    storage.revokeUserRefreshTokens(userId);
+    res.json({ ok: true });
+  });
+
   // ── Misc ─────────────────────────────────────────────────────────────
 
   app.get("/api/now", (_req, res) => {

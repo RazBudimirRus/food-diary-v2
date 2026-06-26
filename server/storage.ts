@@ -123,6 +123,7 @@ export interface IStorage {
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken;
   getRefreshToken(token: string): RefreshToken | undefined;
   revokeRefreshToken(token: string): void;
+  revokeRefreshSessionById(id: number): boolean;
   revokeUserRefreshTokens(userId: number): void;
   deleteExpiredOrRevokedRefreshTokens(nowIso?: string): void;
 
@@ -228,6 +229,11 @@ class SqliteStorage implements IStorage {
 
   revokeRefreshToken(token: string) {
     db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.token, token)).run();
+  }
+
+  revokeRefreshSessionById(id: number): boolean {
+    const result = sqlite.prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ? AND revoked = 0").run(id);
+    return result.changes > 0;
   }
 
   revokeUserRefreshTokens(userId: number) {
