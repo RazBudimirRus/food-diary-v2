@@ -212,6 +212,22 @@ describe("admin routes", () => {
     )).toBe(true);
   });
 
+  it("allows admin users to list users without password hashes", async () => {
+    const auth = await registerUser("admin_list_users");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(auth.user.username);
+
+    const res = await request(app)
+      .get("/api/admin/users")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(res.body.users).toEqual(expect.any(Array));
+    const listedUser = res.body.users.find((user: { username: string }) => user.username === auth.user.username);
+    expect(listedUser.role).toBe("admin");
+    expect(listedUser.passwordHash).toBeUndefined();
+  });
+
   it("forbids non-admin users from revoking sessions", async () => {
     const auth = await registerUser("admin_revoke_forbidden_user");
 
@@ -269,5 +285,40 @@ describe("admin routes", () => {
     expect(after.body.sessions.some((session: { username: string }) =>
       session.username === target.user.username
     )).toBe(false);
+  });
+
+  it("forbids non-admin users from resetting passwords", async () => {
+    const auth = await registerUser("admin_reset_forbidden_user");
+
+    await request(app)
+      .post(`/api/admin/users/${auth.user.id}/reset-password`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(403);
+  });
+
+  it("allows admins to reset a user password and revoke their sessions", async () => {
+    const admin = await registerUser("admin_reset_allowed_user");
+    const target = await registerUser("target_reset_password_user");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(admin.user.username);
+
+    const reset = await request(app)
+      .post(`/api/admin/users/${target.user.id}/reset-password`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    expect(reset.body.user.username).toBe(target.user.username);
+    expect(reset.body.temporaryPassword).toEqual(expect.any(String));
+    expect(reset.body.temporaryPassword.length).toBeGreaterThanOrEqual(12);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ username: target.user.username, password: "password123" })
+      .expect(401);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ username: target.user.username, password: reset.body.temporaryPassword })
+      .expect(200);
   });
 });

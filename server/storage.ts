@@ -117,6 +117,8 @@ export interface IStorage {
   getUserByEmail(email: string): User | undefined;
   createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User;
   bootstrapAdminByUsername(username: string): User | undefined;
+  updateUserPassword(userId: number, passwordHash: string): User | undefined;
+  listUsers(): User[];
   listActiveRefreshSessions(nowIso?: string): AdminSession[];
 
   // Refresh tokens (hashed in DB)
@@ -188,6 +190,14 @@ class SqliteStorage implements IStorage {
     if (!user) return undefined;
     if (user.role === "admin") return user;
     return db.update(users).set({ role: "admin" }).where(eq(users.id, user.id)).returning().get();
+  }
+
+  updateUserPassword(userId: number, passwordHash: string): User | undefined {
+    return db.update(users).set({ passwordHash }).where(eq(users.id, userId)).returning().get();
+  }
+
+  listUsers(): User[] {
+    return db.select().from(users).all().sort((a, b) => a.username.localeCompare(b.username));
   }
 
   listActiveRefreshSessions(nowIso = new Date().toISOString()): AdminSession[] {

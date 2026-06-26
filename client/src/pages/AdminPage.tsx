@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,15 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, Shield, ArrowLeft, Ban } from "lucide-react";
+import { LogOut, Shield, ArrowLeft, Ban, KeyRound } from "lucide-react";
+
+interface AdminUser {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string | null;
+  role: "user" | "admin";
+}
 
 interface AdminSession {
   id: number;
@@ -38,11 +47,27 @@ function formatDateTime(value: string) {
 
 export default function AdminPage() {
   const { user, logout } = useAuth();
+  const [resetResult, setResetResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
+  const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery<{ users: AdminUser[] }>({
+    queryKey: ["/api/admin/users"],
+  });
   const { data, isLoading, error } = useQuery<{ sessions: AdminSession[] }>({
     queryKey: ["/api/admin/sessions"],
   });
 
+  const users = usersData?.users ?? [];
   const sessions = data?.sessions ?? [];
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (userId: number) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/reset-password`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json() as Promise<{ user: AdminUser; temporaryPassword: string }>;
+    },
+    onSuccess: ({ user, temporaryPassword }) => {
+      setResetResult({ username: user.username, temporaryPassword });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/sessions"] });
+    },
+  });
   const revokeSessionMutation = useMutation({
     mutationFn: async (sessionId: number) => {
       const res = await apiRequest("POST", `/api/admin/sessions/${sessionId}/revoke`);
@@ -65,6 +90,11 @@ export default function AdminPage() {
   function revokeAllUserSessions(userId: number, username: string) {
     if (!window.confirm(`Отозвать все refresh-сессии пользователя ${username}?`)) return;
     revokeUserSessionsMutation.mutate(userId);
+  }
+
+  function resetUserPassword(userId: number, username: string) {
+    if (!window.confirm(`Сбросить пароль пользователя ${username}? Его refresh-сессии будут отозваны.`)) return;
+    resetPasswordMutation.mutate(userId);
   }
 
   return (
@@ -90,7 +120,76 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-4">
+      <main className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+        {resetResult && (
+          <Card className="border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
+            <CardHeader>
+              <CardTitle className="text-base">Временный пароль создан</CardTitle>
+              <CardDescription>
+                Покажите этот пароль пользователю один раз. После закрытия он не будет доступен в интерфейсе.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm text-muted-foreground">Пользователь: {resetResult.username}</div>
+                <code className="mt-1 block rounded bg-background px-3 py-2 text-sm font-semibold">
+                  {resetResult.temporaryPassword}
+                </code>
+              </div>
+              <Button variant="outline" onClick={() => setResetResult(null)}>
+                Закрыть
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Пользователи</CardTitle>
+            <CardDescription>
+              Сброс пароля создаёт временный пароль и отзывает refresh-сессии выбранного пользователя.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {usersLoading && <p className="text-sm text-muted-foreground">Загрузка пользователей...</p>}
+            {usersError && <p className="text-sm text-destructive">Не удалось загрузить пользователей</p>}
+            {!usersLoading && !usersError && users.length > 0 && (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Пользователь</TableHead>
+                    <TableHead>Роль</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((adminUser) => (
+                    <TableRow key={adminUser.id}>
+                      <TableCell>
+                        <div className="font-medium">{adminUser.displayName || adminUser.username}</div>
+                        <div className="text-xs text-muted-foreground">{adminUser.email}</div>
+                      </TableCell>
+                      <TableCell>{adminUser.role}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resetUserPassword(adminUser.id, adminUser.username)}
+                          disabled={resetPasswordMutation.isPending}
+                          data-testid={`btn-reset-password-${adminUser.id}`}
+                        >
+                          <KeyRound className="h-3.5 w-3.5 mr-1" />
+                          Сбросить пароль
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Активные сессии</CardTitle>

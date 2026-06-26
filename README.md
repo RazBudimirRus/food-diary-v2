@@ -65,7 +65,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
-| Админ-панель: сессии                   | 🚧 P4  |
+| Админ-панель: сессии и сброс пароля    | 🚧 P4  |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -374,11 +374,21 @@ food-diary-v2/
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
-- [ ] Phase 4: admin panel (sessions management started)
+- [ ] Phase 4: admin panel (sessions + password reset implemented)
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.9.0] — 2026-06-27
+
+**feat: Phase 4 admin password reset**
+
+- Added admin user list endpoint and UI table
+- Added admin password reset action that returns a one-time temporary password
+- Revokes the selected user's refresh sessions after password reset
+- Added integration coverage for admin reset permissions and new-password login
+- Phase 4 still has DeepSeek usage dashboard/alerts pending
 
 ### [1.8.0] — 2026-06-27
 
@@ -511,7 +521,7 @@ The app supports multiple users — each registers through the browser, data is 
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
-| Admin panel: sessions                  | 🚧 P4  |
+| Admin panel: sessions and reset        | 🚧 P4  |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -808,11 +818,21 @@ food-diary-v2/
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
-- [ ] Phase 4: admin panel (sessions management started)
+- [ ] Phase 4: admin panel (sessions + password reset implemented)
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.9.0] — 2026-06-27
+
+**feat: Phase 4 admin password reset**
+
+- Added admin user list endpoint and UI table
+- Added admin password reset action that returns a one-time temporary password
+- Revokes the selected user's refresh sessions after password reset
+- Added integration coverage for admin reset permissions and new-password login
+- Phase 4 still has DeepSeek usage dashboard/alerts pending
 
 ### [1.8.0] — 2026-06-27
 

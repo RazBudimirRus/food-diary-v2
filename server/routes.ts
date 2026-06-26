@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import type { Server } from "http";
+import crypto from "crypto";
 import cookieParser from "cookie-parser";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage, getMskDate, getMskTime } from "./storage";
@@ -61,6 +62,10 @@ export function registerRoutes(httpServer: Server, app: Express) {
       accessToken: signToken({ userId: user.id, username: user.username, role: user.role }),
       user: publicUser(user),
     };
+  }
+
+  function generateTemporaryPassword(): string {
+    return crypto.randomBytes(9).toString("base64url");
   }
 
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -305,6 +310,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   // ── Admin ──────────────────────────────────────────────────────────────────
 
+  app.get("/api/admin/users", requireAuth, requireAdmin, (_req: AuthRequest, res) => {
+    const users = storage.listUsers().map(publicUser);
+    res.json({ users });
+  });
+
   app.get("/api/admin/sessions", requireAuth, requireAdmin, (_req: AuthRequest, res) => {
     res.json({ sessions: storage.listActiveRefreshSessions() });
   });
@@ -325,6 +335,20 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     storage.revokeUserRefreshTokens(userId);
     res.json({ ok: true });
+  });
+
+  app.post("/api/admin/users/:id/reset-password", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "Invalid user id" });
+    if (!storage.getUserById(userId)) return res.status(404).json({ error: "User not found" });
+
+    const temporaryPassword = generateTemporaryPassword();
+    const passwordHash = await hashPassword(temporaryPassword);
+    const user = storage.updateUserPassword(userId, passwordHash);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    storage.revokeUserRefreshTokens(userId);
+    res.json({ user: publicUser(user), temporaryPassword });
   });
 
   // ── Misc ─────────────────────────────────────────────────────────────
