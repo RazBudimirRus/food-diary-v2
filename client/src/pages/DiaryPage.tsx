@@ -427,6 +427,11 @@ export default function DiaryPage() {
             </Button>
           </div>
           <div className="flex items-center gap-2">
+            {user?.role === "admin" && (
+              <Button size="sm" variant="outline" asChild data-testid="link-admin">
+                <a href="#/admin">Админ</a>
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={() => downloadReport(activeDate)} data-testid="btn-download-report">
               <Download className="h-4 w-4 mr-1" />
               Отчёт

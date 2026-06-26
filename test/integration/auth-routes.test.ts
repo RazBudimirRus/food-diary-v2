@@ -12,6 +12,7 @@ interface AuthResponse {
     username: string;
     email: string;
     displayName?: string | null;
+    role: "user" | "admin";
   };
 }
 
@@ -182,5 +183,32 @@ describe("diary route authorization and validation", () => {
     expect(res.body.meal.protein).toBe(25);
     expect(res.body.meal.fat).toBe(12);
     expect(res.body.meal.carbs).toBe(55);
+  });
+});
+
+describe("admin routes", () => {
+  it("forbids non-admin users from reading active sessions", async () => {
+    const auth = await registerUser("admin_forbidden_user");
+
+    await request(app)
+      .get("/api/admin/sessions")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(403);
+  });
+
+  it("allows admin users to read active sessions", async () => {
+    const auth = await registerUser("admin_allowed_user");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(auth.user.username);
+
+    const res = await request(app)
+      .get("/api/admin/sessions")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(res.body.sessions).toEqual(expect.any(Array));
+    expect(res.body.sessions.some((session: { username: string; role: string }) =>
+      session.username === auth.user.username && session.role === "admin"
+    )).toBe(true);
   });
 });

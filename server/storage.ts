@@ -21,6 +21,7 @@ sqlite.exec(`
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     display_name TEXT,
+    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS secrets (
@@ -80,6 +81,12 @@ sqlite.exec(`
   );
 `);
 
+try {
+  sqlite.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin'))");
+} catch {
+  // Колонка уже существует — игнорируем
+}
+
 // Миграция: добавляем колонки КБЖУ в уже существующие таблицы
 for (const col of ["calories", "protein", "fat", "carbs"]) {
   try {
@@ -109,6 +116,8 @@ export interface IStorage {
   getUserByUsername(username: string): User | undefined;
   getUserByEmail(email: string): User | undefined;
   createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User;
+  bootstrapAdminByUsername(username: string): User | undefined;
+  listActiveRefreshSessions(nowIso?: string): AdminSession[];
 
   // Refresh tokens (hashed in DB)
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken;
@@ -136,6 +145,19 @@ export interface IStorage {
   getMeal(id: number): Meal | undefined;
 }
 
+export interface AdminSession {
+  id: number;
+  userId: number;
+  username: string;
+  email: string;
+  displayName: string | null;
+  role: User["role"];
+  createdAt: string;
+  expiresAt: string;
+  userAgent: string | null;
+  ip: string | null;
+}
+
 class SqliteStorage implements IStorage {
   getUserById(id: number) {
     return db.select().from(users).where(eq(users.id, id)).get();
@@ -155,8 +177,37 @@ class SqliteStorage implements IStorage {
       email: data.email,
       passwordHash: data.passwordHash,
       displayName: data.displayName ?? null,
+      role: "user",
       createdAt: new Date().toISOString(),
     }).returning().get();
+  }
+
+  bootstrapAdminByUsername(username: string): User | undefined {
+    const user = this.getUserByUsername(username);
+    if (!user) return undefined;
+    if (user.role === "admin") return user;
+    return db.update(users).set({ role: "admin" }).where(eq(users.id, user.id)).returning().get();
+  }
+
+  listActiveRefreshSessions(nowIso = new Date().toISOString()): AdminSession[] {
+    return sqlite.prepare(`
+      SELECT
+        refresh_tokens.id AS id,
+        refresh_tokens.user_id AS userId,
+        users.username AS username,
+        users.email AS email,
+        users.display_name AS displayName,
+        users.role AS role,
+        refresh_tokens.created_at AS createdAt,
+        refresh_tokens.expires_at AS expiresAt,
+        refresh_tokens.user_agent AS userAgent,
+        refresh_tokens.ip AS ip
+      FROM refresh_tokens
+      JOIN users ON users.id = refresh_tokens.user_id
+      WHERE refresh_tokens.revoked = 0
+        AND refresh_tokens.expires_at > ?
+      ORDER BY refresh_tokens.created_at DESC
+    `).all(nowIso) as AdminSession[];
   }
 
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken {

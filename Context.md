@@ -54,6 +54,7 @@
 - **Phase 2 (код):** Helmet/CSP/HSTS, CORS whitelist, rate-limit login/meals, IDOR fix для day summary, Zod PATCH meals, безопасные API-логи, Dependabot config
 - **Phase 1 (код):** Vitest unit/integration tests, Supertest auth/diary coverage, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, GitHub Actions CI
 - **UX-1 (код):** редактирование приёма пищи в карточке, сохранение через `PATCH /api/meals/:id`, обновление TanStack Query cache, integration + E2E add→edit→verify
+- **Phase 4 foundation (код):** `user/admin` роли, `requireAdmin`, bootstrap через `ADMIN_BOOTSTRAP_USERNAME`, read-only `/api/admin/sessions`, guarded `/#/admin`
 
 ---
 
@@ -189,6 +190,7 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-27 | Cursor Agent | **Phase 4 foundation:** роли user/admin, requireAdmin, bootstrap admin, read-only active sessions, guarded admin page |
 | 2026-06-27 | Cursor Agent | **UX-1:** редактирование приёма пищи, PATCH save, Query cache update, integration + E2E add→edit→verify |
 | 2026-06-27 | Cursor Agent | **Phase 1:** Vitest/Supertest tests, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, CI workflow |
 | 2026-06-26 | Cursor Agent | **Phase 2:** Helmet/CSP/HSTS, CORS whitelist, rate-limit auth/meals, IDOR day summary fix, Zod PATCH meals, API logs без body, Dependabot |
@@ -198,4 +200,4 @@ PROJECT24_FOODDIARY2/
 
 ---
 
-*Версия Context.md: 1.4 · Синхронизировать с ROADMAP.md v2.3.0*
+*Версия Context.md: 1.5 · Синхронизировать с ROADMAP.md v2.3.0*

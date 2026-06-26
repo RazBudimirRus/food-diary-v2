@@ -7,7 +7,7 @@ import { generateDayReport } from "./excel";
 import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema, updateMealSchema, type InsertMeal } from "@shared/schema";
 import {
   hashPassword, verifyPassword, signToken,
-  requireAuth, encryptSecret, decryptSecret,
+  requireAuth, requireAdmin, encryptSecret, decryptSecret,
   refreshCookieOptions, clearRefreshCookieOptions, clearLegacyAuthCookieOptions,
   generateRefreshToken, hashToken, getRefreshExpiresAt, getRefreshCookieName,
   type AuthRequest,
@@ -34,15 +34,15 @@ export function registerRoutes(httpServer: Server, app: Express) {
     message: { error: "Слишком много запросов. Попробуйте позже." },
   });
 
-  function publicUser(user: { id: number; username: string; email: string; displayName?: string | null }) {
-    return { id: user.id, username: user.username, email: user.email, displayName: user.displayName };
+  function publicUser(user: { id: number; username: string; email: string; displayName?: string | null; role: "user" | "admin" }) {
+    return { id: user.id, username: user.username, email: user.email, displayName: user.displayName, role: user.role };
   }
 
   function paramValue(value: string | string[] | undefined): string {
     return Array.isArray(value) ? value[0] : value ?? "";
   }
 
-  function issueSession(req: AuthRequest, res: any, user: { id: number; username: string; email: string; displayName?: string | null }) {
+  function issueSession(req: AuthRequest, res: any, user: { id: number; username: string; email: string; displayName?: string | null; role: "user" | "admin" }) {
     const rawRefreshToken = generateRefreshToken();
     const expiresAt = getRefreshExpiresAt();
 
@@ -58,7 +58,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     res.clearCookie("token", clearLegacyAuthCookieOptions());
 
     return {
-      accessToken: signToken({ userId: user.id, username: user.username }),
+      accessToken: signToken({ userId: user.id, username: user.username, role: user.role }),
       user: publicUser(user),
     };
   }
@@ -301,6 +301,12 @@ export function registerRoutes(httpServer: Server, app: Express) {
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // ── Admin ──────────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/sessions", requireAuth, requireAdmin, (_req: AuthRequest, res) => {
+    res.json({ sessions: storage.listActiveRefreshSessions() });
   });
 
   // ── Misc ─────────────────────────────────────────────────────────────

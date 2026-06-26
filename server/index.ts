@@ -105,6 +105,16 @@ app.use((req, res, next) => {
   // Load DeepSeek key from env → encrypt → store in DB (idempotent)
   initDeepSeekKey();
 
+  const adminBootstrapUsername = process.env.ADMIN_BOOTSTRAP_USERNAME?.trim();
+  if (adminBootstrapUsername) {
+    const admin = storage.bootstrapAdminByUsername(adminBootstrapUsername);
+    if (admin) {
+      log(`admin bootstrap applied for user ${admin.username}`, "auth");
+    } else {
+      log(`ADMIN_BOOTSTRAP_USERNAME user not found: ${adminBootstrapUsername}`, "auth");
+    }
+  }
+
   storage.deleteExpiredOrRevokedRefreshTokens();
   setInterval(() => {
     storage.deleteExpiredOrRevokedRefreshTokens();

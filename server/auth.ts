@@ -97,6 +97,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export interface JwtPayload {
   userId: number;
   username: string;
+  role: User["role"];
 }
 
 export function signToken(payload: JwtPayload): string {
@@ -144,6 +145,13 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
   } catch {
     return res.status(401).json({ error: "Токен недействителен или истёк" });
   }
+}
+
+export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  next();
 }
 
 // ── AES-256-GCM secret encryption ────────────────────────────────────────────
