@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import {
-  Trash2, Download, Plus, ChevronLeft, ChevronRight, Clock,
+  Trash2, Download, Plus, ChevronLeft, ChevronRight, Clock, Pencil,
   Utensils, Droplets, Activity, Sun, Moon, Footprints, LogOut,
   Calculator, Flame
 } from "lucide-react";
@@ -114,6 +114,21 @@ function defaultForm(): AddMealFormData {
   };
 }
 
+function formFromMeal(meal: Meal, date: string): AddMealFormData {
+  return {
+    date,
+    tsStart: meal.tsStart,
+    tsEnd: meal.tsEnd ?? "",
+    mealType: meal.mealType as MealType,
+    foodText: meal.foodText ?? "",
+    drinkText: meal.drinkText ?? "",
+    waterUnits: meal.waterUnits != null ? String(meal.waterUnits) : "",
+    hungerBefore: meal.hungerBefore ?? 4,
+    satietyAfter: meal.satietyAfter ?? 7,
+    contextNote: meal.contextNote ?? "",
+  };
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function DiaryPage() {
@@ -126,6 +141,7 @@ export default function DiaryPage() {
   const [summaryForm, setSummaryForm] = useState({ wakeTime: "", sleepTime: "", sportActivity: "", steps: "", dayComment: "" });
   const [pendingDownloadDate, setPendingDownloadDate] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [editingMealId, setEditingMealId] = useState<number | null>(null);
 
   // КБЖУ analysis state
   const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
@@ -156,6 +172,7 @@ export default function DiaryPage() {
 
   const day = data?.day;
   const meals = data?.meals ?? [];
+  const isEditingMeal = editingMealId !== null;
 
   // Check if DeepSeek is available
   useEffect(() => {
@@ -243,6 +260,43 @@ export default function DiaryPage() {
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
 
+  const updateMealMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: AddMealFormData }) => {
+      const payload: Record<string, unknown> = {
+        tsStart: data.tsStart,
+        tsEnd: data.tsEnd,
+        mealType: data.mealType,
+        foodText: data.foodText,
+        drinkText: data.drinkText,
+        waterUnits: data.waterUnits,
+        hungerBefore: data.hungerBefore,
+        satietyAfter: data.satietyAfter,
+        contextNote: data.contextNote,
+      };
+      if (kbjuResult) {
+        payload.calories = kbjuResult.calories;
+        payload.protein = kbjuResult.protein;
+        payload.fat = kbjuResult.fat;
+        payload.carbs = kbjuResult.carbs;
+      }
+      const res = await apiRequest("PATCH", `/api/meals/${id}`, payload);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json() as Promise<{ meal: Meal }>;
+    },
+    onSuccess: ({ meal }) => {
+      queryClient.setQueryData<{ day: Day; meals: Meal[] }>([`/api/days/${activeDate}`], (old) =>
+        old ? { ...old, meals: old.meals.map((item) => item.id === meal.id ? meal : item) } : old
+      );
+      queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
+      setShowAddForm(false);
+      setEditingMealId(null);
+      setForm(defaultForm());
+      setKbjuResult(null);
+      toast({ title: "Приём обновлён" });
+    },
+    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
+  });
+
   const deleteMealMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `/api/meals/${id}`);
@@ -279,6 +333,26 @@ export default function DiaryPage() {
   });
 
   // ── Download report ────────────────────────────────────────────────────────
+
+  function openAddMealForm() {
+    setForm(defaultForm());
+    setEditingMealId(null);
+    setKbjuResult(null);
+    setShowAddForm(true);
+  }
+
+  function openEditMealForm(meal: Meal) {
+    setForm(formFromMeal(meal, activeDate));
+    setEditingMealId(meal.id);
+    setKbjuResult(null);
+    setShowAddForm(true);
+  }
+
+  function closeMealForm() {
+    setShowAddForm(false);
+    setEditingMealId(null);
+    setKbjuResult(null);
+  }
 
   async function downloadReport(date: string, force = false) {
     const res = await apiRequest("GET", `/api/report/${date}${force ? "?force=1" : ""}`);
@@ -456,14 +530,26 @@ export default function DiaryPage() {
                       </span>
                     )}
                   </div>
-                  <Button
-                    variant="ghost" size="icon"
-                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => setDeleteConfirmId(meal.id)}
-                    data-testid={`btn-delete-meal-${meal.id}`}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEditMealForm(meal)}
+                      title="Редактировать"
+                      data-testid={`btn-edit-meal-${meal.id}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => setDeleteConfirmId(meal.id)}
+                      title="Удалить"
+                      data-testid={`btn-delete-meal-${meal.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
                 {meal.foodText && (
@@ -496,7 +582,7 @@ export default function DiaryPage() {
         {!showAddForm && (
           <Button
             className="w-full" variant="outline"
-            onClick={() => { setForm(defaultForm()); setKbjuResult(null); setShowAddForm(true); }}
+            onClick={openAddMealForm}
             data-testid="btn-add-meal"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -508,7 +594,9 @@ export default function DiaryPage() {
         {showAddForm && (
           <Card className="border-2 border-primary/30">
             <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-base">Новый приём пищи</CardTitle>
+              <CardTitle className="text-base">
+                {isEditingMeal ? "Редактирование приёма пищи" : "Новый приём пищи"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
 
@@ -516,6 +604,9 @@ export default function DiaryPage() {
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="mealDate">
                   Дата записи
+                  {isEditingMeal && (
+                    <span className="ml-2 text-muted-foreground font-normal">— изменить дату можно через новую запись</span>
+                  )}
                   {form.date !== mskToday() && (
                     <span className="ml-2 text-amber-600 font-normal">— прошедший день</span>
                   )}
@@ -527,10 +618,11 @@ export default function DiaryPage() {
                     value={form.date}
                     max={mskToday()}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                    disabled={isEditingMeal}
                     className="w-auto"
                     data-testid="input-meal-date"
                   />
-                  {form.date !== mskToday() && (
+                  {!isEditingMeal && form.date !== mskToday() && (
                     <button
                       type="button"
                       className="text-xs text-primary underline"
@@ -697,13 +789,18 @@ export default function DiaryPage() {
               <div className="flex gap-2 pt-1">
                 <Button
                   className="flex-1"
-                  onClick={() => addMealMutation.mutate(form)}
-                  disabled={addMealMutation.isPending || !form.tsStart || !form.date}
+                  onClick={() => isEditingMeal && editingMealId
+                    ? updateMealMutation.mutate({ id: editingMealId, data: form })
+                    : addMealMutation.mutate(form)
+                  }
+                  disabled={addMealMutation.isPending || updateMealMutation.isPending || !form.tsStart || !form.date}
                   data-testid="btn-save-meal"
                 >
-                  {addMealMutation.isPending ? "Сохраняю..." : "Сохранить"}
+                  {addMealMutation.isPending || updateMealMutation.isPending
+                    ? "Сохраняю..."
+                    : isEditingMeal ? "Сохранить изменения" : "Сохранить"}
                 </Button>
-                <Button variant="outline" onClick={() => { setShowAddForm(false); setKbjuResult(null); }} data-testid="btn-cancel-meal">
+                <Button variant="outline" onClick={closeMealForm} data-testid="btn-cancel-meal">
                   Отмена
                 </Button>
               </div>

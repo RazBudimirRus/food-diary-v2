@@ -152,9 +152,35 @@ describe("diary route authorization and validation", () => {
     const res = await request(app)
       .patch(`/api/meals/${meal.id}`)
       .set("Authorization", `Bearer ${auth.accessToken}`)
-      .send({ foodText: "Обновлённая еда" })
+      .send({
+        tsStart: "13:15",
+        tsEnd: "13:45",
+        mealType: "ужин",
+        foodText: "Обновлённая еда",
+        drinkText: "Чай",
+        waterUnits: 1,
+        hungerBefore: 3,
+        satietyAfter: 8,
+        contextNote: "После прогулки",
+        calories: 450,
+        protein: 25,
+        fat: 12,
+        carbs: 55,
+      })
       .expect(200);
 
     expect(res.body.meal.foodText).toBe("Обновлённая еда");
+    expect(res.body.meal.tsStart).toBe("13:15");
+    expect(res.body.meal.tsEnd).toBe("13:45");
+    expect(res.body.meal.mealType).toBe("ужин");
+    expect(res.body.meal.drinkText).toBe("Чай");
+    expect(res.body.meal.waterUnits).toBe(1);
+    expect(res.body.meal.hungerBefore).toBe(3);
+    expect(res.body.meal.satietyAfter).toBe(8);
+    expect(res.body.meal.contextNote).toBe("После прогулки");
+    expect(res.body.meal.calories).toBe(450);
+    expect(res.body.meal.protein).toBe(25);
+    expect(res.body.meal.fat).toBe(12);
+    expect(res.body.meal.carbs).toBe(55);
   });
 });

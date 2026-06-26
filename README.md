@@ -60,6 +60,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | Итоги дня (подъём/спорт/шаги)          |   ✅   |
 | Excel-отчёт для врача                  |   ✅   |
 | Удаление записи                        |   ✅   |
+| Редактирование записи                  |   ✅   |
 | Зашифрованное хранение секретов        |   ✅   |
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
@@ -301,9 +302,10 @@ echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).d
 2. При первом входе нажмите **«Регистрация»** → введите имя пользователя, e-mail и пароль
 3. После входа — навигация по датам стрелками в шапке (нельзя выбрать дату в будущем)
 4. Нажмите **«Добавить приём пищи»** → заполните форму
-5. Кнопка **«Отчёт»** в шапке → если итоги дня ещё не заполнены, откроется диалог (подъём/отбой/спорт/шаги). При повторном скачивании диалог не показывается
-6. Файл скачивается как `Дневник_питания_YYYY-MM-DD.xlsx`
-7. Для выхода — кнопка **«Выйти»** в шапке (иконка выхода)
+5. Чтобы исправить запись, нажмите кнопку **«Редактировать»** в карточке приёма пищи, измените поля и сохраните
+6. Кнопка **«Отчёт»** в шапке → если итоги дня ещё не заполнены, откроется диалог (подъём/отбой/спорт/шаги). При повторном скачивании диалог не показывается
+7. Файл скачивается как `Дневник_питания_YYYY-MM-DD.xlsx`
+8. Для выхода — кнопка **«Выйти»** в шапке (иконка выхода)
 
 > **Важно:** один день = 00:00–23:59 по МСК (UTC+3). Записи всегда относятся к московскому времени независимо от часового пояса устройства.
 
@@ -369,11 +371,21 @@ food-diary-v2/
 - [x] Phase 10: access/refresh session lifecycle + idle timeout
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
+- [x] UX-1: edit existing meal entries
 - [ ] Phase 4: admin panel
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.6.0] — 2026-06-27
+
+**feat: редактирование приёмов пищи**
+
+- Добавлена кнопка **«Редактировать»** в карточку приёма пищи рядом с удалением
+- Форма редактирования открывается с текущими значениями записи и сохраняет изменения через `PATCH /api/meals/:id`
+- После сохранения обновляется TanStack Query cache текущего дня
+- Расширены integration-тесты PATCH и E2E flow: add → edit → verify updated card
 
 ### [1.5.0] — 2026-06-27
 
@@ -473,6 +485,7 @@ The app supports multiple users — each registers through the browser, data is 
 | Day summary (wake/sport/steps)         |   ✅   |
 | Excel report for doctor                |   ✅   |
 | Delete entry                           |   ✅   |
+| Edit entry                             |   ✅   |
 | Encrypted secrets storage              |   ✅   |
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
@@ -702,9 +715,10 @@ echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).d
 2. On first visit click **"Register"** → enter username, email and password
 3. After login — use arrow buttons in the header to navigate between dates (future dates are disabled)
 4. Click **"Add meal"** → fill out the form
-5. Click **"Report"** in the header → if day summary isn't filled yet, a dialog opens (wake/bedtime/sport/steps). On repeat downloads the dialog is skipped
-6. File downloads as `Дневник_питания_YYYY-MM-DD.xlsx`
-7. To log out — click the **logout button** in the header
+5. To fix an entry, click **"Edit"** on the meal card, update the fields, and save
+6. Click **"Report"** in the header → if day summary isn't filled yet, a dialog opens (wake/bedtime/sport/steps). On repeat downloads the dialog is skipped
+7. File downloads as `Дневник_питания_YYYY-MM-DD.xlsx`
+8. To log out — click the **logout button** in the header
 
 > **Important:** one day = 00:00–23:59 MSK (UTC+3). Entries always use Moscow time regardless of the device's timezone.
 
@@ -770,11 +784,21 @@ food-diary-v2/
 - [x] Phase 10: access/refresh session lifecycle + idle timeout
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
+- [x] UX-1: edit existing meal entries
 - [ ] Phase 4: admin panel
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.6.0] — 2026-06-27
+
+**feat: edit existing meal entries**
+
+- Added an **Edit** action next to delete on meal cards
+- The edit form opens with current entry values and saves through `PATCH /api/meals/:id`
+- The current day's TanStack Query cache is updated after saving
+- Expanded PATCH integration coverage and E2E add → edit → verify coverage
 
 ### [1.5.0] — 2026-06-27
 
