@@ -58,6 +58,7 @@
 - **Phase 4 sessions (код):** admin revoke конкретной refresh-сессии и revoke всех refresh-сессий пользователя, UI actions в `/#/admin`, integration tests
 - **Phase 4 reset (код):** admin user list, reset password с временным паролем, revoke refresh sessions после сброса, integration tests
 - **Phase 4 usage dashboard (код):** `api_usage`, запись DeepSeek prompt/completion tokens, cost estimate, daily token limit status, dashboard в `/#/admin`
+- **Phase 9 (код):** daily limit guard для DeepSeek — `/api/analyze` возвращает `429`, когда `DEEPSEEK_DAILY_TOKEN_LIMIT` достигнут
 
 ---
 
@@ -193,6 +194,7 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-27 | Cursor Agent | **Phase 9:** DeepSeek daily token limit guard, 429 blocking, admin blocked/allowed status, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 4 usage dashboard:** api_usage, DeepSeek token/cost tracking, daily limit status, admin dashboard |
 | 2026-06-27 | Cursor Agent | **Phase 4 reset:** admin user list, one-time temporary password reset, session revoke, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 4 sessions:** admin revoke single session / all user sessions, UI actions, integration coverage |
@@ -206,4 +208,4 @@ PROJECT24_FOODDIARY2/
 
 ---
 
-*Версия Context.md: 1.8 · Синхронизировать с ROADMAP.md v2.3.0*
+*Версия Context.md: 1.9 · Синхронизировать с ROADMAP.md v2.3.0*

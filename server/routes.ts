@@ -73,6 +73,21 @@ export function registerRoutes(httpServer: Server, app: Express) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
+  function deepseekDailyLimitStatus(now = new Date()) {
+    const dailyTokenLimit = readPositiveNumber(process.env.DEEPSEEK_DAILY_TOKEN_LIMIT, 0);
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setUTCDate(tomorrowStart.getUTCDate() + 1);
+    const todaySummary = storage.getApiUsageSummary(todayStart.toISOString(), tomorrowStart.toISOString());
+    const todayTokens = todaySummary.totalTokens;
+
+    return {
+      dailyTokenLimit,
+      todayTokens,
+      dailyLimitExceeded: dailyTokenLimit > 0 && todayTokens >= dailyTokenLimit,
+    };
+  }
+
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   /** POST /api/auth/register */
@@ -306,6 +321,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const parsed = analyzeSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
+      const limitStatus = deepseekDailyLimitStatus();
+      if (limitStatus.dailyLimitExceeded) {
+        return res.status(429).json({
+          error: "DeepSeek daily token limit exceeded",
+          ...limitStatus,
+        });
+      }
+
       const result = await analyzeNutrition(parsed.data.foodText, parsed.data.drinkText);
       if (result.usage) {
         storage.recordApiUsage({
@@ -339,15 +362,12 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const from = new Date(now);
     from.setUTCDate(from.getUTCDate() - 30);
     const summary = storage.getApiUsageSummary(from.toISOString(), now.toISOString());
-    const today = now.toISOString().slice(0, 10);
-    const todayTokens = summary.byDay.find((day) => day.date === today)?.totalTokens ?? 0;
-    const dailyTokenLimit = readPositiveNumber(process.env.DEEPSEEK_DAILY_TOKEN_LIMIT, 0);
+    const limitStatus = deepseekDailyLimitStatus(now);
 
     res.json({
       ...summary,
-      dailyTokenLimit,
-      todayTokens,
-      dailyLimitExceeded: dailyTokenLimit > 0 && todayTokens >= dailyTokenLimit,
+      ...limitStatus,
+      analysisBlocked: limitStatus.dailyLimitExceeded,
     });
   });
 

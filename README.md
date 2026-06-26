@@ -66,6 +66,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
 | Админ-панель MVP                       |   ✅   |
+| Блокировка DeepSeek по дневному лимиту |   ✅   |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -378,10 +379,19 @@ food-diary-v2/
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
 - [x] Phase 4: admin panel MVP
-- [ ] Phase 9: DeepSeek usage alerting
+- [x] Phase 9: DeepSeek usage alerting / daily limit blocking
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.11.0] — 2026-06-27
+
+**feat: Phase 9 DeepSeek daily limit guard**
+
+- Blocks `/api/analyze` with `429` when `DEEPSEEK_DAILY_TOKEN_LIMIT` is reached
+- Returns structured limit status without calling DeepSeek after the limit is reached
+- Shows blocked/allowed analysis status in the admin DeepSeek usage card
+- Added integration coverage for daily limit blocking
 
 ### [1.10.0] — 2026-06-27
 
@@ -536,6 +546,7 @@ The app supports multiple users — each registers through the browser, data is 
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
 | Admin panel MVP                        |   ✅   |
+| DeepSeek daily limit blocking          |   ✅   |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -836,10 +847,19 @@ food-diary-v2/
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
 - [x] Phase 4: admin panel MVP
-- [ ] Phase 9: DeepSeek usage alerting
+- [x] Phase 9: DeepSeek usage alerting / daily limit blocking
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.11.0] — 2026-06-27
+
+**feat: Phase 9 DeepSeek daily limit guard**
+
+- Blocks `/api/analyze` with `429` when `DEEPSEEK_DAILY_TOKEN_LIMIT` is reached
+- Returns structured limit status without calling DeepSeek after the limit is reached
+- Shows blocked/allowed analysis status in the admin DeepSeek usage card
+- Added integration coverage for daily limit blocking
 
 ### [1.10.0] — 2026-06-27
 

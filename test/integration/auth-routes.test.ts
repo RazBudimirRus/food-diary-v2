@@ -186,6 +186,40 @@ describe("diary route authorization and validation", () => {
   });
 });
 
+describe("DeepSeek usage limits", () => {
+  it("blocks analysis when the daily token limit is reached", async () => {
+    const previousLimit = process.env.DEEPSEEK_DAILY_TOKEN_LIMIT;
+    process.env.DEEPSEEK_DAILY_TOKEN_LIMIT = "10";
+    try {
+      const auth = await registerUser("deepseek_limit_user");
+      const { storage } = await import("../../server/storage");
+      storage.recordApiUsage({
+        userId: auth.user.id,
+        endpoint: "deepseek",
+        tokensIn: 8,
+        tokensOut: 2,
+        costEstimate: 0.001,
+      });
+
+      const res = await request(app)
+        .post("/api/analyze")
+        .set("Authorization", `Bearer ${auth.accessToken}`)
+        .send({ foodText: "Овсянка" })
+        .expect(429);
+
+      expect(res.body.error).toBe("DeepSeek daily token limit exceeded");
+      expect(res.body.dailyLimitExceeded).toBe(true);
+      expect(res.body.todayTokens).toBeGreaterThanOrEqual(10);
+    } finally {
+      if (previousLimit === undefined) {
+        delete process.env.DEEPSEEK_DAILY_TOKEN_LIMIT;
+      } else {
+        process.env.DEEPSEEK_DAILY_TOKEN_LIMIT = previousLimit;
+      }
+    }
+  });
+});
+
 describe("admin routes", () => {
   it("forbids non-admin users from reading active sessions", async () => {
     const auth = await registerUser("admin_forbidden_user");

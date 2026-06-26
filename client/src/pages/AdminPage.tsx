@@ -54,6 +54,7 @@ interface DeepSeekUsageSummary {
   dailyTokenLimit: number;
   todayTokens: number;
   dailyLimitExceeded: boolean;
+  analysisBlocked: boolean;
 }
 
 function formatDateTime(value: string) {
@@ -172,7 +173,9 @@ export default function AdminPage() {
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    {deepseekUsage.dailyLimitExceeded ? "Дневной лимит достигнут или превышен." : "Дневной лимит не превышен."}
+                    {deepseekUsage.analysisBlocked
+                      ? "КБЖУ-анализ временно заблокирован до следующего дня."
+                      : "КБЖУ-анализ разрешён, дневной лимит не превышен."}
                   </div>
                 </div>
 
