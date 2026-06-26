@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import type { Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction, CookieOptions } from "express";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
 
@@ -16,6 +16,29 @@ const JWT_SECRET = process.env.JWT_SECRET || (() => {
 })();
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+
+const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Secure flag: COOKIE_SECURE=1 in prod behind HTTPS; COOKIE_SECURE=0 for local HTTP dev */
+export function isSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE === "1") return true;
+  if (process.env.COOKIE_SECURE === "0") return false;
+  return process.env.NODE_ENV === "production";
+}
+
+export function authCookieOptions(): CookieOptions {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isSecureCookie(),
+    maxAge: AUTH_COOKIE_MAX_AGE_MS,
+  };
+}
+
+export function clearAuthCookieOptions(): CookieOptions {
+  const { maxAge: _maxAge, ...rest } = authCookieOptions();
+  return rest;
+}
 
 // AES-256-GCM key for encrypting secrets in DB
 // Must be 32 bytes (256 bits). Derived from ENCRYPTION_KEY env var.

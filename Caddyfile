@@ -1,21 +1,30 @@
-# Caddyfile для VPS 95.163.213.45
-# Использовать с доменом — поменяй 95.163.213.45 на свой домен для автоTLS
-# Пока без домена — HTTP only
+# Food Diary V2 — Caddy reverse proxy (Phase 6)
+# TLS: wildcard *.razbudimir.com — mount certs to /etc/ssl/razbudimir in container
+# DOMAIN env var (default: fooddiary.razbudimir.com) — see docker-compose.yml
 
-:80 {
-    # Веб-форма и API на одном порту
-    reverse_proxy api:5000
-    
-    encode gzip
-    
-    log {
-        output file /var/log/caddy/food_diary.log
-        format json
-    }
+{
+	# JSON access logs
+	log {
+		output file /var/log/caddy/access.log
+		format json
+	}
 }
 
-# Когда будет домен, раскомментировать:
-# food.example.com {
-#     reverse_proxy api:5000
-#     encode gzip
-# }
+{$DOMAIN:fooddiary.razbudimir.com} {
+	tls /etc/ssl/razbudimir/fullchain.pem /etc/ssl/razbudimir/privkey.pem
+
+	reverse_proxy api:5000
+
+	encode gzip zstd
+
+	header {
+		# HSTS — only effective over HTTPS
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/food_diary.log
+		format json
+	}
+}

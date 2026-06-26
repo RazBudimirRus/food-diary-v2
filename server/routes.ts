@@ -7,6 +7,7 @@ import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSc
 import {
   hashPassword, verifyPassword, signToken,
   requireAuth, encryptSecret, decryptSecret,
+  authCookieOptions, clearAuthCookieOptions,
   type AuthRequest,
 } from "./auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
@@ -30,7 +31,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const user = storage.createUser({ username, email, passwordHash, displayName });
     const token = signToken({ userId: user.id, username: user.username });
 
-    res.cookie("token", token, { httpOnly: true, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie("token", token, authCookieOptions());
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, displayName: user.displayName } });
   });
 
@@ -47,13 +48,13 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!ok) return res.status(401).json({ error: "Неверный логин или пароль" });
 
     const token = signToken({ userId: user.id, username: user.username });
-    res.cookie("token", token, { httpOnly: true, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000 });
+    res.cookie("token", token, authCookieOptions());
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, displayName: user.displayName } });
   });
 
   /** POST /api/auth/logout */
   app.post("/api/auth/logout", (_req, res) => {
-    res.clearCookie("token");
+    res.clearCookie("token", clearAuthCookieOptions());
     res.json({ ok: true });
   });
 

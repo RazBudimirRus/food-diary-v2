@@ -12,5 +12,9 @@ data.db-journal
 .env.*
 !.env.example
 
+# TLS private keys — never commit
+certs/*.pem
+certs/*.key
+
 *.log
 .DS_Store

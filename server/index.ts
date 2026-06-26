@@ -9,6 +9,10 @@ import { initDeepSeekKey } from "./deepseek";
 const app = express();
 const httpServer = createServer(app);
 
+if (process.env.TRUST_PROXY === "1") {
+  app.set("trust proxy", 1);
+}
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

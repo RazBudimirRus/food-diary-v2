@@ -1,0 +1,15 @@
+# Local dev without Caddy/HTTPS — API on http://localhost:5000
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api
+
+services:
+  api:
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: development
+      TRUST_PROXY: "0"
+      COOKIE_SECURE: "0"
+
+  caddy:
+    profiles:
+      - never
