@@ -1,12 +1,24 @@
 node_modules/
 dist/
 .vite/
+coverage/
+test-results/
+playwright-report/
+blob-report/
 
 # SQLite database files — never commit; exposes demo data at rest
 data.db
 data.db-shm
 data.db-wal
 data.db-journal
+e2e-test.db
+e2e-test.db-shm
+e2e-test.db-wal
+e2e-test.db-journal
+*-test.db
+*-test.db-shm
+*-test.db-wal
+*-test.db-journal
 
 .env
 .env.*

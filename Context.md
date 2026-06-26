@@ -52,6 +52,7 @@
 - **Phase 3 (код):** SQLite WAL mode, `scripts/backup.sh`, `install-backup-cron.sh`, preflight §13
 - **Phase 10 (код):** `refresh_tokens` в SQLite, access JWT 30m в памяти React, refresh 7d в httpOnly cookie, `/api/auth/refresh`, idle timeout 25/30 мин
 - **Phase 2 (код):** Helmet/CSP/HSTS, CORS whitelist, rate-limit login/meals, IDOR fix для day summary, Zod PATCH meals, безопасные API-логи, Dependabot config
+- **Phase 1 (код):** Vitest unit/integration tests, Supertest auth/diary coverage, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, GitHub Actions CI
 
 ---
 
@@ -68,7 +69,7 @@
 | Дублирование схемы БД: raw SQL + Drizzle + ALTER в runtime | `server/storage.ts` | Средняя |
 | README: `DELETE /api/secrets` — эндпоинта нет | docs | Низкая |
 | ~~Логи API пишут полный JSON ответа~~ | `server/index.ts` | ✅ Закрыто Phase 2 |
-| **Нет тестов** | — | Средняя |
+| ~~Нет тестов~~ | — | ✅ Закрыто Phase 1 |
 
 ---
 
@@ -187,6 +188,7 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-27 | Cursor Agent | **Phase 1:** Vitest/Supertest tests, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, CI workflow |
 | 2026-06-26 | Cursor Agent | **Phase 2:** Helmet/CSP/HSTS, CORS whitelist, rate-limit auth/meals, IDOR day summary fix, Zod PATCH meals, API logs без body, Dependabot |
 | 2026-06-26 | Cursor Agent | **Phase 10:** refresh_tokens, access 30m + refresh 7d, `/api/auth/refresh`, access token in-memory, idle timeout 25/30, `.env.example` |
 | 2026-06-26 | Cursor Agent | **Phase 3:** SQLite WAL, backup.sh, install-backup-cron.sh, sqlite3 in image, preflight §13 |
@@ -194,4 +196,4 @@ PROJECT24_FOODDIARY2/
 
 ---
 
-*Версия Context.md: 1.2 · Синхронизировать с ROADMAP.md v2.2.0*
+*Версия Context.md: 1.3 · Синхронизировать с ROADMAP.md v2.2.0*

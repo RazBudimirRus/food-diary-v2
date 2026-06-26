@@ -1,0 +1,160 @@
+import express from "express";
+import { createServer, type Server } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import request from "supertest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+interface AuthResponse {
+  accessToken: string;
+  user: {
+    id: number;
+    username: string;
+    email: string;
+    displayName?: string | null;
+  };
+}
+
+let app: express.Express;
+let server: Server;
+
+async function registerUser(username: string): Promise<AuthResponse> {
+  const res = await request(app)
+    .post("/api/auth/register")
+    .send({
+      username,
+      email: `${username}@example.com`,
+      password: "password123",
+      displayName: username,
+    })
+    .expect(200);
+
+  return res.body as AuthResponse;
+}
+
+async function addMeal(accessToken: string, date = "2026-06-26") {
+  const res = await request(app)
+    .post("/api/meals")
+    .set("Authorization", `Bearer ${accessToken}`)
+    .send({
+      date,
+      tsStart: "12:30",
+      mealType: "обед",
+      foodText: "Гречка и курица",
+      hungerBefore: 4,
+      satietyAfter: 7,
+    })
+    .expect(200);
+
+  return res.body as { meal: { id: number }; day: { id: number } };
+}
+
+beforeAll(async () => {
+  vi.resetModules();
+  process.env.NODE_ENV = "test";
+  process.env.SQLITE_DB_PATH = join(tmpdir(), `food-diary-integration-${process.pid}-${Date.now()}.db`);
+  process.env.JWT_SECRET = "integration-test-jwt-secret-change-me-32";
+  process.env.ENCRYPTION_KEY = "integration-test-encryption-key-change-me-32";
+  process.env.JWT_EXPIRES_IN = "30m";
+  process.env.JWT_REFRESH_EXPIRES_IN = "7d";
+  process.env.REFRESH_COOKIE_MAX_AGE = "604800";
+
+  app = express();
+  server = createServer(app);
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
+
+  const { registerRoutes } = await import("../../server/routes");
+  registerRoutes(server, app);
+});
+
+afterAll(() => {
+  server.close();
+});
+
+describe("auth routes", () => {
+  it("registers a user, returns an access token, and sets an httpOnly refresh cookie", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "alice",
+        email: "alice@example.com",
+        password: "password123",
+        displayName: "Alice",
+      })
+      .expect(200);
+
+    expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.token).toBeUndefined();
+    expect(res.headers["set-cookie"].join(";")).toContain("refresh_token=");
+    expect(res.headers["set-cookie"].join(";")).toContain("HttpOnly");
+  });
+
+  it("refreshes an access token using the refresh cookie", async () => {
+    const agent = request.agent(app);
+
+    await agent
+      .post("/api/auth/register")
+      .send({
+        username: "refresh_user",
+        email: "refresh_user@example.com",
+        password: "password123",
+      })
+      .expect(200);
+
+    const refresh = await agent.post("/api/auth/refresh").expect(200);
+
+    expect(refresh.body.accessToken).toEqual(expect.any(String));
+    expect(refresh.body.user.username).toBe("refresh_user");
+  });
+
+  it("requires a bearer access token for protected routes", async () => {
+    await request(app).get("/api/auth/me").expect(401);
+
+    const auth = await registerUser("protected_user");
+    const me = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(me.body.username).toBe("protected_user");
+  });
+});
+
+describe("diary route authorization and validation", () => {
+  it("blocks day summary updates across users", async () => {
+    const owner = await registerUser("owner_user");
+    const intruder = await registerUser("intruder_user");
+    const { day } = await addMeal(owner.accessToken);
+
+    await request(app)
+      .post(`/api/days/${day.id}/summary`)
+      .set("Authorization", `Bearer ${intruder.accessToken}`)
+      .send({ wakeTime: "08:00", sleepTime: "23:30", steps: 5000 })
+      .expect(403);
+  });
+
+  it("rejects mass-assignment fields in meal updates", async () => {
+    const auth = await registerUser("patch_user");
+    const { meal } = await addMeal(auth.accessToken);
+
+    await request(app)
+      .patch(`/api/meals/${meal.id}`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({ foodText: "Updated", userId: 999, dayId: 999 })
+      .expect(400);
+  });
+
+  it("allows valid meal updates", async () => {
+    const auth = await registerUser("patch_valid_user");
+    const { meal } = await addMeal(auth.accessToken);
+
+    const res = await request(app)
+      .patch(`/api/meals/${meal.id}`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({ foodText: "Обновлённая еда" })
+      .expect(200);
+
+    expect(res.body.meal.foodText).toBe("Обновлённая еда");
+  });
+});
