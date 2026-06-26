@@ -123,6 +123,7 @@ export interface IStorage {
   listSecretKeys(userId: number): string[];
 
   // Days
+  getDayById(id: number): Day | undefined;
   getDayByDate(userId: number, date: string): Day | undefined;
   getOrCreateDay(userId: number, date: string): Day;
   updateDaySummary(dayId: number, summary: DaySummary): Day;
@@ -206,6 +207,10 @@ class SqliteStorage implements IStorage {
 
   listSecretKeys(userId: number): string[] {
     return db.select({ key: secrets.key }).from(secrets).where(eq(secrets.userId, userId)).all().map(r => r.key);
+  }
+
+  getDayById(id: number) {
+    return db.select().from(days).where(eq(days.id, id)).get();
   }
 
   getDayByDate(userId: number, date: string) {

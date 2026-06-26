@@ -132,6 +132,9 @@ export const addMealSchema = z.object({
 });
 export type AddMeal = z.infer<typeof addMealSchema>;
 
+export const updateMealSchema = addMealSchema.omit({ date: true }).partial().strict();
+export type UpdateMeal = z.infer<typeof updateMealSchema>;
+
 // ─── DeepSeek КБЖУ ────────────────────────────────────────────────────────────
 export const analyzeSchema = z.object({
   foodText: z.string().optional(),

@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express, { Response, NextFunction } from 'express';
 import type { Request } from 'express';
+import cors from "cors";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
@@ -13,6 +15,50 @@ const httpServer = createServer(app);
 if (process.env.TRUST_PROXY === "1") {
   app.set("trust proxy", 1);
 }
+
+function allowedOrigins(): string[] {
+  const configured = (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const publicUrl = process.env.PUBLIC_URL ? [process.env.PUBLIC_URL] : [];
+  const domainUrl = process.env.DOMAIN ? [`https://${process.env.DOMAIN}`] : [];
+  const devOrigins = process.env.NODE_ENV === "production"
+    ? []
+    : ["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000", "http://127.0.0.1:5173"];
+
+  return Array.from(new Set([...configured, ...publicUrl, ...domainUrl, ...devOrigins]));
+}
+
+app.use(helmet({
+  contentSecurityPolicy: process.env.NODE_ENV === "production"
+    ? {
+        directives: {
+          defaultSrc: ["'self'"],
+          baseUri: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:"],
+          fontSrc: ["'self'", "data:"],
+          connectSrc: ["'self'"],
+        },
+      }
+    : false,
+  hsts: process.env.NODE_ENV === "production"
+    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
+    : false,
+}));
+
+const corsOrigins = allowedOrigins();
+app.use(cors({
+  credentials: true,
+  origin(origin, callback) {
+    if (!origin || corsOrigins.includes(origin)) return callback(null, true);
+    return callback(null, false);
+  },
+}));
 
 declare module "http" {
   interface IncomingMessage {
@@ -44,23 +90,11 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
     }
   });
 

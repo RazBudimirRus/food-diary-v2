@@ -1,9 +1,10 @@
 import type { Express } from "express";
 import type { Server } from "http";
 import cookieParser from "cookie-parser";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage, getMskDate, getMskTime } from "./storage";
 import { generateDayReport } from "./excel";
-import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema } from "@shared/schema";
+import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema, updateMealSchema, type InsertMeal } from "@shared/schema";
 import {
   hashPassword, verifyPassword, signToken,
   requireAuth, encryptSecret, decryptSecret,
@@ -17,6 +18,21 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
 
   const refreshCookieName = getRefreshCookieName();
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Слишком много попыток входа. Попробуйте позже." },
+  });
+  const mealCreateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    limit: 60,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    keyGenerator: (req: AuthRequest) => req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || "0.0.0.0")}`,
+    message: { error: "Слишком много запросов. Попробуйте позже." },
+  });
 
   function publicUser(user: { id: number; username: string; email: string; displayName?: string | null }) {
     return { id: user.id, username: user.username, email: user.email, displayName: user.displayName };
@@ -66,7 +82,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
   });
 
   /** POST /api/auth/login */
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", loginLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -163,14 +179,18 @@ export function registerRoutes(httpServer: Server, app: Express) {
     try {
       const parsed = daySummarySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-      const day = storage.updateDaySummary(Number(req.params.id), parsed.data);
+      const existingDay = storage.getDayById(Number(req.params.id));
+      if (!existingDay) return res.status(404).json({ error: "День не найден" });
+      if (existingDay.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
+
+      const day = storage.updateDaySummary(existingDay.id, parsed.data);
       res.json({ day });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
   // ── Meals ──────────────────────────────────────────────────────────────────
 
-  app.post("/api/meals", requireAuth, (req: AuthRequest, res) => {
+  app.post("/api/meals", requireAuth, mealCreateLimiter, (req: AuthRequest, res) => {
     try {
       const parsed = addMealSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -217,7 +237,27 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const meal = storage.getMeal(Number(req.params.id));
       if (!meal) return res.status(404).json({ error: "Not found" });
       if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
-      const updated = storage.updateMeal(meal.id, req.body);
+      const parsed = updateMealSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const data = parsed.data;
+      const update: Partial<InsertMeal> = {};
+      if (data.tsStart !== undefined) update.tsStart = data.tsStart;
+      if (data.tsEnd !== undefined) update.tsEnd = data.tsEnd || data.tsStart || meal.tsStart;
+      if (data.mealType !== undefined) update.mealType = data.mealType;
+      if (data.foodText !== undefined) update.foodText = data.foodText || null;
+      if (data.drinkText !== undefined) update.drinkText = data.drinkText || null;
+      if (data.waterUnits !== undefined) update.waterUnits = data.waterUnits === "" ? null : Number(data.waterUnits);
+      if (data.hungerBefore !== undefined) update.hungerBefore = Number(data.hungerBefore);
+      if (data.satietyAfter !== undefined) update.satietyAfter = Number(data.satietyAfter);
+      if (data.contextNote !== undefined) update.contextNote = data.contextNote || null;
+      if (data.rawInput !== undefined) update.rawInput = data.rawInput || null;
+      if (data.calories !== undefined) update.calories = data.calories;
+      if (data.protein !== undefined) update.protein = data.protein;
+      if (data.fat !== undefined) update.fat = data.fat;
+      if (data.carbs !== undefined) update.carbs = data.carbs;
+
+      const updated = storage.updateMeal(meal.id, update);
       res.json({ meal: updated });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
