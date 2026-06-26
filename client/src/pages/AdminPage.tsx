@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, Shield, ArrowLeft, Ban, KeyRound } from "lucide-react";
+import { LogOut, Shield, ArrowLeft, Ban, KeyRound, BarChart3 } from "lucide-react";
 
 interface AdminUser {
   id: number;
@@ -35,6 +35,27 @@ interface AdminSession {
   ip: string | null;
 }
 
+interface DeepSeekUsageDay {
+  date: string;
+  totalTokens: number;
+  tokensIn: number;
+  tokensOut: number;
+  costEstimate: number;
+  requests: number;
+}
+
+interface DeepSeekUsageSummary {
+  totalRequests: number;
+  totalTokens: number;
+  tokensIn: number;
+  tokensOut: number;
+  costEstimate: number;
+  byDay: DeepSeekUsageDay[];
+  dailyTokenLimit: number;
+  todayTokens: number;
+  dailyLimitExceeded: boolean;
+}
+
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("ru-RU", {
     day: "2-digit",
@@ -50,6 +71,9 @@ export default function AdminPage() {
   const [resetResult, setResetResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
   const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
+  });
+  const { data: deepseekUsage, isLoading: deepseekLoading, error: deepseekError } = useQuery<DeepSeekUsageSummary>({
+    queryKey: ["/api/admin/deepseek/usage"],
   });
   const { data, isLoading, error } = useQuery<{ sessions: AdminSession[] }>({
     queryKey: ["/api/admin/sessions"],
@@ -121,6 +145,89 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              DeepSeek usage
+            </CardTitle>
+            <CardDescription>
+              Токены и примерная стоимость КБЖУ-анализа за последние 30 дней.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {deepseekLoading && <p className="text-sm text-muted-foreground">Загрузка usage...</p>}
+            {deepseekError && <p className="text-sm text-destructive">Не удалось загрузить DeepSeek usage</p>}
+            {!deepseekLoading && !deepseekError && deepseekUsage && (
+              <div className="space-y-4">
+                <div className={`rounded-lg border px-4 py-3 ${
+                  deepseekUsage.dailyLimitExceeded
+                    ? "border-destructive bg-destructive/10"
+                    : "border-border bg-muted/30"
+                }`}>
+                  <div className="text-sm font-medium">
+                    Сегодня: {deepseekUsage.todayTokens.toLocaleString("ru-RU")} токенов
+                    {deepseekUsage.dailyTokenLimit > 0 && (
+                      <span className="text-muted-foreground"> / лимит {deepseekUsage.dailyTokenLimit.toLocaleString("ru-RU")}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {deepseekUsage.dailyLimitExceeded ? "Дневной лимит достигнут или превышен." : "Дневной лимит не превышен."}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-lg border px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Запросов</div>
+                    <div className="text-lg font-semibold">{deepseekUsage.totalRequests}</div>
+                  </div>
+                  <div className="rounded-lg border px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Токены</div>
+                    <div className="text-lg font-semibold">{deepseekUsage.totalTokens.toLocaleString("ru-RU")}</div>
+                  </div>
+                  <div className="rounded-lg border px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Input / output</div>
+                    <div className="text-lg font-semibold">
+                      {deepseekUsage.tokensIn.toLocaleString("ru-RU")} / {deepseekUsage.tokensOut.toLocaleString("ru-RU")}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border px-3 py-2">
+                    <div className="text-xs text-muted-foreground">Оценка стоимости</div>
+                    <div className="text-lg font-semibold">${deepseekUsage.costEstimate.toFixed(4)}</div>
+                  </div>
+                </div>
+
+                {deepseekUsage.byDay.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата</TableHead>
+                        <TableHead>Запросы</TableHead>
+                        <TableHead>Токены</TableHead>
+                        <TableHead>Input</TableHead>
+                        <TableHead>Output</TableHead>
+                        <TableHead>Стоимость</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {deepseekUsage.byDay.slice(0, 7).map((day) => (
+                        <TableRow key={day.date}>
+                          <TableCell>{day.date}</TableCell>
+                          <TableCell>{day.requests}</TableCell>
+                          <TableCell>{day.totalTokens.toLocaleString("ru-RU")}</TableCell>
+                          <TableCell>{day.tokensIn.toLocaleString("ru-RU")}</TableCell>
+                          <TableCell>{day.tokensOut.toLocaleString("ru-RU")}</TableCell>
+                          <TableCell>${day.costEstimate.toFixed(4)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {resetResult && (
           <Card className="border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
             <CardHeader>

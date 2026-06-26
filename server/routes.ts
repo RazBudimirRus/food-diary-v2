@@ -68,6 +68,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
     return crypto.randomBytes(9).toString("base64url");
   }
 
+  function readPositiveNumber(value: string | undefined, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  }
+
   // ── Auth ───────────────────────────────────────────────────────────────────
 
   /** POST /api/auth/register */
@@ -302,7 +307,17 @@ export function registerRoutes(httpServer: Server, app: Express) {
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
       const result = await analyzeNutrition(parsed.data.foodText, parsed.data.drinkText);
-      res.json(result);
+      if (result.usage) {
+        storage.recordApiUsage({
+          userId: req.user!.id,
+          endpoint: "deepseek",
+          tokensIn: result.usage.tokensIn,
+          tokensOut: result.usage.tokensOut,
+          costEstimate: result.usage.costEstimate,
+        });
+      }
+      const { usage: _usage, ...nutrition } = result;
+      res.json(nutrition);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -317,6 +332,23 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   app.get("/api/admin/sessions", requireAuth, requireAdmin, (_req: AuthRequest, res) => {
     res.json({ sessions: storage.listActiveRefreshSessions() });
+  });
+
+  app.get("/api/admin/deepseek/usage", requireAuth, requireAdmin, (_req: AuthRequest, res) => {
+    const now = new Date();
+    const from = new Date(now);
+    from.setUTCDate(from.getUTCDate() - 30);
+    const summary = storage.getApiUsageSummary(from.toISOString(), now.toISOString());
+    const today = now.toISOString().slice(0, 10);
+    const todayTokens = summary.byDay.find((day) => day.date === today)?.totalTokens ?? 0;
+    const dailyTokenLimit = readPositiveNumber(process.env.DEEPSEEK_DAILY_TOKEN_LIMIT, 0);
+
+    res.json({
+      ...summary,
+      dailyTokenLimit,
+      todayTokens,
+      dailyLimitExceeded: dailyTokenLimit > 0 && todayTokens >= dailyTokenLimit,
+    });
   });
 
   app.post("/api/admin/sessions/:id/revoke", requireAuth, requireAdmin, (req: AuthRequest, res) => {

@@ -65,7 +65,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
-| Админ-панель: сессии и сброс пароля    | 🚧 P4  |
+| Админ-панель MVP                       |   ✅   |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -203,6 +203,9 @@ PUBLIC_URL=https://fooddiary.razbudimir.com
 ALLOWED_ORIGINS=https://fooddiary.razbudimir.com
 TRUST_PROXY=1
 # ADMIN_BOOTSTRAP_USERNAME=<существующий логин для роли admin>
+DEEPSEEK_DAILY_TOKEN_LIMIT=100000
+DEEPSEEK_INPUT_USD_PER_M_TOKENS=0.27
+DEEPSEEK_OUTPUT_USD_PER_M_TOKENS=1.10
 ```
 
 Сгенерировать значения:
@@ -374,11 +377,22 @@ food-diary-v2/
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
-- [ ] Phase 4: admin panel (sessions + password reset implemented)
+- [x] Phase 4: admin panel MVP
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.10.0] — 2026-06-27
+
+**feat: Phase 4 DeepSeek usage dashboard**
+
+- Added `api_usage` storage for DeepSeek token and cost tracking
+- Records DeepSeek prompt/completion tokens after successful КБЖУ analysis
+- Added admin DeepSeek usage summary with daily token limit status
+- Added dashboard cards and recent daily usage table to `/#/admin`
+- Added integration coverage for admin usage access
+- External notifications remain planned for Phase 9
 
 ### [1.9.0] — 2026-06-27
 
@@ -521,7 +535,7 @@ The app supports multiple users — each registers through the browser, data is 
 | Access/refresh sessions, idle timeout  |   ✅   |
 | HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
 | Unit/integration/E2E tests + CI        |   ✅   |
-| Admin panel: sessions and reset        | 🚧 P4  |
+| Admin panel MVP                        |   ✅   |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -647,6 +661,9 @@ PUBLIC_URL=https://fooddiary.razbudimir.com
 ALLOWED_ORIGINS=https://fooddiary.razbudimir.com
 TRUST_PROXY=1
 # ADMIN_BOOTSTRAP_USERNAME=<existing username for admin role>
+DEEPSEEK_DAILY_TOKEN_LIMIT=100000
+DEEPSEEK_INPUT_USD_PER_M_TOKENS=0.27
+DEEPSEEK_OUTPUT_USD_PER_M_TOKENS=1.10
 ```
 
 Generate values on the server:
@@ -818,11 +835,22 @@ food-diary-v2/
 - [x] Phase 2: security hardening and audit fixes
 - [x] Phase 1: tests, linting, E2E smoke, CI
 - [x] UX-1: edit existing meal entries
-- [ ] Phase 4: admin panel (sessions + password reset implemented)
+- [x] Phase 4: admin panel MVP
 - [ ] Phase 9: DeepSeek usage alerting
 - [ ] Phase 11: analytics dashboard
 
 ## Changelog
+
+### [1.10.0] — 2026-06-27
+
+**feat: Phase 4 DeepSeek usage dashboard**
+
+- Added `api_usage` storage for DeepSeek token and cost tracking
+- Records DeepSeek prompt/completion tokens after successful nutrition analysis
+- Added admin DeepSeek usage summary with daily token limit status
+- Added dashboard cards and recent daily usage table to `/#/admin`
+- Added integration coverage for admin usage access
+- External notifications remain planned for Phase 9
 
 ### [1.9.0] — 2026-06-27
 

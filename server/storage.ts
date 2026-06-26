@@ -2,8 +2,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken } from "@shared/schema";
-import { users, days, meals, secrets, refreshTokens } from "@shared/schema";
+import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken, ApiUsage } from "@shared/schema";
+import { users, days, meals, secrets, refreshTokens, apiUsage } from "@shared/schema";
 
 const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
 const sqlite = new Database(DB_PATH);
@@ -46,6 +46,17 @@ sqlite.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
   CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+  CREATE TABLE IF NOT EXISTS api_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    endpoint TEXT NOT NULL,
+    tokens_in INTEGER NOT NULL DEFAULT 0,
+    tokens_out INTEGER NOT NULL DEFAULT 0,
+    cost_estimate REAL NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp ON api_usage(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_api_usage_user_id ON api_usage(user_id);
   CREATE TABLE IF NOT EXISTS days (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -120,6 +131,8 @@ export interface IStorage {
   updateUserPassword(userId: number, passwordHash: string): User | undefined;
   listUsers(): User[];
   listActiveRefreshSessions(nowIso?: string): AdminSession[];
+  recordApiUsage(data: InsertApiUsage): ApiUsage;
+  getApiUsageSummary(fromIso: string, toIso: string): ApiUsageSummary;
 
   // Refresh tokens (hashed in DB)
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken;
@@ -159,6 +172,33 @@ export interface AdminSession {
   expiresAt: string;
   userAgent: string | null;
   ip: string | null;
+}
+
+export interface InsertApiUsage {
+  userId: number;
+  endpoint: string;
+  tokensIn: number;
+  tokensOut: number;
+  costEstimate: number;
+  timestamp?: string;
+}
+
+export interface ApiUsageDay {
+  date: string;
+  totalTokens: number;
+  tokensIn: number;
+  tokensOut: number;
+  costEstimate: number;
+  requests: number;
+}
+
+export interface ApiUsageSummary {
+  totalRequests: number;
+  totalTokens: number;
+  tokensIn: number;
+  tokensOut: number;
+  costEstimate: number;
+  byDay: ApiUsageDay[];
 }
 
 class SqliteStorage implements IStorage {
@@ -219,6 +259,65 @@ class SqliteStorage implements IStorage {
         AND refresh_tokens.expires_at > ?
       ORDER BY refresh_tokens.created_at DESC
     `).all(nowIso) as AdminSession[];
+  }
+
+  recordApiUsage(data: InsertApiUsage): ApiUsage {
+    return db.insert(apiUsage).values({
+      userId: data.userId,
+      endpoint: data.endpoint,
+      tokensIn: data.tokensIn,
+      tokensOut: data.tokensOut,
+      costEstimate: data.costEstimate,
+      timestamp: data.timestamp ?? new Date().toISOString(),
+    }).returning().get();
+  }
+
+  getApiUsageSummary(fromIso: string, toIso: string): ApiUsageSummary {
+    const rows = sqlite.prepare(`
+      SELECT
+        substr(timestamp, 1, 10) AS date,
+        COUNT(*) AS requests,
+        COALESCE(SUM(tokens_in), 0) AS tokensIn,
+        COALESCE(SUM(tokens_out), 0) AS tokensOut,
+        COALESCE(SUM(cost_estimate), 0) AS costEstimate
+      FROM api_usage
+      WHERE endpoint = 'deepseek'
+        AND timestamp >= ?
+        AND timestamp < ?
+      GROUP BY substr(timestamp, 1, 10)
+      ORDER BY date DESC
+    `).all(fromIso, toIso) as Array<{
+      date: string;
+      requests: number;
+      tokensIn: number;
+      tokensOut: number;
+      costEstimate: number;
+    }>;
+
+    const byDay = rows.map((row) => ({
+      date: row.date,
+      requests: Number(row.requests),
+      tokensIn: Number(row.tokensIn),
+      tokensOut: Number(row.tokensOut),
+      totalTokens: Number(row.tokensIn) + Number(row.tokensOut),
+      costEstimate: Number(row.costEstimate),
+    }));
+
+    return byDay.reduce<ApiUsageSummary>((summary, day) => ({
+      totalRequests: summary.totalRequests + day.requests,
+      tokensIn: summary.tokensIn + day.tokensIn,
+      tokensOut: summary.tokensOut + day.tokensOut,
+      totalTokens: summary.totalTokens + day.totalTokens,
+      costEstimate: summary.costEstimate + day.costEstimate,
+      byDay: summary.byDay,
+    }), {
+      totalRequests: 0,
+      tokensIn: 0,
+      tokensOut: 0,
+      totalTokens: 0,
+      costEstimate: 0,
+      byDay,
+    });
   }
 
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken {

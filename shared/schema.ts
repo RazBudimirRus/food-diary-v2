@@ -151,3 +151,16 @@ export interface NutritionResult {
   carbs: number;
   note?: string;
 }
+
+// ─── API Usage (DeepSeek monitoring) ──────────────────────────────────────────
+export const apiUsage = sqliteTable("api_usage", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  timestamp: text("timestamp").notNull().default(""),
+  endpoint: text("endpoint").notNull(),
+  tokensIn: integer("tokens_in").notNull().default(0),
+  tokensOut: integer("tokens_out").notNull().default(0),
+  costEstimate: real("cost_estimate").notNull().default(0),
+});
+
+export type ApiUsage = typeof apiUsage.$inferSelect;

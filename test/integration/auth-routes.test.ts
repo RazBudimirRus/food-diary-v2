@@ -228,6 +228,40 @@ describe("admin routes", () => {
     expect(listedUser.passwordHash).toBeUndefined();
   });
 
+  it("forbids non-admin users from reading DeepSeek usage", async () => {
+    const auth = await registerUser("admin_usage_forbidden_user");
+
+    await request(app)
+      .get("/api/admin/deepseek/usage")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(403);
+  });
+
+  it("allows admin users to read DeepSeek usage summary", async () => {
+    const auth = await registerUser("admin_usage_allowed_user");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(auth.user.username);
+    storage.recordApiUsage({
+      userId: auth.user.id,
+      endpoint: "deepseek",
+      tokensIn: 100,
+      tokensOut: 50,
+      costEstimate: 0.001,
+    });
+
+    const res = await request(app)
+      .get("/api/admin/deepseek/usage")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(res.body.totalRequests).toBeGreaterThanOrEqual(1);
+    expect(res.body.totalTokens).toBeGreaterThanOrEqual(150);
+    expect(res.body.tokensIn).toBeGreaterThanOrEqual(100);
+    expect(res.body.tokensOut).toBeGreaterThanOrEqual(50);
+    expect(res.body.byDay).toEqual(expect.any(Array));
+    expect(res.body.dailyLimitExceeded).toEqual(expect.any(Boolean));
+  });
+
   it("forbids non-admin users from revoking sessions", async () => {
     const auth = await registerUser("admin_revoke_forbidden_user");
 
