@@ -436,21 +436,189 @@ SESSION_IDLE_TIMEOUT_MIN=30
 ### Технические заметки
 
 - **Текущее состояние:** JWT хранится в httpOnly cookie, время жизни задаётся через `JWT_EXPIRES_IN` в `.env` — базовая защита есть.
-- **Следующий шаг:** добавить отдельный `refresh_token` endpoint + таблицу `refresh_tokens` (token, userId, expiresAt, revoked).
-- **Idle timeout на фронтенде:** отслеживать события `mousemove`, `keydown`, `click` — сбрасывать таймер. При истечении — показать модальное окно «Сессия истекает через N минут» с кнопкой «Продлить».
 - **`SameSite=Strict`** на cookie refresh token — блокирует CSRF-атаки без дополнительных CSRF-токенов.
 - **Absolute timeout** (независимо от активности): раз в 7 дней принудительный повторный логин — стандарт для enterprise-систем.
 - При реализации `jti` blacklist (Фаза 4) — logout немедленно инвалидирует сессию без ожидания истечения токена.
-- Cookie атрибуты для продакшена:
+
+---
+
+### Чеклист реализации (порядок шагов)
+
+#### Шаг 1 — Схема БД: таблица refresh_tokens
+
+```sql
+CREATE TABLE refresh_tokens (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  token     TEXT NOT NULL UNIQUE,   -- UUID v4, хранить хэш (SHA-256)
+  userId    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expiresAt DATETIME NOT NULL,      -- NOW + 7 дней
+  revoked   INTEGER NOT NULL DEFAULT 0,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  userAgent TEXT,
+  ip        TEXT
+);
+CREATE INDEX idx_refresh_tokens_token  ON refresh_tokens(token);
+CREATE INDEX idx_refresh_tokens_userId ON refresh_tokens(userId);
+```
+
+> Хранить не сам токен, а его SHA-256 хэш — чтобы утечка таблицы не дала атакующему refresh-токены.
+
+#### Шаг 2 — server/auth.ts: generateRefreshToken + verifyRefreshToken
 
 ```typescript
-res.cookie('refresh_token', token, {
+import crypto from 'crypto';
+
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export function generateRefreshToken(): string {
+  return crypto.randomUUID(); // UUID v4, криптостойкий
+}
+```
+
+#### Шаг 3 — server/routes.ts: три новых эндпоинта
+
+```typescript
+// POST /api/auth/login — изменить: выдавать короткий access + refresh cookie
+// Было: JWT_EXPIRES_IN из .env (обычно '7d' или '24h')
+// Стало: access JWT = 30m, refresh token в httpOnly cookie = 7 дней
+
+// POST /api/auth/refresh — обновить access token по refresh cookie
+app.post('/api/auth/refresh', async (req, res) => {
+  const rawToken = req.cookies['refresh_token'];
+  if (!rawToken) return res.status(401).json({ error: 'No refresh token' });
+
+  const hash = hashToken(rawToken);
+  const record = db.prepare(
+    'SELECT * FROM refresh_tokens WHERE token = ? AND revoked = 0 AND expiresAt > datetime("now")'
+  ).get(hash);
+  if (!record) return res.status(401).json({ error: 'Invalid or expired refresh token' });
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(record.userId);
+  const accessToken = signToken({ userId: user.id, role: user.role }, '30m');
+  res.json({ accessToken });
+});
+
+// POST /api/auth/logout — отозвать refresh token
+app.post('/api/auth/logout', requireAuth, async (req, res) => {
+  const rawToken = req.cookies['refresh_token'];
+  if (rawToken) {
+    db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE token = ?').run(hashToken(rawToken));
+  }
+  res.clearCookie('refresh_token', { path: '/api/auth' });
+  res.json({ ok: true });
+});
+```
+
+#### Шаг 4 — Cookie атрибуты при выдаче refresh token
+
+```typescript
+// В /api/auth/login после успешной аутентификации:
+const rawRefresh = generateRefreshToken();
+const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+db.prepare(
+  'INSERT INTO refresh_tokens (token, userId, expiresAt, userAgent, ip) VALUES (?, ?, ?, ?, ?)'
+).run(hashToken(rawRefresh), user.id, expiresAt.toISOString(), req.headers['user-agent'], req.ip);
+
+res.cookie('refresh_token', rawRefresh, {
   httpOnly: true,
-  secure: true,          // только HTTPS
+  secure: process.env.NODE_ENV === 'production', // только HTTPS в проде
   sameSite: 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней в мс
-  path: '/api/auth',     // cookie отправляется только на /api/auth/*
+  path: '/api/auth',   // cookie уходит только на /api/auth/* — минимальный scope
 });
+
+// Access token возвращать в JSON (не в cookie) — хранится в памяти React
+const accessToken = signToken({ userId: user.id, role: user.role }, '30m');
+res.json({ accessToken, user: { id: user.id, username: user.username } });
+```
+
+#### Шаг 5 — client/src/lib/auth.tsx: хранение access token в памяти
+
+```typescript
+// Хранить accessToken в React state/context, НЕ в localStorage
+const [accessToken, setAccessToken] = useState<string | null>(null);
+
+// При старте приложения — попытаться обновить через refresh cookie
+useEffect(() => {
+  fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => data && setAccessToken(data.accessToken))
+    .catch(() => {});
+}, []);
+
+// Все API-запросы — передавать accessToken в заголовке Authorization
+// Перехватчик: если 401 → попробовать /api/auth/refresh → повторить запрос
+```
+
+#### Шаг 6 — Idle timeout на фронтенде (хук useIdleTimer)
+
+```typescript
+// client/src/hooks/useIdleTimer.ts
+import { useEffect, useRef, useCallback } from 'react';
+
+const EVENTS = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'];
+
+export function useIdleTimer(
+  onWarning: () => void,  // показать модальное окно
+  onLogout: () => void,   // принудительный выход
+  warningMin = 25,
+  logoutMin = 30,
+) {
+  const warnTimer  = useRef<ReturnType<typeof setTimeout>>();
+  const logoutTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const reset = useCallback(() => {
+    clearTimeout(warnTimer.current);
+    clearTimeout(logoutTimer.current);
+    warnTimer.current  = setTimeout(onWarning, warningMin * 60 * 1000);
+    logoutTimer.current = setTimeout(onLogout,  logoutMin  * 60 * 1000);
+  }, [onWarning, onLogout, warningMin, logoutMin]);
+
+  useEffect(() => {
+    EVENTS.forEach(e => window.addEventListener(e, reset, { passive: true }));
+    reset(); // запустить таймер сразу
+    return () => {
+      EVENTS.forEach(e => window.removeEventListener(e, reset));
+      clearTimeout(warnTimer.current);
+      clearTimeout(logoutTimer.current);
+    };
+  }, [reset]);
+}
+```
+
+> Использовать в DiaryPage: при `onWarning` — показать toast/модалку «Сессия истекает через 5 минут», при `onLogout` — вызвать `logout()`.
+
+#### Шаг 7 — Очистка устаревших refresh токенов (cron в БД)
+
+```typescript
+// В server/index.ts — запускать раз в час
+setInterval(() => {
+  db.prepare(
+    "DELETE FROM refresh_tokens WHERE expiresAt < datetime('now') OR revoked = 1"
+  ).run();
+}, 60 * 60 * 1000);
+```
+
+#### Шаг 8 — .env.example (добавить новые переменные)
+
+```dotenv
+# Время жизни access token (JWT) — короткий
+JWT_EXPIRES_IN=30m
+
+# Время жизни refresh token
+JWT_REFRESH_EXPIRES_IN=7d
+
+# Cookie Max-Age для refresh token (секунды), 7 дней = 604800
+REFRESH_COOKIE_MAX_AGE=604800
+
+# Idle timeout фронтенд — предупреждение (минуты)
+SESSION_IDLE_WARNING_MIN=25
+
+# Idle timeout фронтенд — принудительный выход (минуты)
+SESSION_IDLE_TIMEOUT_MIN=30
 ```
 
 ---
