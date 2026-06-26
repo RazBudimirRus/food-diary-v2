@@ -1,23 +1,16 @@
 # Деплой Food Diary V2 на Ubuntu 24.04 VPS
 
-**IP сервера:** 95.163.213.45
+**Домен:** https://fooddiary.razbudimir.com  
+**IP сервера:** 149.33.12.166
 
 ---
 
 ## 1. Подготовка сервера
 
 ```bash
-# Установить Docker + Compose plugin
-sudo apt update && sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list
-sudo apt update && sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-# Создать рабочую директорию
-sudo mkdir -p /srv/foodbot/data
+sudo apt update && sudo apt install -y ca-certificates curl openssl
+# Docker — см. README или preflight-check.sh --fix
+sudo mkdir -p /srv/foodbot/data /srv/foodbot/certs
 sudo chown -R $USER:$USER /srv/foodbot
 ```
 
@@ -25,73 +18,94 @@ sudo chown -R $USER:$USER /srv/foodbot
 
 ```bash
 cd /srv/foodbot
-# Вариант A: git clone (рекомендуется)
-git clone <your-repo-url> .
-
-# Вариант B: scp с локальной машины
-# scp -r ./food-diary user@95.163.213.45:/srv/foodbot/
+git clone https://github.com/RazBudimirRus/food-diary-v2.git .
 ```
 
-## 3. Создать .env
+## 3. DNS (Phase 6)
+
+В панели DNS создайте A-запись:
+
+```
+fooddiary.razbudimir.com  →  149.33.12.166
+```
+
+Проверка:
+
+```bash
+getent hosts fooddiary.razbudimir.com
+```
+
+## 4. TLS-сертификаты
+
+Скопируйте wildcard `*.razbudimir.com` в `certs/`:
+
+```bash
+cp /path/to/fullchain.pem /srv/foodbot/certs/
+cp /path/to/privkey.pem /srv/foodbot/certs/
+chmod 600 /srv/foodbot/certs/privkey.pem
+openssl x509 -in certs/fullchain.pem -noout -subject -dates
+```
+
+Подробнее: `certs/README.md`
+
+## 5. Создать .env
 
 ```bash
 cp .env.example .env
 nano .env
-# Вписать TELEGRAM_BOT_TOKEN
 ```
 
-## 4. Запустить
+Минимум:
+
+```env
+JWT_SECRET=<openssl rand -hex 32>
+ENCRYPTION_KEY=<openssl rand -hex 32>
+DOMAIN=fooddiary.razbudimir.com
+PUBLIC_URL=https://fooddiary.razbudimir.com
+TRUST_PROXY=1
+```
+
+## 6. Фаервол (Phase 6)
+
+Открыть только 80/443, **закрыть 5000**:
+
+```bash
+sudo bash scripts/setup-ufw-phase6.sh
+```
+
+## 7. Проверка перед запуском
+
+```bash
+sudo bash preflight-check.sh
+```
+
+## 8. Запустить (Caddy + API)
 
 ```bash
 cd /srv/foodbot
 docker compose up -d --build
-docker compose logs -f
+docker compose ps
+docker compose logs -f caddy
 ```
 
-## 5. Проверить
+## 9. Проверить HTTPS
 
 ```bash
-# API health
-curl http://localhost:5000/api/now
+curl -I https://fooddiary.razbudimir.com/api/now
+# Ожидается: HTTP/2 200 + strict-transport-security
 
-# Веб-форма
-open http://95.163.213.45:5000
+# В браузере
+open https://fooddiary.razbudimir.com
 ```
 
-## 6. Фаервол (если нужен доступ снаружи)
+## 10. Локальная разработка (без Caddy)
 
 ```bash
-# Открыть порт 5000 (или 80 если с Caddy)
-sudo ufw allow 5000/tcp
-sudo ufw allow 80/tcp
-sudo ufw enable
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api
+# http://localhost:5000
 ```
 
-## 7. Опционально — Caddy для доменного имени
-
-Добавить в docker-compose.yml сервис caddy:
-
-```yaml
-caddy:
-  image: caddy:2-alpine
-  container_name: food_caddy
-  restart: unless-stopped
-  ports:
-    - "80:80"
-    - "443:443"
-  volumes:
-    - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    - caddy_data:/data
-    - caddy_config:/config
-  networks:
-    - food_net
-  depends_on:
-    - api
-```
-
-И добавить в секцию `volumes`: `caddy_data:` и `caddy_config:`
-
-## 8. Обновление
+## 11. Обновление
 
 ```bash
 cd /srv/foodbot
@@ -101,14 +115,53 @@ docker compose up -d --build
 
 ---
 
-## Структура контейнеров
+## Структура контейнеров (Phase 6)
 
-| Контейнер | Назначение | Порт |
+| Контейнер | Назначение | Порт на хосте |
 |---|---|---|
-| `food_diary_api` | Backend API + веб-форма (Node.js/Express) | 5000 |
-| `food_diary_bot` | Telegram-бот (Python/aiogram) | — |
+| `food_diary_api` | Backend API + React SPA | — (только Docker network) |
+| `food_caddy` | HTTPS reverse proxy | 80, 443 |
 
 ## База данных
 
-SQLite `data.db` хранится в `/srv/foodbot/data/` (volume-mount).  
+SQLite `data.db` в `/srv/foodbot/data/` (bind mount).  
 Бэкап: `cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d).db`
+
+## Troubleshooting
+
+| Симптом | Решение |
+|---------|---------|
+| Caddy не стартует | Проверить `certs/fullchain.pem` и `privkey.pem` |
+| 526 / SSL error | Неверная цепочка сертификатов |
+| Cookie не сохраняется | Нужен HTTPS; `COOKIE_SECURE=1` в production |
+| 502 Bad Gateway | `docker compose logs api` — дождаться healthcheck |
+
+---
+
+## 12. Бэкапы (Phase 3)
+
+Данные: `/srv/foodbot/data/data.db` (bind mount, **не удаляется** при `docker compose down`).
+
+```bash
+# Ручной бэкап (hot backup, без остановки)
+cd /srv/foodbot
+bash scripts/backup.sh
+
+# Автобэкап ежедневно в 03:00 MSK
+sudo bash scripts/install-backup-cron.sh
+
+# Проверка
+ls -la /srv/foodbot/data/backups/
+```
+
+Хранится **30** последних копий (`BACKUP_RETENTION` в `.env`).
+
+Восстановление:
+
+```bash
+docker compose stop api
+cp /srv/foodbot/data/backups/food-diary_YYYYMMDD_HHMMSS.db /srv/foodbot/data/data.db
+docker compose start api
+```
+
+> **Важно:** никогда не используйте `docker compose down -v` — флаг `-v` удалит named volumes (не bind mount, но лучше избегать).

@@ -33,7 +33,7 @@
 - **Auth:** bcrypt (cost 12), JWT (httpOnly cookie, 7d), AES-256-GCM для secrets
 - **AI:** DeepSeek API — расчёт КБЖУ (ключ из env → шифруется в БД, userId=0)
 - **Excel:** exceljs — отчёт врача, 8 колонок (включая КБЖУ)
-- **Deploy:** Docker Compose (сервис `api`), опционально Caddy
+- **Deploy:** Docker Compose (`api` + `caddy`), HTTPS на `fooddiary.razbudimir.com` (Phase 6)
 - **Часовой пояс:** МСК (UTC+3), день = 00:00–23:59 MSK
 
 ---
@@ -46,7 +46,9 @@
 - DeepSeek КБЖУ: кнопка в форме, бейджи на карточках, колонка H в Excel
 - Итоги дня (подъём, отбой, спорт, шаги) — диалог перед первым отчётом
 - `preflight-check.sh`, `DEPLOY.md`, двуязычный `README.md`
-- `ROADMAP.md` v2.1.0 — 11 фаз (0–10)
+- `ROADMAP.md` v2.2.0 — 11 фаз (0–10) + Phase 11 analytics (planned)
+- **Phase 6 (код):** Caddy в docker-compose, TLS wildcard certs, ufw script, secure cookies, `TRUST_PROXY`
+- **Phase 3 (код):** SQLite WAL mode, `scripts/backup.sh`, `install-backup-cron.sh`, preflight §13
 
 ---
 
@@ -121,8 +123,8 @@ PROJECT24_FOODDIARY2/
 
 | Шаг | Фаза | Зачем сейчас |
 |-----|------|--------------|
-| 1 | **6** HTTPS + Caddy + ufw | Без TLS cookie/медданные в открытую; блокер прода |
-| 2 | **3** Volume + backup + WAL | Не потерять SQLite |
+| 1 | **6** HTTPS + Caddy + ufw | ✅ в репо — деплой на VPS |
+| 2 | **3** Volume + backup + WAL | ✅ в репо — `backup.sh` + cron на сервере |
 | 3 | **10** Access/refresh + idle timeout | После HTTPS (`secure` cookie); медицинские данные |
 | 4 | **2** Security (Helmet, rate-limit, IDOR fix) | Закрыть дыры из code review |
 | 5 | **1** Тесты + CI | Страховка перед админкой |
@@ -174,6 +176,8 @@ PROJECT24_FOODDIARY2/
 
 | Дата | Кто | Что |
 |------|-----|-----|
+| 2026-06-26 | Cursor Agent | **Phase 3:** SQLite WAL, backup.sh, install-backup-cron.sh, sqlite3 in image, preflight §13 |
+| 2026-06-26 | Cursor Agent | **Phase 6:** Caddyfile HTTPS, docker-compose+caddy, dev override, secure cookies, trust proxy, certs/, setup-ufw-phase6.sh, preflight §12, DEPLOY.md |
 | 2026-06-26 | Cursor Agent | Создан Context.md: контекст Perplexity+Cursor, code review, roadmap, модели, порядок фаз |
 
 ---

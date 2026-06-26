@@ -142,7 +142,7 @@ for port_entry in "$APP_PORT:App API" "$CADDY_HTTP_PORT:HTTP (Caddy)" "$CADDY_HT
   if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
     PROC=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
     if [[ $port -eq $APP_PORT ]]; then
-      fail "Port $port ($label): IN USE" "$PROC"
+      warn "Port $port ($label): IN USE on host" "$PROC — Phase 6: API should be internal (no host publish)"
     else
       warn "Port $port ($label): in use" "$PROC — Caddy container won't bind"
     fi
@@ -343,14 +343,20 @@ if command -v ufw &>/dev/null; then
     warn "ufw: inactive" "firewall disabled — consider enabling after setup"
   else
     ok "ufw: active"
-    for port in 22 80 443 5000; do
+    for port in 22 80 443; do
       if ufw status | grep -qE "^${port}(/tcp)?\s+ALLOW"; then
         ok "  ufw: port $port ALLOW"
       else
         warn "  ufw: port $port" "no explicit ALLOW rule"
-        info "Fix: sudo ufw allow $port/tcp"
+        info "Fix: sudo bash scripts/setup-ufw-phase6.sh"
       fi
     done
+    if ufw status | grep -qE "^5000(/tcp)?\s+ALLOW"; then
+      warn "  ufw: port 5000 ALLOW" "Phase 6: remove — API must not be public"
+      info "Fix: sudo ufw delete allow 5000/tcp"
+    else
+      ok "  ufw: port 5000 not exposed" "API internal via Docker network"
+    fi
   fi
 else
   warn "ufw: not installed" "no firewall management"
@@ -391,6 +397,120 @@ elif [[ "$HTTP_CODE" == "000" ]]; then
   warn "API health: not reachable" "server may not be running yet — start after deploy"
 else
   warn "API health: unexpected status" "HTTP $HTTP_CODE"
+fi
+
+# =============================================================================
+section "12" "HTTPS / Caddy (Phase 6)"
+# =============================================================================
+
+CERT_DIR="${DEPLOY_DIR}/certs"
+FULLCHAIN="${CERT_DIR}/fullchain.pem"
+PRIVKEY="${CERT_DIR}/privkey.pem"
+
+if [[ -f "$FULLCHAIN" && -f "$PRIVKEY" ]]; then
+  ok "TLS certs" "certs/fullchain.pem + privkey.pem present"
+  if command -v openssl &>/dev/null; then
+    EXPIRY=$(openssl x509 -in "$FULLCHAIN" -noout -enddate 2>/dev/null | cut -d= -f2- || true)
+    [[ -n "$EXPIRY" ]] && ok "  TLS expiry" "$EXPIRY"
+  fi
+else
+  fail "TLS certs missing" "add fullchain.pem and privkey.pem to ${CERT_DIR}/ (see certs/README.md)"
+fi
+
+if [[ -f "${DEPLOY_DIR}/docker-compose.yml" ]] && grep -qE '^\s+caddy:' "${DEPLOY_DIR}/docker-compose.yml"; then
+  ok "docker-compose: caddy service defined"
+else
+  fail "docker-compose: caddy service missing"
+fi
+
+DOMAIN_VAL="fooddiary.razbudimir.com"
+if [[ -f "$ENV_FILE" ]]; then
+  DOMAIN_VAL=$(grep '^DOMAIN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "$DOMAIN_VAL")
+fi
+
+if getent hosts "$DOMAIN_VAL" &>/dev/null; then
+  RESOLVED=$(getent hosts "$DOMAIN_VAL" | awk '{print $1}' | head -1)
+  ok "DNS: $DOMAIN_VAL" "resolves to $RESOLVED"
+else
+  warn "DNS: $DOMAIN_VAL" "does not resolve yet — add A record before public HTTPS"
+fi
+
+HTTPS_URL="https://${DOMAIN_VAL}/api/now"
+skip "Calling $HTTPS_URL ..."
+HTTPS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$HTTPS_URL" 2>/dev/null || echo "000")
+if [[ "$HTTPS_CODE" == "200" ]]; then
+  ok "HTTPS health" "HTTP $HTTPS_CODE"
+  HSTS=$(curl -sI --max-time 10 "$HTTPS_URL" 2>/dev/null | grep -i strict-transport-security || true)
+  if [[ -n "$HSTS" ]]; then
+    ok "HSTS header" "present"
+  else
+    warn "HSTS header" "not found — verify Caddy is serving TLS"
+  fi
+elif [[ "$HTTPS_CODE" == "000" ]]; then
+  skip "HTTPS health: not reachable (deploy stack or check DNS/certs)"
+else
+  warn "HTTPS health" "HTTP $HTTPS_CODE — expected 200 from /api/now"
+fi
+
+# =============================================================================
+section "13" "Data Persistence (Phase 3)"
+# =============================================================================
+
+HOST_DATA_DIR="/srv/foodbot/data"
+BACKUP_DIR="${HOST_DATA_DIR}/backups"
+DB_ON_HOST="${HOST_DATA_DIR}/data.db"
+
+if [[ -d "$HOST_DATA_DIR" ]]; then
+  ok "Data directory" "$HOST_DATA_DIR exists"
+  if [[ -w "$HOST_DATA_DIR" ]]; then
+    ok "  Data dir writable" "container can persist SQLite"
+  else
+    fail "  Data dir not writable" "chown $USER $HOST_DATA_DIR"
+  fi
+else
+  warn "Data directory missing" "mkdir -p $HOST_DATA_DIR"
+  if [[ $FIX_MODE -eq 1 ]]; then
+    mkdir -p "$HOST_DATA_DIR" && ok "Created $HOST_DATA_DIR"
+  fi
+fi
+
+if [[ -f "$DB_ON_HOST" ]]; then
+  ok "SQLite database" "data.db present on host"
+  if command -v sqlite3 &>/dev/null; then
+    JMODE=$(sqlite3 "$DB_ON_HOST" "PRAGMA journal_mode;" 2>/dev/null || echo "unknown")
+    if [[ "$JMODE" == "wal" ]]; then
+      ok "  journal_mode" "WAL (recommended)"
+    else
+      warn "  journal_mode" "$JMODE — restart API after Phase 3 deploy for WAL"
+    fi
+  fi
+else
+  skip "SQLite database not found yet" "created on first app start"
+fi
+
+if [[ -d "$BACKUP_DIR" ]]; then
+  BCOUNT=$(find "$BACKUP_DIR" -maxdepth 1 -name 'food-diary_*.db' 2>/dev/null | wc -l | tr -d ' ')
+  ok "Backup directory" "$BACKUP_DIR ($BCOUNT backups)"
+else
+  warn "Backup directory missing" "mkdir -p $BACKUP_DIR"
+fi
+
+if [[ -f "${DEPLOY_DIR}/scripts/backup.sh" ]]; then
+  ok "backup.sh script" "present"
+else
+  fail "scripts/backup.sh missing"
+fi
+
+if crontab -l 2>/dev/null | grep -qF "scripts/backup.sh"; then
+  ok "Backup cron" "installed"
+else
+  warn "Backup cron not installed" "sudo bash scripts/install-backup-cron.sh"
+fi
+
+if grep -q 'device: /srv/foodbot/data' "${DEPLOY_DIR}/docker-compose.yml" 2>/dev/null; then
+  ok "docker-compose data volume" "bind mount /srv/foodbot/data"
+else
+  warn "docker-compose volume" "verify data bind mount in docker-compose.yml"
 fi
 
 # =============================================================================

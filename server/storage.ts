@@ -5,8 +5,14 @@ import * as schema from "@shared/schema";
 import type { User, Day, InsertDay, Meal, InsertMeal, DaySummary, Secret } from "@shared/schema";
 import { users, days, meals, secrets } from "@shared/schema";
 
-const sqlite = new Database("data.db");
+const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
+const sqlite = new Database(DB_PATH);
 export const db = drizzle(sqlite, { schema });
+
+// Phase 3 — production SQLite tuning (WAL: safe concurrent reads during writes)
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("synchronous = NORMAL");
+sqlite.pragma("foreign_keys = ON");
 
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
