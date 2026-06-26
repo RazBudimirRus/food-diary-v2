@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
 import { initDeepSeekKey } from "./deepseek";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -69,6 +70,11 @@ app.use((req, res, next) => {
 (async () => {
   // Load DeepSeek key from env → encrypt → store in DB (idempotent)
   initDeepSeekKey();
+
+  storage.deleteExpiredOrRevokedRefreshTokens();
+  setInterval(() => {
+    storage.deleteExpiredOrRevokedRefreshTokens();
+  }, 60 * 60 * 1000);
 
   await registerRoutes(httpServer, app);
 

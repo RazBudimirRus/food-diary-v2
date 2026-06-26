@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest, API_BASE } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,6 +132,23 @@ export default function DiaryPage() {
   const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
   const [kbjuLoading, setKbjuLoading] = useState(false);
   const [deepseekAvailable, setDeepseekAvailable] = useState(false);
+
+  const handleIdleWarning = useCallback(() => {
+    toast({
+      title: "Сессия скоро завершится",
+      description: "Через 5 минут бездействия будет выполнен автоматический выход.",
+    });
+  }, [toast]);
+
+  const handleIdleTimeout = useCallback(() => {
+    toast({
+      title: "Сессия завершена",
+      description: "Вы вышли автоматически из-за 30 минут бездействия.",
+    });
+    void logout();
+  }, [logout, toast]);
+
+  useIdleTimer(handleIdleWarning, handleIdleTimeout);
 
   // Fetch day data
   const { data, isLoading, refetch } = useQuery<{ day: Day; meals: Meal[] }>({
@@ -264,8 +282,7 @@ export default function DiaryPage() {
   // ── Download report ────────────────────────────────────────────────────────
 
   async function downloadReport(date: string, force = false) {
-    const url = `${API_BASE}/api/report/${date}${force ? "?force=1" : ""}`;
-    const res = await fetch(url);
+    const res = await apiRequest("GET", `/api/report/${date}${force ? "?force=1" : ""}`);
     if (res.status === 202) {
       // Need summary
       setPendingDownloadDate(date);

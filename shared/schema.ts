@@ -31,6 +31,20 @@ export const loginSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 
+// ─── Refresh Tokens ───────────────────────────────────────────────────────────
+export const refreshTokens = sqliteTable("refresh_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  token: text("token").notNull().unique(), // SHA-256 hash, never the raw token
+  userId: integer("user_id").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(""),
+  userAgent: text("user_agent"),
+  ip: text("ip"),
+});
+
+export type RefreshToken = typeof refreshTokens.$inferSelect;
+
 // ─── App Secrets (encrypted in DB) ───────────────────────────────────────────
 // Arbitrary key-value secrets per user (for future integrations)
 export const secrets = sqliteTable("secrets", {

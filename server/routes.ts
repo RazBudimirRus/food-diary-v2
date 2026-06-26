@@ -7,13 +7,45 @@ import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSc
 import {
   hashPassword, verifyPassword, signToken,
   requireAuth, encryptSecret, decryptSecret,
-  authCookieOptions, clearAuthCookieOptions,
+  refreshCookieOptions, clearRefreshCookieOptions, clearLegacyAuthCookieOptions,
+  generateRefreshToken, hashToken, getRefreshExpiresAt, getRefreshCookieName,
   type AuthRequest,
 } from "./auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
+
+  const refreshCookieName = getRefreshCookieName();
+
+  function publicUser(user: { id: number; username: string; email: string; displayName?: string | null }) {
+    return { id: user.id, username: user.username, email: user.email, displayName: user.displayName };
+  }
+
+  function paramValue(value: string | string[] | undefined): string {
+    return Array.isArray(value) ? value[0] : value ?? "";
+  }
+
+  function issueSession(req: AuthRequest, res: any, user: { id: number; username: string; email: string; displayName?: string | null }) {
+    const rawRefreshToken = generateRefreshToken();
+    const expiresAt = getRefreshExpiresAt();
+
+    storage.createRefreshToken({
+      token: hashToken(rawRefreshToken),
+      userId: user.id,
+      expiresAt: expiresAt.toISOString(),
+      userAgent: req.get("user-agent") ?? null,
+      ip: req.ip ?? null,
+    });
+
+    res.cookie(refreshCookieName, rawRefreshToken, refreshCookieOptions());
+    res.clearCookie("token", clearLegacyAuthCookieOptions());
+
+    return {
+      accessToken: signToken({ userId: user.id, username: user.username }),
+      user: publicUser(user),
+    };
+  }
 
   // ── Auth ───────────────────────────────────────────────────────────────────
 
@@ -29,10 +61,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     const passwordHash = await hashPassword(password);
     const user = storage.createUser({ username, email, passwordHash, displayName });
-    const token = signToken({ userId: user.id, username: user.username });
 
-    res.cookie("token", token, authCookieOptions());
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, displayName: user.displayName } });
+    res.json(issueSession(req, res, user));
   });
 
   /** POST /api/auth/login */
@@ -47,21 +77,47 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Неверный логин или пароль" });
 
-    const token = signToken({ userId: user.id, username: user.username });
-    res.cookie("token", token, authCookieOptions());
-    res.json({ token, user: { id: user.id, username: user.username, email: user.email, displayName: user.displayName } });
+    res.json(issueSession(req, res, user));
+  });
+
+  /** POST /api/auth/refresh */
+  app.post("/api/auth/refresh", (req, res) => {
+    const rawRefreshToken = req.cookies?.[refreshCookieName];
+    if (!rawRefreshToken) return res.status(401).json({ error: "Refresh token отсутствует" });
+
+    const tokenHash = hashToken(rawRefreshToken);
+    const record = storage.getRefreshToken(tokenHash);
+    if (!record || record.revoked || new Date(record.expiresAt).getTime() <= Date.now()) {
+      res.clearCookie(refreshCookieName, clearRefreshCookieOptions());
+      return res.status(401).json({ error: "Refresh token недействителен или истёк" });
+    }
+
+    const user = storage.getUserById(record.userId);
+    if (!user) {
+      storage.revokeRefreshToken(tokenHash);
+      res.clearCookie(refreshCookieName, clearRefreshCookieOptions());
+      return res.status(401).json({ error: "Пользователь не найден" });
+    }
+
+    storage.revokeRefreshToken(tokenHash);
+    res.json(issueSession(req, res, user));
   });
 
   /** POST /api/auth/logout */
-  app.post("/api/auth/logout", (_req, res) => {
-    res.clearCookie("token", clearAuthCookieOptions());
+  app.post("/api/auth/logout", (req, res) => {
+    const rawRefreshToken = req.cookies?.[refreshCookieName];
+    if (rawRefreshToken) {
+      storage.revokeRefreshToken(hashToken(rawRefreshToken));
+    }
+    res.clearCookie(refreshCookieName, clearRefreshCookieOptions());
+    res.clearCookie("token", clearLegacyAuthCookieOptions());
     res.json({ ok: true });
   });
 
   /** GET /api/auth/me */
   app.get("/api/auth/me", requireAuth, (req: AuthRequest, res) => {
     const u = req.user!;
-    res.json({ id: u.id, username: u.username, email: u.email, displayName: u.displayName });
+    res.json(publicUser(u));
   });
 
   // ── Secrets (encrypted key-value store per user) ───────────────────────────
@@ -77,13 +133,13 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const { value } = req.body;
     if (typeof value !== "string" || !value) return res.status(400).json({ error: "value required" });
     const { encryptedValue, iv } = encryptSecret(value);
-    const secret = storage.setSecret(req.user!.id, req.params.key, encryptedValue, iv);
+    const secret = storage.setSecret(req.user!.id, paramValue(req.params.key), encryptedValue, iv);
     res.json({ key: secret.key, updatedAt: secret.updatedAt });
   });
 
   /** GET /api/secrets/:key/value — decrypt and return a single secret value */
   app.get("/api/secrets/:key/value", requireAuth, (req: AuthRequest, res) => {
-    const s = storage.getSecret(req.user!.id, req.params.key);
+    const s = storage.getSecret(req.user!.id, paramValue(req.params.key));
     if (!s) return res.status(404).json({ error: "Not found" });
     try {
       const value = decryptSecret(s.encryptedValue, s.iv);
@@ -97,7 +153,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   app.get("/api/days/:date", requireAuth, (req: AuthRequest, res) => {
     try {
-      const day = storage.getOrCreateDay(req.user!.id, req.params.date);
+      const day = storage.getOrCreateDay(req.user!.id, paramValue(req.params.date));
       const mealsData = storage.getMealsByDay(day.id);
       res.json({ day, meals: mealsData });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -170,7 +226,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   app.get("/api/report/:date", requireAuth, async (req: AuthRequest, res) => {
     try {
-      const day = storage.getDayByDate(req.user!.id, req.params.date);
+      const date = paramValue(req.params.date);
+      const day = storage.getDayByDate(req.user!.id, date);
       if (!day) return res.status(404).json({ error: "День не найден" });
 
       if (!day.summaryFilled && req.query.force !== "1") {
@@ -179,7 +236,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
       const mealsData = storage.getMealsByDay(day.id);
       const buf = await generateDayReport(day, mealsData);
-      const filename = `Дневник_питания_${req.params.date}.xlsx`;
+      const filename = `Дневник_питания_${date}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.send(buf);

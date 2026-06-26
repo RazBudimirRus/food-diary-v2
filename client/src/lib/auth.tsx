@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { apiRequest } from "./queryClient";
+import { apiRequest, queryClient, refreshAccessToken, setAccessToken, setUnauthorizedHandler } from "./queryClient";
 
 export interface AuthUser {
   id: number;
@@ -10,7 +10,7 @@ export interface AuthUser {
 
 interface AuthCtx {
   user: AuthUser | null;
-  token: string | null;
+  accessToken: string | null;
   loading: boolean;
   login(username: string, password: string): Promise<void>;
   register(username: string, email: string, password: string, displayName?: string): Promise<void>;
@@ -21,17 +21,28 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [accessTokenState, setAccessTokenState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount — try to restore session from cookie (server-side httpOnly)
+  function rememberSession(token: string | null, nextUser: AuthUser | null) {
+    setAccessToken(token);
+    setAccessTokenState(token);
+    setUser(nextUser);
+    if (!token) queryClient.clear();
+  }
+
+  // On mount — use httpOnly refresh cookie to mint a new in-memory access token.
   useEffect(() => {
-    apiRequest("GET", "/api/auth/me").then(async (r) => {
-      if (r.ok) {
-        const data = await r.json();
-        setUser(data);
-      }
-    }).catch(() => {}).finally(() => setLoading(false));
+    setUnauthorizedHandler(() => rememberSession(null, null));
+    refreshAccessToken(false)
+      .then((data) => {
+        if (data) {
+          rememberSession(data.accessToken, data.user as AuthUser);
+        }
+      })
+      .finally(() => setLoading(false));
+
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   async function login(username: string, password: string) {
@@ -41,8 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error ?? "Ошибка входа");
     }
     const data = await r.json();
-    setUser(data.user);
-    setToken(data.token);
+    rememberSession(data.accessToken, data.user);
   }
 
   async function register(username: string, email: string, password: string, displayName?: string) {
@@ -52,17 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error ?? "Ошибка регистрации");
     }
     const data = await r.json();
-    setUser(data.user);
-    setToken(data.token);
+    rememberSession(data.accessToken, data.user);
   }
 
   async function logout() {
     await apiRequest("POST", "/api/auth/logout");
-    setUser(null);
-    setToken(null);
+    rememberSession(null, null);
   }
 
-  return <Ctx.Provider value={{ user, token, loading, login, register, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, accessToken: accessTokenState, loading, login, register, logout }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

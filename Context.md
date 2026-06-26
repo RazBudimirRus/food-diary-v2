@@ -22,6 +22,7 @@
 | Локальная папка | `APPLICATIONS/PROJECT24_FOODDIARY2` внутри workspace CURSOR |
 | Домен (план) | `fooddiary.razbudimir.com` |
 | VPS | Ubuntu 24.04, wildcard `*.razbudimir.com` |
+| **Прод-сервер (отладка)** | `149.33.12.166` · проект: `/home/razbudimir/food_app` · пользователь: `razbudimir` |
 | Исходная разработка | **Perplexity MAX** (Computer mode), затем доработки в **Cursor** |
 
 ---
@@ -49,6 +50,7 @@
 - `ROADMAP.md` v2.2.0 — 11 фаз (0–10) + Phase 11 analytics (planned)
 - **Phase 6 (код):** Caddy в docker-compose, TLS wildcard certs, ufw script, secure cookies, `TRUST_PROXY`
 - **Phase 3 (код):** SQLite WAL mode, `scripts/backup.sh`, `install-backup-cron.sh`, preflight §13
+- **Phase 10 (код):** `refresh_tokens` в SQLite, access JWT 30m в памяти React, refresh 7d в httpOnly cookie, `/api/auth/refresh`, idle timeout 25/30 мин
 
 ---
 
@@ -58,7 +60,7 @@
 |----------|-----|-------------|
 | **IDOR** — нет проверки `day.userId` при сохранении итогов дня | `POST /api/days/:id/summary` | Высокая |
 | **PATCH /api/meals/:id** без Zod — mass assignment | `server/routes.ts` | Высокая |
-| JWT дублируется в JSON ответа + React state (смысл httpOnly частично теряется) | auth flow | Средняя |
+| ~~JWT дублируется в JSON ответа + React state (смысл httpOnly частично теряется)~~ | auth flow | ✅ Закрыто Phase 10 |
 | Нет rate-limit, Helmet, CSP, `secure` на cookie | server | Средняя |
 | Мёртвый Python-бот `bot/bot.py` вызывает несуществующие `/api/tg/*` | `bot/` | Низкая (legacy) |
 | Много неиспользуемых npm-зависимостей (шаблон Replit) | `package.json` | Низкая |
@@ -87,9 +89,16 @@ PROJECT24_FOODDIARY2/
 
 ## Docker / данные
 
-- `docker-compose.yml`: volume `data_db` → bind mount `/srv/foodbot/data`
-- SQLite: в коде `new Database("data.db")` — путь относительно cwd контейнера (см. `Dockerfile.api`, WORKDIR меняется на `/app/data`)
-- Перед продакшеном: убедиться, что БД не теряется при `docker compose down` (без `-v`)
+- **Прод:** `/home/razbudimir/food_app` (не `/srv/foodbot` — в compose по умолчанию bind `device: /srv/foodbot/data`; на сервере должен совпадать с реальным путём к `data/`)
+- SQLite: `data.db` внутри mount `/app/data` в контейнере
+- Бэкапы: `scripts/backup.sh` — `DATA_DIR` по умолчанию `/srv/foodbot/data`; на проде задавать: `DATA_DIR=/home/razbudimir/food_app/data bash scripts/backup.sh`
+- Перед продакшеном: `docker compose down` **без** `-v` не удаляет bind mount
+
+### Прод-деплой (2026-06-26) — проверено
+
+- `docker compose ps`: `food_caddy` + `food_diary_api` (healthy)
+- `curl -I https://fooddiary.razbudimir.com/api/now` → **HTTP/2 200**, HSTS present
+- **Phase 6 закрыта** на проде
 
 ---
 
@@ -176,10 +185,11 @@ PROJECT24_FOODDIARY2/
 
 | Дата | Кто | Что |
 |------|-----|-----|
+| 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-26 | Cursor Agent | **Phase 10:** refresh_tokens, access 30m + refresh 7d, `/api/auth/refresh`, access token in-memory, idle timeout 25/30, `.env.example` |
 | 2026-06-26 | Cursor Agent | **Phase 3:** SQLite WAL, backup.sh, install-backup-cron.sh, sqlite3 in image, preflight §13 |
-| 2026-06-26 | Cursor Agent | **Phase 6:** Caddyfile HTTPS, docker-compose+caddy, dev override, secure cookies, trust proxy, certs/, setup-ufw-phase6.sh, preflight §12, DEPLOY.md |
 | 2026-06-26 | Cursor Agent | Создан Context.md: контекст Perplexity+Cursor, code review, roadmap, модели, порядок фаз |
 
 ---
 
-*Версия Context.md: 1.0 · Синхронизировать с ROADMAP.md v2.1.0*
+*Версия Context.md: 1.1 · Синхронизировать с ROADMAP.md v2.2.0*

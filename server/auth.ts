@@ -15,9 +15,29 @@ const JWT_SECRET = process.env.JWT_SECRET || (() => {
   return "dev-insecure-secret-change-me";
 })();
 
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || "30m") as jwt.SignOptions["expiresIn"];
+const REFRESH_COOKIE_NAME = "refresh_token";
 
-const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseDurationSeconds(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const match = value.trim().match(/^(\d+)([smhd])$/);
+  if (!match) return parsePositiveInt(value, fallback);
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  const multiplier = unit === "s" ? 1 : unit === "m" ? 60 : unit === "h" ? 60 * 60 : 24 * 60 * 60;
+  return amount * multiplier;
+}
+
+const REFRESH_EXPIRES_SECONDS = parseDurationSeconds(process.env.JWT_REFRESH_EXPIRES_IN, 7 * 24 * 60 * 60);
+const REFRESH_COOKIE_MAX_AGE_SECONDS = parsePositiveInt(process.env.REFRESH_COOKIE_MAX_AGE, REFRESH_EXPIRES_SECONDS);
+const REFRESH_EXPIRES_MS = REFRESH_EXPIRES_SECONDS * 1000;
+const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_COOKIE_MAX_AGE_SECONDS * 1000;
 
 /** Secure flag: COOKIE_SECURE=1 in prod behind HTTPS; COOKIE_SECURE=0 for local HTTP dev */
 export function isSecureCookie(): boolean {
@@ -26,18 +46,27 @@ export function isSecureCookie(): boolean {
   return process.env.NODE_ENV === "production";
 }
 
-export function authCookieOptions(): CookieOptions {
+export function refreshCookieOptions(): CookieOptions {
+  return {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: isSecureCookie(),
+    maxAge: REFRESH_COOKIE_MAX_AGE_MS,
+    path: "/api/auth",
+  };
+}
+
+export function clearRefreshCookieOptions(): CookieOptions {
+  const { maxAge: _maxAge, ...rest } = refreshCookieOptions();
+  return rest;
+}
+
+export function clearLegacyAuthCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     sameSite: "lax",
     secure: isSecureCookie(),
-    maxAge: AUTH_COOKIE_MAX_AGE_MS,
   };
-}
-
-export function clearAuthCookieOptions(): CookieOptions {
-  const { maxAge: _maxAge, ...rest } = authCookieOptions();
-  return rest;
 }
 
 // AES-256-GCM key for encrypting secrets in DB
@@ -78,6 +107,22 @@ export function verifyToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET) as JwtPayload;
 }
 
+export function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+export function generateRefreshToken(): string {
+  return crypto.randomUUID();
+}
+
+export function getRefreshExpiresAt(): Date {
+  return new Date(Date.now() + REFRESH_EXPIRES_MS);
+}
+
+export function getRefreshCookieName(): string {
+  return REFRESH_COOKIE_NAME;
+}
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 export interface AuthRequest extends Request {
@@ -86,7 +131,7 @@ export interface AuthRequest extends Request {
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : req.cookies?.token;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 
   if (!token) return res.status(401).json({ error: "Не авторизован" });
 

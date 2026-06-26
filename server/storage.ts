@@ -2,8 +2,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { User, Day, InsertDay, Meal, InsertMeal, DaySummary, Secret } from "@shared/schema";
-import { users, days, meals, secrets } from "@shared/schema";
+import type { User, Day, InsertDay, Meal, InsertMeal, DaySummary, Secret, RefreshToken } from "@shared/schema";
+import { users, days, meals, secrets, refreshTokens } from "@shared/schema";
 
 const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
 const sqlite = new Database(DB_PATH);
@@ -32,6 +32,19 @@ sqlite.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(user_id, key)
   );
+  CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    user_agent TEXT,
+    ip TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
+  CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
   CREATE TABLE IF NOT EXISTS days (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -97,6 +110,13 @@ export interface IStorage {
   getUserByEmail(email: string): User | undefined;
   createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User;
 
+  // Refresh tokens (hashed in DB)
+  createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken;
+  getRefreshToken(token: string): RefreshToken | undefined;
+  revokeRefreshToken(token: string): void;
+  revokeUserRefreshTokens(userId: number): void;
+  deleteExpiredOrRevokedRefreshTokens(nowIso?: string): void;
+
   // Secrets (encrypted in DB)
   getSecret(userId: number, key: string): Secret | undefined;
   setSecret(userId: number, key: string, encryptedValue: string, iv: string): Secret;
@@ -136,6 +156,34 @@ class SqliteStorage implements IStorage {
       displayName: data.displayName ?? null,
       createdAt: new Date().toISOString(),
     }).returning().get();
+  }
+
+  createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken {
+    return db.insert(refreshTokens).values({
+      token: data.token,
+      userId: data.userId,
+      expiresAt: data.expiresAt,
+      revoked: false,
+      createdAt: new Date().toISOString(),
+      userAgent: data.userAgent ?? null,
+      ip: data.ip ?? null,
+    }).returning().get();
+  }
+
+  getRefreshToken(token: string) {
+    return db.select().from(refreshTokens).where(eq(refreshTokens.token, token)).get();
+  }
+
+  revokeRefreshToken(token: string) {
+    db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.token, token)).run();
+  }
+
+  revokeUserRefreshTokens(userId: number) {
+    db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.userId, userId)).run();
+  }
+
+  deleteExpiredOrRevokedRefreshTokens(nowIso = new Date().toISOString()) {
+    sqlite.prepare("DELETE FROM refresh_tokens WHERE revoked = 1 OR expires_at <= ?").run(nowIso);
   }
 
   getSecret(userId: number, key: string) {
