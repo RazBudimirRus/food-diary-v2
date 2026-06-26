@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -151,7 +150,7 @@ export default function DiaryPage() {
   useIdleTimer(handleIdleWarning, handleIdleTimeout);
 
   // Fetch day data
-  const { data, isLoading, refetch } = useQuery<{ day: Day; meals: Meal[] }>({
+  const { data, isLoading } = useQuery<{ day: Day; meals: Meal[] }>({
     queryKey: [`/api/days/${activeDate}`],
   });
 
@@ -177,7 +176,7 @@ export default function DiaryPage() {
         dayComment: day.dayComment ?? "",
       });
     }
-  }, [day?.id]);
+  }, [day]);
 
   // Reset КБЖУ when form food/drink changes
   useEffect(() => {
@@ -304,9 +303,6 @@ export default function DiaryPage() {
 
   // ── Summary totals ─────────────────────────────────────────────────────────
   const totalWater = meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0);
-  const avgHunger = meals.filter(m => m.hungerBefore != null).length
-    ? (meals.reduce((s, m) => s + (m.hungerBefore ?? 0), 0) / meals.filter(m => m.hungerBefore != null).length).toFixed(1)
-    : "—";
   const avgSatiety = meals.filter(m => m.satietyAfter != null).length
     ? (meals.reduce((s, m) => s + (m.satietyAfter ?? 0), 0) / meals.filter(m => m.satietyAfter != null).length).toFixed(1)
     : "—";

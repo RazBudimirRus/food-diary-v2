@@ -42,6 +42,17 @@ export default tseslint.config(
     },
   },
   {
+    files: [
+      "client/src/components/ui/**/*.{ts,tsx}",
+      "client/src/hooks/use-toast.ts",
+      "client/src/lib/auth.tsx",
+    ],
+    rules: {
+      // shadcn/ui and auth modules intentionally colocate hooks/variant helpers with components.
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  {
     files: ["test/**/*.ts", "tests/**/*.ts"],
     languageOptions: {
       globals: {

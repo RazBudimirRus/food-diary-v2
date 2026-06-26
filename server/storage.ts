@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { User, Day, InsertDay, Meal, InsertMeal, DaySummary, Secret, RefreshToken } from "@shared/schema";
+import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken } from "@shared/schema";
 import { users, days, meals, secrets, refreshTokens } from "@shared/schema";
 
 const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
