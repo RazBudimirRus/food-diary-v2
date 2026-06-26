@@ -1,7 +1,7 @@
 # 🗺 Food Diary V2 — RoadMap
 
-**Версия:** 2.2.0  
-**Дата обновления:** 26 июня 2026  
+**Версия:** 2.3.0  
+**Дата обновления:** 27 июня 2026  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
 **Стек:** React 18 + Vite · Node.js 20 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
@@ -10,16 +10,57 @@
 
 ## Статус реализованного (v1.x)
 
-| Функциональность | Статус |
-|---|---|
+| Функциональность                                                          | Статус    |
+| ------------------------------------------------------------------------- | --------- |
 | Веб-форма ввода приёмов пищи (еда, напитки, голод/сытость 0–10, контекст) | ✅ Готово |
-| Авторизация: регистрация/логин, bcrypt, JWT в httpOnly cookies | ✅ Готово |
-| Шифрованное хранение секретов (AES-256-GCM) | ✅ Готово |
-| Date-picker: запись задним числом (дефолт — сегодня MSK) | ✅ Готово |
-| Анализ КБЖУ через DeepSeek API (ккал/Б/Ж/У) | ✅ Готово |
-| Выгрузка Excel-отчёта для врача с колонкой КБЖУ | ✅ Готово |
-| `preflight-check.sh` — скрипт проверки перед деплоем | ✅ Готово |
-| Docker Compose (single `api` service) | ✅ Готово |
+| Авторизация: регистрация/логин, bcrypt, JWT в httpOnly cookies            | ✅ Готово |
+| Шифрованное хранение секретов (AES-256-GCM)                               | ✅ Готово |
+| Date-picker: запись задним числом (дефолт — сегодня MSK)                  | ✅ Готово |
+| Анализ КБЖУ через DeepSeek API (ккал/Б/Ж/У)                               | ✅ Готово |
+| Выгрузка Excel-отчёта для врача с колонкой КБЖУ                           | ✅ Готово |
+| `preflight-check.sh` — скрипт проверки перед деплоем                      | ✅ Готово |
+| Docker Compose (single `api` service)                                     | ✅ Готово |
+
+---
+
+## Что уже сделано и в какой версии
+
+| Версия / дата       |             Фаза | Статус         | Что вошло                                                                          |
+| ------------------- | ---------------: | -------------- | ---------------------------------------------------------------------------------- |
+| v1.0.0 · 2026-06-25 |              MVP | ✅ Реализовано | Веб-форма дневника, SQLite, Excel-отчёт, Docker Compose                            |
+| v1.1.0 · 2026-06-25 |        Preflight | ✅ Реализовано | `preflight-check.sh` для проверки готовности сервера                               |
+| v1.2.0 · 2026-06-26 |     Auth/secrets | ✅ Реализовано | Регистрация/логин/logout, bcrypt, AES-256-GCM secrets, изоляция userId             |
+| v1.3.x · 2026-06-26 | КБЖУ/date-picker | ✅ Реализовано | Date-picker, DeepSeek КБЖУ, колонка КБЖУ в Excel                                   |
+| v1.4.0 · 2026-06-26 |       Фазы 6 + 3 | ✅ Реализовано | HTTPS/Caddy, secure cookies/proxy, SQLite WAL, backup scripts                      |
+| v1.5.0 · 2026-06-27 |  Фазы 10 + 2 + 1 | ✅ Реализовано | Refresh sessions, idle timeout, Helmet/CORS/rate-limit, IDOR/PATCH fixes, tests/CI |
+
+> Прод-сервер может отставать от `main`: после коммитов Phase 10/2/1 нужен отдельный деплой на VPS.
+
+---
+
+## Ближайшие UX-доработки вне крупных фаз
+
+### Редактирование уже внесённого приёма пищи
+
+### Что делаем
+
+- Добавить в карточку приёма пищи кнопку **«Редактировать»** рядом с удалением.
+- Открывать форму/диалог с уже заполненными полями записи: время, тип приёма, еда, напитки, вода, голод/сытость, контекст, КБЖУ.
+- Сохранять изменения через существующий backend `PATCH /api/meals/:id`.
+- После успешного сохранения обновлять TanStack Query cache для текущего дня.
+- Покрыть flow тестами:
+  - integration: `PATCH /api/meals/:id` принимает валидные поля и отклоняет mass assignment;
+  - E2E: пользователь добавляет запись, редактирует текст еды, видит обновлённую карточку.
+
+### Почему важно
+
+Сейчас пользователь может только удалить ошибочную запись и создать новую. Для дневника питания это неудобно: чаще нужно поправить время, текст еды или оценки голода/сытости без потери контекста дня.
+
+### Технические заметки
+
+- Backend уже содержит `PATCH /api/meals/:id` и строгую Zod-схему после Phase 2; основная работа — UI/UX.
+- Переиспользовать существующие поля формы добавления, но не смешивать состояния add/edit так, чтобы случайно сохранить новую запись вместо обновления.
+- После редактирования сбрасывать состояние КБЖУ так же аккуратно, как при добавлении.
 
 ---
 
@@ -110,17 +151,19 @@ lint → typecheck → unit-tests → integration-tests → build → deploy
 - Helmet конфигурация:
 
 ```typescript
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:"],
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+      },
     },
-  },
-  hsts: { maxAge: 31536000, includeSubDomains: true },
-}));
+    hsts: { maxAge: 31536000, includeSubDomains: true },
+  }),
+);
 ```
 
 - Rate-limit хранить в памяти (по умолчанию) — при масштабировании заменить на Redis store.
@@ -375,13 +418,14 @@ DeepSeek API — платный ресурс. Без мониторинга од
 
 #### Рекомендации OWASP
 
-| Тип приложения | Idle timeout | Absolute timeout |
-|---|---|---|
-| Высокая чувствительность (банки, медицина) | 2–5 мин | 30 мин |
-| Средняя (корпоративные системы) | 15–30 мин | 4–8 часов |
-| Низкая (публичные сайты) | 30–60 мин | 24 часа+ |
+| Тип приложения                             | Idle timeout | Absolute timeout |
+| ------------------------------------------ | ------------ | ---------------- |
+| Высокая чувствительность (банки, медицина) | 2–5 мин      | 30 мин           |
+| Средняя (корпоративные системы)            | 15–30 мин    | 4–8 часов        |
+| Низкая (публичные сайты)                   | 30–60 мин    | 24 часа+         |
 
 Food Diary — медицинские данные → категория **«средняя»** (не банковские, но личные). Рекомендуется:
+
 - **Access token (JWT):** 30 минут
 - **Refresh token:** 7 дней (с возможностью отзыва)
 - **Idle timeout на фронтенде:** 30–60 минут
@@ -397,17 +441,18 @@ Food Diary — медицинские данные → категория **«с
 ```
 
 **Почему не один долгоживущий JWT:**
+
 - Долгий JWT нельзя отозвать без blacklist — компрометация = неделю атакующий имеет доступ
 - Refresh token хранится в httpOnly cookie → недоступен JS → защита от XSS
 - Access token короткий → украденный токен быстро устаревает
 
 #### Сравнение вариантов хранения
 
-| Хранение | XSS-защита | CSRF-защита | Logout | Рекомендация |
-|---|---|---|---|---|
-| httpOnly cookie (access) | ✅ | ❌ (нужен CSRF-токен) | ✅ через Set-Cookie | Текущий подход |
-| httpOnly cookie (refresh) + memory (access) | ✅ | ✅ (access в памяти) | ✅ | **Рекомендуется** |
-| localStorage | ❌ XSS уязвим | ✅ | Сложнее | Не рекомендуется |
+| Хранение                                    | XSS-защита    | CSRF-защита           | Logout              | Рекомендация      |
+| ------------------------------------------- | ------------- | --------------------- | ------------------- | ----------------- |
+| httpOnly cookie (access)                    | ✅            | ❌ (нужен CSRF-токен) | ✅ через Set-Cookie | Текущий подход    |
+| httpOnly cookie (refresh) + memory (access) | ✅            | ✅ (access в памяти)  | ✅                  | **Рекомендуется** |
+| localStorage                                | ❌ XSS уязвим | ✅                    | Сложнее             | Не рекомендуется  |
 
 ### Рекомендованные значения для Food Diary
 
@@ -466,10 +511,10 @@ CREATE INDEX idx_refresh_tokens_userId ON refresh_tokens(userId);
 #### Шаг 2 — server/auth.ts: generateRefreshToken + verifyRefreshToken
 
 ```typescript
-import crypto from 'crypto';
+import crypto from "crypto";
 
 export function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 export function generateRefreshToken(): string {
@@ -485,28 +530,28 @@ export function generateRefreshToken(): string {
 // Стало: access JWT = 30m, refresh token в httpOnly cookie = 7 дней
 
 // POST /api/auth/refresh — обновить access token по refresh cookie
-app.post('/api/auth/refresh', async (req, res) => {
-  const rawToken = req.cookies['refresh_token'];
-  if (!rawToken) return res.status(401).json({ error: 'No refresh token' });
+app.post("/api/auth/refresh", async (req, res) => {
+  const rawToken = req.cookies["refresh_token"];
+  if (!rawToken) return res.status(401).json({ error: "No refresh token" });
 
   const hash = hashToken(rawToken);
-  const record = db.prepare(
-    'SELECT * FROM refresh_tokens WHERE token = ? AND revoked = 0 AND expiresAt > datetime("now")'
-  ).get(hash);
-  if (!record) return res.status(401).json({ error: 'Invalid or expired refresh token' });
+  const record = db
+    .prepare('SELECT * FROM refresh_tokens WHERE token = ? AND revoked = 0 AND expiresAt > datetime("now")')
+    .get(hash);
+  if (!record) return res.status(401).json({ error: "Invalid or expired refresh token" });
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(record.userId);
-  const accessToken = signToken({ userId: user.id, role: user.role }, '30m');
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(record.userId);
+  const accessToken = signToken({ userId: user.id, role: user.role }, "30m");
   res.json({ accessToken });
 });
 
 // POST /api/auth/logout — отозвать refresh token
-app.post('/api/auth/logout', requireAuth, async (req, res) => {
-  const rawToken = req.cookies['refresh_token'];
+app.post("/api/auth/logout", requireAuth, async (req, res) => {
+  const rawToken = req.cookies["refresh_token"];
   if (rawToken) {
-    db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE token = ?').run(hashToken(rawToken));
+    db.prepare("UPDATE refresh_tokens SET revoked = 1 WHERE token = ?").run(hashToken(rawToken));
   }
-  res.clearCookie('refresh_token', { path: '/api/auth' });
+  res.clearCookie("refresh_token", { path: "/api/auth" });
   res.json({ ok: true });
 });
 ```
@@ -518,20 +563,24 @@ app.post('/api/auth/logout', requireAuth, async (req, res) => {
 const rawRefresh = generateRefreshToken();
 const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-db.prepare(
-  'INSERT INTO refresh_tokens (token, userId, expiresAt, userAgent, ip) VALUES (?, ?, ?, ?, ?)'
-).run(hashToken(rawRefresh), user.id, expiresAt.toISOString(), req.headers['user-agent'], req.ip);
+db.prepare("INSERT INTO refresh_tokens (token, userId, expiresAt, userAgent, ip) VALUES (?, ?, ?, ?, ?)").run(
+  hashToken(rawRefresh),
+  user.id,
+  expiresAt.toISOString(),
+  req.headers["user-agent"],
+  req.ip,
+);
 
-res.cookie('refresh_token', rawRefresh, {
+res.cookie("refresh_token", rawRefresh, {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // только HTTPS в проде
-  sameSite: 'strict',
+  secure: process.env.NODE_ENV === "production", // только HTTPS в проде
+  sameSite: "strict",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней в мс
-  path: '/api/auth',   // cookie уходит только на /api/auth/* — минимальный scope
+  path: "/api/auth", // cookie уходит только на /api/auth/* — минимальный scope
 });
 
 // Access token возвращать в JSON (не в cookie) — хранится в памяти React
-const accessToken = signToken({ userId: user.id, role: user.role }, '30m');
+const accessToken = signToken({ userId: user.id, role: user.role }, "30m");
 res.json({ accessToken, user: { id: user.id, username: user.username } });
 ```
 
@@ -543,9 +592,9 @@ const [accessToken, setAccessToken] = useState<string | null>(null);
 
 // При старте приложения — попытаться обновить через refresh cookie
 useEffect(() => {
-  fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => data && setAccessToken(data.accessToken))
+  fetch("/api/auth/refresh", { method: "POST", credentials: "include" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => data && setAccessToken(data.accessToken))
     .catch(() => {});
 }, []);
 
@@ -557,31 +606,31 @@ useEffect(() => {
 
 ```typescript
 // client/src/hooks/useIdleTimer.ts
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from "react";
 
-const EVENTS = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'];
+const EVENTS = ["mousemove", "keydown", "click", "touchstart", "scroll"];
 
 export function useIdleTimer(
-  onWarning: () => void,  // показать модальное окно
-  onLogout: () => void,   // принудительный выход
+  onWarning: () => void, // показать модальное окно
+  onLogout: () => void, // принудительный выход
   warningMin = 25,
   logoutMin = 30,
 ) {
-  const warnTimer  = useRef<ReturnType<typeof setTimeout>>();
+  const warnTimer = useRef<ReturnType<typeof setTimeout>>();
   const logoutTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const reset = useCallback(() => {
     clearTimeout(warnTimer.current);
     clearTimeout(logoutTimer.current);
-    warnTimer.current  = setTimeout(onWarning, warningMin * 60 * 1000);
-    logoutTimer.current = setTimeout(onLogout,  logoutMin  * 60 * 1000);
+    warnTimer.current = setTimeout(onWarning, warningMin * 60 * 1000);
+    logoutTimer.current = setTimeout(onLogout, logoutMin * 60 * 1000);
   }, [onWarning, onLogout, warningMin, logoutMin]);
 
   useEffect(() => {
-    EVENTS.forEach(e => window.addEventListener(e, reset, { passive: true }));
+    EVENTS.forEach((e) => window.addEventListener(e, reset, { passive: true }));
     reset(); // запустить таймер сразу
     return () => {
-      EVENTS.forEach(e => window.removeEventListener(e, reset));
+      EVENTS.forEach((e) => window.removeEventListener(e, reset));
       clearTimeout(warnTimer.current);
       clearTimeout(logoutTimer.current);
     };
@@ -595,11 +644,12 @@ export function useIdleTimer(
 
 ```typescript
 // В server/index.ts — запускать раз в час
-setInterval(() => {
-  db.prepare(
-    "DELETE FROM refresh_tokens WHERE expiresAt < datetime('now') OR revoked = 1"
-  ).run();
-}, 60 * 60 * 1000);
+setInterval(
+  () => {
+    db.prepare("DELETE FROM refresh_tokens WHERE expiresAt < datetime('now') OR revoked = 1").run();
+  },
+  60 * 60 * 1000,
+);
 ```
 
 #### Шаг 8 — .env.example (добавить новые переменные)
@@ -634,24 +684,27 @@ SESSION_IDLE_TIMEOUT_MIN=30
 ### Блок 1 — Сон
 
 **Метрики:**
+
 - Время отбоя и подъёма по дням (ось X — даты, ось Y — время на шкале 0–24ч)
 - Продолжительность сна (часы) — бар-чарт по дням
 - Динамика: среднее время сна за период
 - «Долг сна» — накопленный дефицит относительно цели (например, 8 ч)
 
 **Нюанс реализации:** если лёг в 23:30, встал в 07:00 — продолжительность считается через midnight crossing:
+
 ```typescript
 function sleepDuration(sleepTime: string, wakeTime: string): number {
   // sleepTime: "23:30", wakeTime: "07:00"
-  const [sh, sm] = sleepTime.split(':').map(Number);
-  const [wh, wm] = wakeTime.split(':').map(Number);
-  let mins = (wh * 60 + wm) - (sh * 60 + sm);
+  const [sh, sm] = sleepTime.split(":").map(Number);
+  const [wh, wm] = wakeTime.split(":").map(Number);
+  let mins = wh * 60 + wm - (sh * 60 + sm);
   if (mins < 0) mins += 24 * 60; // перенос через полночь
   return mins / 60;
 }
 ```
 
 **Полезные сравнения:**
+
 - Корреляция «мало спал → средний голод выше» (ранний завтрак, более частые перекусы)
 - Дни с недосыпом (<6 ч) vs среднее потребление калорий в тот же день
 
@@ -660,6 +713,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 ### Блок 2 — Калорийность и КБЖУ
 
 **Метрики:**
+
 - Калорийность по дням — линейный или бар-чарт
 - Скользящее среднее за 7 дней (сглаживает выбросы)
 - Динамика Б/Ж/У по неделям — stacked area chart
@@ -667,6 +721,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 - Дни без данных КБЖУ (не заполнено через DeepSeek) — видно где пропуски
 
 **Полезные сравнения:**
+
 - Будни vs выходные: средняя калорийность
 - Дни с физической активностью vs без: калорийность
 - Топ-5 самых калорийных дней за период с раскладкой по приёмам
@@ -676,6 +731,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 ### Блок 3 — Перерывы между приёмами пищи
 
 **Метрики:**
+
 - Среднее время между приёмами по дням — dot chart
 - Длинные перерывы (>5 ч) — подсветка красным
 - Время первого приёма (завтрак) — scatter plot по дням
@@ -683,6 +739,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 - «Окно питания» = от первого до последнего приёма (Intermittent Fasting-метрика)
 
 **Полезные сравнения:**
+
 - Длинный перерыв перед едой → голод высокий → переедание (корреляция hungerBefore с gap)
 - Позднее время ужина (после 21:00) vs качество сна
 
@@ -691,6 +748,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 ### Блок 4 — Шкала голода и насыщения
 
 **Метрики:**
+
 - Средний голод ДО приёма по дням — line chart
 - Среднее насыщение ПОСЛЕ приёма по дням
 - «Зелёная зона» (голод 3–5, насыщение 6–7) — процент попаданий за период
@@ -698,6 +756,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 - Переедания (насыщение ≥ 8) — количество за период
 
 **Полезные сравнения:**
+
 - Приёмы с голодом 0–2 («экстремальный голод») — когда чаще всего случаются (день недели, время суток)
 - Корреляция высокого голода до приёма → высокое насыщение после (ожидаемо, но интересно видеть на графике)
 
@@ -706,6 +765,7 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 ### Блок 5 — Активность и шаги
 
 **Метрики:**
+
 - Шаги по дням — бар-чарт с целевой линией (например, 10 000)
 - Дни с указанной физической активностью — calendar heatmap (GitHub-style)
 - Недели с активностью ≥ 3 дней vs средняя калорийность в ту же неделю
@@ -716,17 +776,17 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 
 Эти метрики специфичны для медицинского дневника питания и дают врачу ценный контекст:
 
-| Метрика | Что показывает | Практическая ценность |
-|---|---|---|
-| **Регулярность заполнения** | % дней с хотя бы 1 записью за период | Мотивация + честность данных |
-| **Контекст приёмов** | Топ-5 контекстов (за компьютером, в спешке, с семьёй) | Паттерны эмоционального питания |
-| **Вода за день** | Среднее потребление воды (л) по дням, trend | Гидратация |
-| **Разнообразие типов приёма** | Какой тип пропускается чаще всего (завтрак?) | Режим питания |
-| **Стрик** | Количество дней подряд с заполнением | Геймификация, мотивация |
-| **Вечернее питание** | % калорий после 19:00 от суточного КБЖУ | Связь с весом, качеством сна |
-| **Распределение приёмов по времени суток** | Heatmap: час дня × день недели | Поведенческие паттерны |
-| **Корреляция сон–КБЖУ** | Недосып → рост калорийности на следующий день | Доказано в науке, интересно видеть своё |
-| **Вариабельность калорийности** | Стандартное отклонение за период | Чем стабильнее — тем лучше для контроля веса |
+| Метрика                                    | Что показывает                                        | Практическая ценность                        |
+| ------------------------------------------ | ----------------------------------------------------- | -------------------------------------------- |
+| **Регулярность заполнения**                | % дней с хотя бы 1 записью за период                  | Мотивация + честность данных                 |
+| **Контекст приёмов**                       | Топ-5 контекстов (за компьютером, в спешке, с семьёй) | Паттерны эмоционального питания              |
+| **Вода за день**                           | Среднее потребление воды (л) по дням, trend           | Гидратация                                   |
+| **Разнообразие типов приёма**              | Какой тип пропускается чаще всего (завтрак?)          | Режим питания                                |
+| **Стрик**                                  | Количество дней подряд с заполнением                  | Геймификация, мотивация                      |
+| **Вечернее питание**                       | % калорий после 19:00 от суточного КБЖУ               | Связь с весом, качеством сна                 |
+| **Распределение приёмов по времени суток** | Heatmap: час дня × день недели                        | Поведенческие паттерны                       |
+| **Корреляция сон–КБЖУ**                    | Недосып → рост калорийности на следующий день         | Доказано в науке, интересно видеть своё      |
+| **Вариабельность калорийности**            | Стандартное отклонение за период                      | Чем стабильнее — тем лучше для контроля веса |
 
 ---
 
@@ -734,12 +794,12 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 
 #### Стек для графиков
 
-| Вариант | Плюсы | Минусы |
-|---|---|---|
-| **Recharts** | React-native, легковесный, хорошо с TypeScript | Меньше типов графиков |
-| **Chart.js + react-chartjs-2** | Зрелый, много примеров | Больше boilerplate |
-| **Tremor** | Компоненты в стиле shadcn, готовые дашборды | Платные компоненты для сложных графиков |
-| **Victory** | Мощный, анимации | Тяжёлый |
+| Вариант                        | Плюсы                                          | Минусы                                  |
+| ------------------------------ | ---------------------------------------------- | --------------------------------------- |
+| **Recharts**                   | React-native, легковесный, хорошо с TypeScript | Меньше типов графиков                   |
+| **Chart.js + react-chartjs-2** | Зрелый, много примеров                         | Больше boilerplate                      |
+| **Tremor**                     | Компоненты в стиле shadcn, готовые дашборды    | Платные компоненты для сложных графиков |
+| **Victory**                    | Мощный, анимации                               | Тяжёлый                                 |
 
 **Рекомендация:** `Recharts` — уже в экосистеме React/Vite, минимальный размер бандла, хорошо с Tailwind.
 
@@ -783,11 +843,11 @@ function sleepDuration(sleepTime: string, wakeTime: string): number {
 ```typescript
 // Периоды на фронтенде
 const PERIODS = [
-  { label: 'Неделя',    days: 7   },
-  { label: 'Месяц',     days: 30  },
-  { label: '3 месяца',  days: 90  },
-  { label: '6 месяцев', days: 180 },
-  { label: 'Год',       days: 365 },
+  { label: "Неделя", days: 7 },
+  { label: "Месяц", days: 30 },
+  { label: "3 месяца", days: 90 },
+  { label: "6 месяцев", days: 180 },
+  { label: "Год", days: 365 },
 ];
 
 // На бэкенде — агрегировать через SQL, не в JS:
@@ -811,22 +871,24 @@ const PERIODS = [
 
 ## Таблица приоритетов фаз
 
-| Фаза | Название | Приоритет | Сложность | Статус |
-|------|----------|-----------|-----------|--------|
-| 0 | Заготовки под Telegram-бот | Низкий | Низкая | 📋 Запланировано |
-| 1 | Качество кода | Высокий | Средняя | 📋 Запланировано |
-| 2 | Безопасность и аудит | Высокий | Средняя | 📋 Запланировано |
-| 3 | Персистентность данных | Критический | Низкая | 📋 Запланировано |
-| 4 | Административная панель | Средний | Высокая | 📋 Запланировано |
-| 5 | Самостоятельный сброс пароля | Низкий | Средняя | 📋 Запланировано |
-| 6 | HTTPS и домен | Критический | Низкая | 📋 Запланировано |
-| 7 | WAF и инфраструктура | Средний | Средняя | 📋 Запланировано |
-| 8 | Масштабируемость и микросервисы | Низкий | Высокая | 📋 Запланировано |
-| 9 | Алертинг DeepSeek в админке | Средний | Средняя | 📋 Запланировано |
-| 10 | Управление временем жизни сессий | Высокий | Средняя | 📋 Запланировано |
-| 11 | Аналитика и графики истории питания | Средний | Высокая | 📋 Запланировано |
+| Фаза | Название                            | Приоритет   | Сложность | Статус                  |
+| ---- | ----------------------------------- | ----------- | --------- | ----------------------- |
+| 0    | Заготовки под Telegram-бот          | Низкий      | Низкая    | 📋 Запланировано        |
+| 1    | Качество кода                       | Высокий     | Средняя   | ✅ Реализовано в v1.5.0 |
+| 2    | Безопасность и аудит                | Высокий     | Средняя   | ✅ Реализовано в v1.5.0 |
+| 3    | Персистентность данных              | Критический | Низкая    | ✅ Реализовано в v1.4.0 |
+| 4    | Административная панель             | Средний     | Высокая   | 📋 Запланировано        |
+| 5    | Самостоятельный сброс пароля        | Низкий      | Средняя   | 📋 Запланировано        |
+| 6    | HTTPS и домен                       | Критический | Низкая    | ✅ Реализовано в v1.4.0 |
+| 7    | WAF и инфраструктура                | Средний     | Средняя   | 📋 Запланировано        |
+| 8    | Масштабируемость и микросервисы     | Низкий      | Высокая   | 📋 Запланировано        |
+| 9    | Алертинг DeepSeek в админке         | Средний     | Средняя   | 📋 Запланировано        |
+| 10   | Управление временем жизни сессий    | Высокий     | Средняя   | ✅ Реализовано в v1.5.0 |
+| 11   | Аналитика и графики истории питания | Средний     | Высокая   | 📋 Запланировано        |
+| UX-1 | Редактирование приёма пищи          | Высокий     | Низкая    | 📋 Запланировано        |
 
 **Легенда приоритетов:**
+
 - **Критический** — блокирует продакшен-эксплуатацию
 - **Высокий** — необходимо для стабильной работы
 - **Средний** — важно, но не блокирует запуск
@@ -834,4 +896,4 @@ const PERIODS = [
 
 ---
 
-**Рекомендуемый порядок реализации:** Фаза 6 → Фаза 3 → Фаза 10 → Фаза 2 → Фаза 1 → Фаза 4 → Фаза 9 → Фаза 11 → Фаза 7 → Фаза 5 → Фаза 0 → Фаза 8
+**Рекомендуемый порядок реализации:** Фаза 6 → Фаза 3 → Фаза 10 → Фаза 2 → Фаза 1 → UX-1 → Фаза 4 → Фаза 9 → Фаза 11 → Фаза 7 → Фаза 5 → Фаза 0 → Фаза 8
