@@ -13,6 +13,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
 
 </div>
 
@@ -49,28 +50,33 @@ Food Diary V2 — инструмент для ведения дневника п
 
 ## Возможности
 
-| Функция | Статус |
-|---|:---:|
-| Регистрация / вход / выход | ✅ |
-| Добавить приём пищи | ✅ |
-| Навигация по датам | ✅ |
-| Шкала голода/насыщения 0–10 | ✅ |
-| Контекст приёма (где, как) | ✅ |
-| Итоги дня (подъём/спорт/шаги) | ✅ |
-| Excel-отчёт для врача | ✅ |
-| Удаление записи | ✅ |
-| Зашифрованное хранение секретов | ✅ |
-| Распознавание фото | 🔜 V2 |
+| Функция                                | Статус |
+| -------------------------------------- | :----: |
+| Регистрация / вход / выход             |   ✅   |
+| Добавить приём пищи                    |   ✅   |
+| Навигация по датам                     |   ✅   |
+| Шкала голода/насыщения 0–10            |   ✅   |
+| Контекст приёма (где, как)             |   ✅   |
+| Итоги дня (подъём/спорт/шаги)          |   ✅   |
+| Excel-отчёт для врача                  |   ✅   |
+| Удаление записи                        |   ✅   |
+| Зашифрованное хранение секретов        |   ✅   |
+| Access/refresh sessions, idle timeout  |   ✅   |
+| HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
+| Unit/integration/E2E tests + CI        |   ✅   |
+| Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
 
 Формируется по формату лечащего врача:
+
 - **7 колонок:** интервал приёма, голод до (0–10), тип приёма, что ел, что пил, насыщение после (0–10), контекст
 - **Итоги дня:** подъём, отбой, спорт, шаги, общий комментарий
 - **Автоматические итоги:** суммарный объём воды, количество приёмов, средний голод/насыщение — с пустыми полями «по версии врача»
 - **Цветная легенда шкалы голода** (зелёная зона 3–7, красная зона 0–2 и 8–10)
 
 ### Шкала голода
+
 ```
 0 — Экстремальный голод        🔴   7 — Комфортная сытость         🟢
 1 — Сильный голод              🔴   8 — Переел                     🔴
@@ -112,17 +118,19 @@ Food Diary V2 — инструмент для ведения дневника п
 
 ### Стек технологий
 
-| Слой | Технология |
-|---|---|
-| Frontend | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query |
-| Backend | Node.js 20, Express, TypeScript |
-| База данных | SQLite (better-sqlite3) + Drizzle ORM |
-| Аутентификация | bcryptjs (cost 12) + JWT (httpOnly cookie, 7 дней) |
-| Шифрование секретов | AES-256-GCM, ключ из `ENCRYPTION_KEY` |
-| Excel | exceljs |
-| Контейнеризация | Docker, Docker Compose (1 сервис: `api`) |
-| Reverse proxy | Caddy (опционально) |
-| Часовой пояс | МСК (UTC+3) — день = 00:00–23:59 MSK |
+| Слой                | Технология                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------------- |
+| Frontend            | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query                                     |
+| Backend             | Node.js 20, Express, TypeScript                                                                |
+| База данных         | SQLite (better-sqlite3) + Drizzle ORM                                                          |
+| Аутентификация      | bcryptjs (cost 12), access JWT 30 минут в памяти React, refresh token 7 дней в httpOnly cookie |
+| Шифрование секретов | AES-256-GCM, ключ из `ENCRYPTION_KEY`                                                          |
+| Excel               | exceljs                                                                                        |
+| Контейнеризация     | Docker, Docker Compose (1 сервис: `api`)                                                       |
+| Reverse proxy       | Caddy + HTTPS                                                                                  |
+| Безопасность        | Helmet/CSP/HSTS, CORS whitelist, rate-limit auth/meals                                         |
+| Качество            | Vitest, Supertest, Playwright, ESLint, Prettier, GitHub Actions                                |
+| Часовой пояс        | МСК (UTC+3) — день = 00:00–23:59 MSK                                                           |
 
 ## Установка и запуск
 
@@ -180,13 +188,22 @@ nano .env
 ```
 
 Минимальный `.env`:
+
 ```env
 JWT_SECRET=<случайная строка, минимум 40 символов>
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=30m
+JWT_REFRESH_EXPIRES_IN=7d
+REFRESH_COOKIE_MAX_AGE=604800
+SESSION_IDLE_WARNING_MIN=25
+SESSION_IDLE_TIMEOUT_MIN=30
 ENCRYPTION_KEY=<случайная строка, минимум 40 символов>
+PUBLIC_URL=https://fooddiary.razbudimir.com
+ALLOWED_ORIGINS=https://fooddiary.razbudimir.com
+TRUST_PROXY=1
 ```
 
 Сгенерировать значения:
+
 ```bash
 openssl rand -hex 32   # для JWT_SECRET
 openssl rand -hex 32   # для ENCRYPTION_KEY
@@ -198,7 +215,23 @@ openssl rand -hex 32   # для ENCRYPTION_KEY
 docker compose up -d --build
 ```
 
+### Локальная разработка и проверки
+
+```bash
+npm ci
+npm run dev
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+```
+
+`npm run test:e2e` автоматически собирает приложение, поднимает production server на `127.0.0.1:5174`
+и запускает Playwright smoke-flow. При первом запуске может понадобиться `npx playwright install chromium`.
+
 Проверить статус:
+
 ```bash
 docker compose ps
 docker compose logs -f
@@ -206,9 +239,9 @@ docker compose logs -f
 
 ### Шаг 6. Доступ
 
-| Сервис | Адрес |
-|---|---|
-| Веб-форма | `http://<IP_сервера>:5000` |
+| Сервис     | Адрес                                  |
+| ---------- | -------------------------------------- |
+| Веб-форма  | `http://<IP_сервера>:5000`             |
 | API health | `http://<IP_сервера>:5000/api/auth/me` |
 
 При первом входе нажмите **«Регистрация»** и создайте учётную запись.
@@ -236,6 +269,7 @@ caddy:
 ```
 
 Добавьте в раздел `volumes`:
+
 ```yaml
 caddy_data:
 caddy_config:
@@ -288,13 +322,16 @@ food-diary-v2/
 │       └── components/ui/       # shadcn/ui компоненты
 │
 ├── server/                      # Node.js backend (Express)
-│   ├── auth.ts                  # JWT, bcrypt, AES-256-GCM, requireAuth
+│   ├── auth.ts                  # access JWT, refresh cookies, bcrypt, AES-256-GCM, requireAuth
 │   ├── routes.ts                # REST API endpoints
 │   ├── storage.ts               # Drizzle ORM + SQLite
 │   └── excel.ts                 # Генератор Excel-отчётов
 │
 ├── shared/
 │   └── schema.ts                # Drizzle schema (users, secrets, days, meals)
+│
+├── test/                        # Vitest unit/integration tests
+├── tests/e2e/                   # Playwright E2E smoke tests
 │
 ├── bot/                         # (не используется в V1, зарезервировано для V2)
 │
@@ -308,34 +345,63 @@ food-diary-v2/
 
 ## API Reference
 
-| Method | Endpoint | Auth | Description |
-|---|---|:---:|---|
-| POST | `/api/auth/register` | — | Регистрация пользователя |
-| POST | `/api/auth/login` | — | Вход (возвращает JWT cookie) |
-| POST | `/api/auth/logout` | ✅ | Выход (очищает cookie) |
-| GET | `/api/auth/me` | ✅ | Текущий пользователь |
-| GET | `/api/secrets` | ✅ | Список сохранённых секретов |
-| PUT | `/api/secrets/:name` | ✅ | Сохранить/обновить секрет (зашифровано) |
-| DELETE | `/api/secrets/:name` | ✅ | Удалить секрет |
-| GET | `/api/days/:date` | ✅ | Данные дня + приёмы пищи (YYYY-MM-DD) |
-| POST | `/api/meals` | ✅ | Добавить приём пищи |
-| DELETE | `/api/meals/:id` | ✅ | Удалить запись |
-| PATCH | `/api/meals/:id` | ✅ | Обновить запись |
-| POST | `/api/days/:id/summary` | ✅ | Сохранить итоги дня |
-| GET | `/api/report/:date` | ✅ | Скачать Excel (202 если итоги не заполнены) |
-| GET | `/api/now` | — | Текущие дата и время МСК |
+| Method | Endpoint                |  Auth  | Description                                    |
+| ------ | ----------------------- | :----: | ---------------------------------------------- |
+| POST   | `/api/auth/register`    |   —    | Регистрация пользователя                       |
+| POST   | `/api/auth/login`       |   —    | Вход: access token в JSON + refresh cookie     |
+| POST   | `/api/auth/refresh`     | cookie | Обновить access token по refresh cookie        |
+| POST   | `/api/auth/logout`      | cookie | Выход: отзывает refresh token и очищает cookie |
+| GET    | `/api/auth/me`          |   ✅   | Текущий пользователь                           |
+| GET    | `/api/secrets`          |   ✅   | Список сохранённых секретов                    |
+| PUT    | `/api/secrets/:name`    |   ✅   | Сохранить/обновить секрет (зашифровано)        |
+| GET    | `/api/days/:date`       |   ✅   | Данные дня + приёмы пищи (YYYY-MM-DD)          |
+| POST   | `/api/meals`            |   ✅   | Добавить приём пищи                            |
+| DELETE | `/api/meals/:id`        |   ✅   | Удалить запись                                 |
+| PATCH  | `/api/meals/:id`        |   ✅   | Обновить запись                                |
+| POST   | `/api/days/:id/summary` |   ✅   | Сохранить итоги дня                            |
+| GET    | `/api/report/:date`     |   ✅   | Скачать Excel (202 если итоги не заполнены)    |
+| GET    | `/api/now`              |   —    | Текущие дата и время МСК                       |
 
 ## Roadmap
 
-- [x] V1: текстовый ввод, веб-форма, авторизация, зашифрованные секреты, Excel-отчёт
-- [ ] V2: распознавание фото через GigaChat Vision (Сбер)
-- [ ] V3: автоматический подсчёт КБЖУ (FatSecret / USDA API)
-- [ ] V4: статистика и графики по неделям/месяцам
+- [x] Phase 6: HTTPS + Caddy deployment
+- [x] Phase 3: SQLite persistence, WAL mode, backups
+- [x] Phase 10: access/refresh session lifecycle + idle timeout
+- [x] Phase 2: security hardening and audit fixes
+- [x] Phase 1: tests, linting, E2E smoke, CI
+- [ ] Phase 4: admin panel
+- [ ] Phase 9: DeepSeek usage alerting
+- [ ] Phase 11: analytics dashboard
 
 ## Changelog
 
+### [1.5.0] — 2026-06-27
+
+**feat: session lifecycle, security hardening, and CI quality gates**
+
+- Added refresh token table, hashed refresh tokens, 30-minute access JWTs, 7-day httpOnly refresh cookies
+- Added `/api/auth/refresh`; login/register/logout now rotate or revoke refresh sessions
+- React keeps access tokens in memory and refreshes them through the API client
+- Added frontend idle warning/logout timers (25/30 minutes)
+- Added Helmet/CSP/HSTS, CORS allowlist, rate limits for login and meal creation
+- Fixed IDOR in day summary updates and strict Zod validation for meal updates
+- Removed full JSON API response bodies from logs
+- Added Vitest unit tests, Supertest integration tests, Playwright E2E smoke test, ESLint, Prettier, Husky, lint-staged
+- Added GitHub Actions CI and Dependabot config
+
+### [1.4.0] — 2026-06-26
+
+**feat: HTTPS deployment and SQLite persistence**
+
+- Added Caddy reverse proxy with HTTPS support
+- Added secure cookie/proxy configuration for production
+- Enabled SQLite WAL mode and backup scripts
+- Added backup cron installer and deployment preflight checks
+
 ### [1.2.0] — 2026-06-26
+
 **feat: отвязка от Telegram-бота, добавление авторизации и зашифрованных секретов**
+
 - Удалён сервис `bot` (Python/aiogram) из Docker Compose — теперь один сервис `api`
 - Добавлена таблица `users`: username, email, `passwordHash` (bcryptjs, cost 12)
 - Добавлена таблица `secrets`: зашифрованное хранилище ключ-значение на пользователя (AES-256-GCM)
@@ -350,7 +416,9 @@ food-diary-v2/
 - `preflight-check.sh` секция 11: валидация Telegram-токена заменена проверкой API health (`GET /api/auth/me`)
 
 ### [1.1.0] — 2026-06-25
+
 **feat: скрипт проверки готовности сервера preflight-check.sh**
+
 - 11 разделов: ОС, RAM, диск, интернет, Docker, порты, firewall, переменные окружения, образы, синтаксис compose, токен
 - Цветной вывод с box-drawing символами, ✔/✘/⚠
 - Панель SUMMARY с блокерами и цветным вердиктом (зелёный/жёлтый/красный)
@@ -358,7 +426,9 @@ food-diary-v2/
 - Проверка интернета через `https://hub.docker.com/`
 
 ### [1.0.0] — 2026-06-25
+
 **feat: начальный MVP**
+
 - Фронтенд: React 18 + Vite + Tailwind CSS v3 + shadcn/ui
 - Бэкенд: Express + TypeScript + Drizzle ORM + SQLite
 - Ввод приёмов пищи: еда, напитки, шкала голода/насыщения (0–10), тип приёма, контекст
@@ -393,22 +463,26 @@ The app supports multiple users — each registers through the browser, data is 
 
 ## Features
 
-| Feature | Status |
-|---|:---:|
-| Register / login / logout | ✅ |
-| Add meal entry | ✅ |
-| Date navigation | ✅ |
-| Hunger/satiety scale 0–10 | ✅ |
-| Meal context (where, how) | ✅ |
-| Day summary (wake/sport/steps) | ✅ |
-| Excel report for doctor | ✅ |
-| Delete entry | ✅ |
-| Encrypted secrets storage | ✅ |
-| Photo recognition | 🔜 V2 |
+| Feature                                | Status |
+| -------------------------------------- | :----: |
+| Register / login / logout              |   ✅   |
+| Add meal entry                         |   ✅   |
+| Date navigation                        |   ✅   |
+| Hunger/satiety scale 0–10              |   ✅   |
+| Meal context (where, how)              |   ✅   |
+| Day summary (wake/sport/steps)         |   ✅   |
+| Excel report for doctor                |   ✅   |
+| Delete entry                           |   ✅   |
+| Encrypted secrets storage              |   ✅   |
+| Access/refresh sessions, idle timeout  |   ✅   |
+| HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
+| Unit/integration/E2E tests + CI        |   ✅   |
+| Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
 
 Generated in the doctor's agreed format:
+
 - **7 columns:** time interval, hunger before (0–10), meal type, food, drink, satiety after (0–10), context
 - **Day summary:** wake time, bedtime, sport activity, steps, general comment
 - **Auto totals:** total water volume, meal count, avg hunger/satiety — with empty "doctor's version" fields
@@ -445,17 +519,19 @@ Generated in the doctor's agreed format:
 
 ### Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query |
-| Backend | Node.js 20, Express, TypeScript |
-| Database | SQLite (better-sqlite3) + Drizzle ORM |
-| Authentication | bcryptjs (cost 12) + JWT (httpOnly cookie, 7 days) |
-| Secrets encryption | AES-256-GCM, key derived from `ENCRYPTION_KEY` |
-| Excel | exceljs |
-| Containerization | Docker, Docker Compose (1 service: `api`) |
-| Reverse proxy | Caddy (optional) |
-| Timezone | MSK (UTC+3) — day = 00:00–23:59 MSK |
+| Layer              | Technology                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| Frontend           | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query                                       |
+| Backend            | Node.js 20, Express, TypeScript                                                                  |
+| Database           | SQLite (better-sqlite3) + Drizzle ORM                                                            |
+| Authentication     | bcryptjs (cost 12), 30-minute access JWT in React memory, 7-day refresh token in httpOnly cookie |
+| Secrets encryption | AES-256-GCM, key derived from `ENCRYPTION_KEY`                                                   |
+| Excel              | exceljs                                                                                          |
+| Containerization   | Docker, Docker Compose (1 service: `api`)                                                        |
+| Reverse proxy      | Caddy + HTTPS                                                                                    |
+| Security           | Helmet/CSP/HSTS, CORS allowlist, auth/meals rate limits                                          |
+| Quality            | Vitest, Supertest, Playwright, ESLint, Prettier, GitHub Actions                                  |
+| Timezone           | MSK (UTC+3) — day = 00:00–23:59 MSK                                                              |
 
 ## Installation & Setup
 
@@ -513,13 +589,22 @@ nano .env
 ```
 
 Minimum `.env`:
+
 ```env
 JWT_SECRET=<random string, at least 40 characters>
-JWT_EXPIRES_IN=7d
+JWT_EXPIRES_IN=30m
+JWT_REFRESH_EXPIRES_IN=7d
+REFRESH_COOKIE_MAX_AGE=604800
+SESSION_IDLE_WARNING_MIN=25
+SESSION_IDLE_TIMEOUT_MIN=30
 ENCRYPTION_KEY=<random string, at least 40 characters>
+PUBLIC_URL=https://fooddiary.razbudimir.com
+ALLOWED_ORIGINS=https://fooddiary.razbudimir.com
+TRUST_PROXY=1
 ```
 
 Generate values on the server:
+
 ```bash
 openssl rand -hex 32   # for JWT_SECRET
 openssl rand -hex 32   # for ENCRYPTION_KEY
@@ -531,7 +616,23 @@ openssl rand -hex 32   # for ENCRYPTION_KEY
 docker compose up -d --build
 ```
 
+### Local development and checks
+
+```bash
+npm ci
+npm run dev
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run test:e2e
+```
+
+`npm run test:e2e` builds the app, starts the production server on `127.0.0.1:5174`,
+and runs the Playwright smoke flow. On first run, you may need `npx playwright install chromium`.
+
 Check status:
+
 ```bash
 docker compose ps
 docker compose logs -f
@@ -539,9 +640,9 @@ docker compose logs -f
 
 ### Step 6. Access
 
-| Service | URL |
-|---|---|
-| Web form | `http://<server_ip>:5000` |
+| Service    | URL                                   |
+| ---------- | ------------------------------------- |
+| Web form   | `http://<server_ip>:5000`             |
 | API health | `http://<server_ip>:5000/api/auth/me` |
 
 On first visit click **"Register"** to create an account.
@@ -569,6 +670,7 @@ caddy:
 ```
 
 Add to the `volumes` section:
+
 ```yaml
 caddy_data:
 caddy_config:
@@ -621,13 +723,16 @@ food-diary-v2/
 │       └── components/ui/       # shadcn/ui components
 │
 ├── server/                      # Node.js backend (Express)
-│   ├── auth.ts                  # JWT, bcrypt, AES-256-GCM, requireAuth
+│   ├── auth.ts                  # access JWT, refresh cookies, bcrypt, AES-256-GCM, requireAuth
 │   ├── routes.ts                # REST API endpoints
 │   ├── storage.ts               # Drizzle ORM + SQLite
 │   └── excel.ts                 # Excel report generator
 │
 ├── shared/
 │   └── schema.ts                # Drizzle schema (users, secrets, days, meals)
+│
+├── test/                        # Vitest unit/integration tests
+├── tests/e2e/                   # Playwright E2E smoke tests
 │
 ├── bot/                         # (unused in V1, reserved for V2)
 │
@@ -641,34 +746,63 @@ food-diary-v2/
 
 ## API Reference
 
-| Method | Endpoint | Auth | Description |
-|---|---|:---:|---|
-| POST | `/api/auth/register` | — | Register a new user |
-| POST | `/api/auth/login` | — | Login (sets JWT httpOnly cookie) |
-| POST | `/api/auth/logout` | ✅ | Logout (clears cookie) |
-| GET | `/api/auth/me` | ✅ | Current user info |
-| GET | `/api/secrets` | ✅ | List saved secrets |
-| PUT | `/api/secrets/:name` | ✅ | Save/update secret (encrypted) |
-| DELETE | `/api/secrets/:name` | ✅ | Delete secret |
-| GET | `/api/days/:date` | ✅ | Day data + meals (YYYY-MM-DD) |
-| POST | `/api/meals` | ✅ | Add meal entry |
-| DELETE | `/api/meals/:id` | ✅ | Delete entry |
-| PATCH | `/api/meals/:id` | ✅ | Update entry |
-| POST | `/api/days/:id/summary` | ✅ | Save day summary |
-| GET | `/api/report/:date` | ✅ | Download Excel (202 if summary needed) |
-| GET | `/api/now` | — | Current MSK date and time |
+| Method | Endpoint                |  Auth  | Description                                     |
+| ------ | ----------------------- | :----: | ----------------------------------------------- |
+| POST   | `/api/auth/register`    |   —    | Register a new user                             |
+| POST   | `/api/auth/login`       |   —    | Login: access token in JSON + refresh cookie    |
+| POST   | `/api/auth/refresh`     | cookie | Refresh access token from refresh cookie        |
+| POST   | `/api/auth/logout`      | cookie | Logout: revokes refresh token and clears cookie |
+| GET    | `/api/auth/me`          |   ✅   | Current user info                               |
+| GET    | `/api/secrets`          |   ✅   | List saved secrets                              |
+| PUT    | `/api/secrets/:name`    |   ✅   | Save/update secret (encrypted)                  |
+| GET    | `/api/days/:date`       |   ✅   | Day data + meals (YYYY-MM-DD)                   |
+| POST   | `/api/meals`            |   ✅   | Add meal entry                                  |
+| DELETE | `/api/meals/:id`        |   ✅   | Delete entry                                    |
+| PATCH  | `/api/meals/:id`        |   ✅   | Update entry                                    |
+| POST   | `/api/days/:id/summary` |   ✅   | Save day summary                                |
+| GET    | `/api/report/:date`     |   ✅   | Download Excel (202 if summary needed)          |
+| GET    | `/api/now`              |   —    | Current MSK date and time                       |
 
 ## Roadmap
 
-- [x] V1: text input, web form, authentication, encrypted secrets, Excel report
-- [ ] V2: photo recognition via GigaChat Vision (Sber)
-- [ ] V3: automatic KBJU calculation (FatSecret / USDA API)
-- [ ] V4: weekly/monthly statistics and charts
+- [x] Phase 6: HTTPS + Caddy deployment
+- [x] Phase 3: SQLite persistence, WAL mode, backups
+- [x] Phase 10: access/refresh session lifecycle + idle timeout
+- [x] Phase 2: security hardening and audit fixes
+- [x] Phase 1: tests, linting, E2E smoke, CI
+- [ ] Phase 4: admin panel
+- [ ] Phase 9: DeepSeek usage alerting
+- [ ] Phase 11: analytics dashboard
 
 ## Changelog
 
+### [1.5.0] — 2026-06-27
+
+**feat: session lifecycle, security hardening, and CI quality gates**
+
+- Added refresh token table, hashed refresh tokens, 30-minute access JWTs, 7-day httpOnly refresh cookies
+- Added `/api/auth/refresh`; login/register/logout now rotate or revoke refresh sessions
+- React keeps access tokens in memory and refreshes them through the API client
+- Added frontend idle warning/logout timers (25/30 minutes)
+- Added Helmet/CSP/HSTS, CORS allowlist, rate limits for login and meal creation
+- Fixed IDOR in day summary updates and strict Zod validation for meal updates
+- Removed full JSON API response bodies from logs
+- Added Vitest unit tests, Supertest integration tests, Playwright E2E smoke test, ESLint, Prettier, Husky, lint-staged
+- Added GitHub Actions CI and Dependabot config
+
+### [1.4.0] — 2026-06-26
+
+**feat: HTTPS deployment and SQLite persistence**
+
+- Added Caddy reverse proxy with HTTPS support
+- Added secure cookie/proxy configuration for production
+- Enabled SQLite WAL mode and backup scripts
+- Added backup cron installer and deployment preflight checks
+
 ### [1.2.0] — 2026-06-26
+
 **feat: remove Telegram bot, add authentication and encrypted secrets**
+
 - Removed Telegram bot (`bot/` service) from Docker Compose — now single `api` service
 - Added `users` table: username, email, `passwordHash` (bcryptjs cost 12)
 - Added `secrets` table: per-user encrypted key-value storage (AES-256-GCM)
@@ -683,7 +817,9 @@ food-diary-v2/
 - `preflight-check.sh` section 11: replaced Telegram token validation with API health check (`GET /api/auth/me`)
 
 ### [1.1.0] — 2026-06-25
+
 **feat: preflight-check.sh — server readiness script**
+
 - 11-section bash script: OS, RAM, disk, internet, Docker, ports, firewall, env vars, Docker images, compose syntax, Telegram token
 - Color output with box-drawing characters, ✔/✘/⚠ symbols
 - SUMMARY panel with blockers list and colored verdict (green/yellow/red)
@@ -691,7 +827,9 @@ food-diary-v2/
 - Internet check via `https://hub.docker.com/`
 
 ### [1.0.0] — 2026-06-25
+
 **feat: initial MVP**
+
 - React 18 + Vite + Tailwind CSS v3 + shadcn/ui frontend
 - Express + TypeScript + Drizzle ORM + SQLite backend
 - Meal logging: food, drink, hunger/satiety scale (0–10), meal type, context
