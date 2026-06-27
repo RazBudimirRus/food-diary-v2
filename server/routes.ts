@@ -14,7 +14,6 @@ import {
   type AuthRequest,
 } from "./auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
-import { getClientIp } from "./client-ip";
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
@@ -25,7 +24,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
     limit: 10,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    keyGenerator: (req) => ipKeyGenerator(getClientIp(req)),
     message: { error: "Слишком много попыток входа. Попробуйте позже." },
   });
   const mealCreateLimiter = rateLimit({
@@ -33,9 +31,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     limit: 60,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    keyGenerator: (req: AuthRequest) => req.user
-      ? `user:${req.user.id}`
-      : `ip:${ipKeyGenerator(getClientIp(req))}`,
+    keyGenerator: (req: AuthRequest) => req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || "0.0.0.0")}`,
     message: { error: "Слишком много запросов. Попробуйте позже." },
   });
 
@@ -56,7 +52,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       userId: user.id,
       expiresAt: expiresAt.toISOString(),
       userAgent: req.get("user-agent") ?? null,
-      ip: getClientIp(req),
+      ip: req.ip ?? null,
     });
 
     res.cookie(refreshCookieName, rawRefreshToken, refreshCookieOptions());
