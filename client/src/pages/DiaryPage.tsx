@@ -1,5 +1,9 @@
 import { useCallback, useState, useEffect } from "react";
 import { useAppTheme } from "@/App";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useOnboardingTour } from "@/hooks/useOnboardingTour";
+import { OnboardingTour } from "@/components/OnboardingTour";
+import { TodayWidget } from "@/components/TodayWidget";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -182,6 +186,23 @@ export default function DiaryPage() {
   }, [logout, toast]);
 
   useIdleTimer(handleIdleWarning, handleIdleTimeout);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: "n",
+      onTrigger: () => { if (!showAddForm) setShowAddForm(true); },
+      enabled: !showAddForm && !showSummaryDialog,
+    },
+    {
+      key: "r",
+      onTrigger: () => downloadReport(activeDate),
+      enabled: !showAddForm && !showSummaryDialog,
+    },
+  ]);
+
+  // Onboarding tour
+  const { step: tourStep, active: tourActive, next: tourNext, skip: tourSkip } = useOnboardingTour();
 
   // Fetch day data
   const { data, isLoading } = useQuery<{ day: Day; meals: Meal[] }>({
@@ -485,6 +506,17 @@ export default function DiaryPage() {
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+        {/* Today widget — only shown for today */}
+        {isToday && (
+          <TodayWidget
+            mealsCount={meals.length}
+            totalKcal={totalKcal}
+            totalWater={totalWater}
+            steps={day?.steps}
+            hasKcal={hasKcal}
+          />
+        )}
+
         {/* Stats bar */}
         {meals.length > 0 && (
           <div className={`grid gap-2 text-sm ${hasKcal ? "grid-cols-4" : "grid-cols-3"}`}>
@@ -975,6 +1007,13 @@ export default function DiaryPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Onboarding tour */}
+      <OnboardingTour
+        step={tourStep}
+        active={tourActive}
+        onNext={tourNext}
+        onSkip={tourSkip}
+      />
     </div>
   );
 }
