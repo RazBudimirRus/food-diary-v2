@@ -29,6 +29,11 @@ export function iterateDates(from: string, to: string): string[] {
 }
 
 export type CalendarPeriodType = "week" | "month" | "year";
+export type AnalyticsPeriodType = CalendarPeriodType | "quarter" | "half";
+
+export function getSlidingRange(anchor: string, days: number): { from: string; to: string } {
+  return { from: addDays(anchor, -(days - 1)), to: anchor };
+}
 
 export function getCalendarWeekRange(anchor: string): { from: string; to: string } {
   const d = new Date(`${anchor}T00:00:00Z`);
@@ -66,6 +71,15 @@ export function getCalendarPeriodRange(
   return getCalendarYearRange(anchor);
 }
 
+export function getAnalyticsPeriodRange(
+  period: AnalyticsPeriodType,
+  anchor: string,
+): { from: string; to: string } {
+  if (period === "quarter") return getSlidingRange(anchor, 90);
+  if (period === "half") return getSlidingRange(anchor, 180);
+  return getCalendarPeriodRange(period, anchor);
+}
+
 export function shiftCalendarAnchor(
   anchor: string,
   period: CalendarPeriodType,
@@ -78,6 +92,36 @@ export function shiftCalendarAnchor(
     return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-01`;
   }
   return `${y + delta}-01-01`;
+}
+
+export function shiftAnalyticsAnchor(
+  anchor: string,
+  period: AnalyticsPeriodType,
+  delta: -1 | 1,
+): string {
+  if (period === "quarter") return addDays(anchor, delta * 90);
+  if (period === "half") return addDays(anchor, delta * 180);
+  return shiftCalendarAnchor(anchor, period, delta);
+}
+
+export function formatAnalyticsPeriodLabel(
+  period: AnalyticsPeriodType,
+  from: string,
+  to: string,
+): string {
+  if (period === "week") return `${formatRuDate(from)} — ${formatRuDate(to)}`;
+  if (period === "month") {
+    const [, month] = from.split("-");
+    const monthNames = [
+      "января", "февраля", "марта", "апреля", "мая", "июня",
+      "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    ];
+    return `${monthNames[Number(month) - 1]} ${from.slice(0, 4)}`;
+  }
+  if (period === "quarter" || period === "half") {
+    return `${formatRuDate(from)} — ${formatRuDate(to)}`;
+  }
+  return from.slice(0, 4);
 }
 
 /** Sleep 18:00–23:59 → diary day; 00:00–17:59 → next calendar day. */

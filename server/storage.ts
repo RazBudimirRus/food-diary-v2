@@ -5,6 +5,14 @@ import * as schema from "@shared/schema";
 import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken, ApiUsage, PasswordResetToken } from "@shared/schema";
 import { users, days, meals, secrets, refreshTokens, apiUsage, passwordResetTokens } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
+import {
+  computeMealTimingMetrics,
+  computePeriodInsights,
+  computeRollingAverage,
+  computeSleepDebtSeries,
+  type MealType,
+  type PeriodInsights,
+} from "@shared/analytics";
 
 const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
 const sqlite = new Database(DB_PATH);
@@ -162,6 +170,17 @@ function emptyAnalyticsDay(date: string): NutritionAnalyticsDay {
     sleepDuration: null,
     steps: null,
     sportActivity: null,
+    firstMealTime: null,
+    lastMealTime: null,
+    eatingWindowHours: null,
+    avgGapHours: null,
+    maxGapHours: null,
+    lateCaloriesRatio: null,
+    overeatingCount: 0,
+    caloriesByMealType: { завтрак: 0, обед: 0, перекус: 0, ужин: 0 },
+    hasKbjuData: false,
+    sleepDebt: null,
+    rollingAvgCalories7: null,
   };
 }
 
@@ -278,6 +297,17 @@ export interface NutritionAnalyticsDay {
   sleepDuration: number | null;
   steps: number | null;
   sportActivity: string | null;
+  firstMealTime: string | null;
+  lastMealTime: string | null;
+  eatingWindowHours: number | null;
+  avgGapHours: number | null;
+  maxGapHours: number | null;
+  lateCaloriesRatio: number | null;
+  overeatingCount: number;
+  caloriesByMealType: Record<MealType, number>;
+  hasKbjuData: boolean;
+  sleepDebt: number | null;
+  rollingAvgCalories7: number | null;
 }
 
 export interface NutritionAnalyticsSummary {
@@ -293,6 +323,7 @@ export interface NutritionAnalyticsSummary {
     totalWaterLitres: number;
     totalMeals: number;
   };
+  insights: PeriodInsights;
 }
 
 class SqliteStorage implements IStorage {
@@ -457,8 +488,40 @@ class SqliteStorage implements IStorage {
       avgSatiety: number | null;
     }>;
 
+    const mealRows = sqlite.prepare(`
+      SELECT
+        days.date AS date,
+        meals.ts_start AS tsStart,
+        meals.meal_type AS mealType,
+        meals.calories AS calories,
+        meals.hunger_before AS hungerBefore,
+        meals.satiety_after AS satietyAfter,
+        meals.context_note AS contextNote
+      FROM meals
+      JOIN days ON meals.day_id = days.id
+      WHERE days.user_id = ?
+        AND days.date >= ?
+        AND days.date <= ?
+      ORDER BY days.date ASC, meals.ts_start ASC
+    `).all(userId, fromDate, toDate) as Array<{
+      date: string;
+      tsStart: string;
+      mealType: string;
+      calories: number | null;
+      hungerBefore: number | null;
+      satietyAfter: number | null;
+      contextNote: string | null;
+    }>;
+
+    const mealsByDate = new Map<string, typeof mealRows>();
+    for (const meal of mealRows) {
+      const list = mealsByDate.get(meal.date) ?? [];
+      list.push(meal);
+      mealsByDate.set(meal.date, list);
+    }
+
     const rowByDate = new Map(rows.map((row) => [row.date, row]));
-    const analyticsDays = iterateDates(fromDate, toDate).map((date) => {
+    const baseDays = iterateDates(fromDate, toDate).map((date) => {
       const row = rowByDate.get(date);
       if (!row) return emptyAnalyticsDay(date);
 
@@ -469,6 +532,9 @@ class SqliteStorage implements IStorage {
         row.sleepDate,
         row.wakeDate,
       );
+      const dayMeals = mealsByDate.get(date) ?? [];
+      const timing = computeMealTimingMetrics(dayMeals);
+
       return {
         date: row.date,
         mealsCount: Number(row.mealsCount),
@@ -486,8 +552,27 @@ class SqliteStorage implements IStorage {
         sleepDuration,
         steps: row.steps,
         sportActivity: row.sportActivity,
+        firstMealTime: timing.firstMealTime,
+        lastMealTime: timing.lastMealTime,
+        eatingWindowHours: timing.eatingWindowHours,
+        avgGapHours: timing.avgGapHours,
+        maxGapHours: timing.maxGapHours,
+        lateCaloriesRatio: timing.lateCaloriesRatio,
+        overeatingCount: timing.overeatingCount,
+        caloriesByMealType: timing.caloriesByMealType,
+        hasKbjuData: timing.hasKbjuData,
+        sleepDebt: null,
+        rollingAvgCalories7: null,
       };
     });
+
+    const sleepDebtSeries = computeSleepDebtSeries(baseDays);
+    const rollingCalories = computeRollingAverage(baseDays.map((d) => d.totalCalories), 7);
+    const analyticsDays = baseDays.map((day, index) => ({
+      ...day,
+      sleepDebt: sleepDebtSeries.get(day.date) ?? null,
+      rollingAvgCalories7: rollingCalories[index],
+    }));
 
     const periodDays = countInclusiveDays(fromDate, toDate);
     const filledDays = analyticsDays.filter((day) => day.mealsCount > 0).length;
@@ -496,6 +581,12 @@ class SqliteStorage implements IStorage {
     const totalWaterLitres = analyticsDays.reduce((sum, day) => sum + day.waterLitres, 0);
     const daysWithCalories = analyticsDays.filter((day) => day.totalCalories > 0);
     const daysWithSleep = analyticsDays.filter((day) => day.sleepDuration != null);
+
+    const insights = computePeriodInsights(
+      analyticsDays,
+      mealRows,
+      mealsByDate,
+    );
 
     return {
       days: analyticsDays,
@@ -512,6 +603,7 @@ class SqliteStorage implements IStorage {
         totalWaterLitres: round1(totalWaterLitres),
         totalMeals,
       },
+      insights,
     };
   }
 

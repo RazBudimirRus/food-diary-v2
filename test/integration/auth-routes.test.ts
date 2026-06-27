@@ -332,6 +332,9 @@ describe("analytics routes", () => {
     expect(analytics.body.days[0].protein).toBe(52);
     expect(analytics.body.days[0].waterLitres).toBe(1.5);
     expect(analytics.body.days[0].sleepDuration).toBe(7.5);
+    expect(analytics.body.days[0].firstMealTime).toBe("08:30");
+    expect(analytics.body.days[0].eatingWindowHours).toBe(4.5);
+    expect(analytics.body.insights.totalOvereating).toBe(1);
     expect(analytics.body.summary.totalMeals).toBe(2);
     expect(analytics.body.summary.filledDaysRatio).toBe(1);
   });
