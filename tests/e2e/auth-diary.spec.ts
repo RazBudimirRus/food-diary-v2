@@ -26,7 +26,7 @@ test("user can register, add a meal, log out, and log back in", async ({ page })
 
   await page.locator('[data-testid^="btn-edit-meal-"]').first().click();
   await expect(page.getByText("Редактирование приёма пищи")).toBeVisible();
-  await expect(page.getByTestId("input-meal-date")).toBeDisabled();
+  await expect(page.getByTestId("input-meal-date")).toBeEnabled();
   await page.getByTestId("input-food-text").fill("Гречка с индейкой");
   await page.getByTestId("input-context-note").fill("Обновил запись в дневнике");
   await page.getByTestId("btn-save-meal").click();

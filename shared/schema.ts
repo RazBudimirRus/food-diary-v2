@@ -67,6 +67,8 @@ export const days = sqliteTable("days", {
   date: text("date").notNull(),             // YYYY-MM-DD MSK
   wakeTime: text("wake_time"),
   sleepTime: text("sleep_time"),
+  wakeDate: text("wake_date"),
+  sleepDate: text("sleep_date"),
   sportActivity: text("sport_activity"),
   steps: integer("steps"),
   dayComment: text("day_comment"),
@@ -80,6 +82,8 @@ export type Day = typeof days.$inferSelect;
 export const daySummarySchema = z.object({
   wakeTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
   sleepTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
+  wakeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+  sleepDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
   sportActivity: z.string().optional(),
   steps: z.coerce.number().int().min(0).optional().or(z.literal("")),
   dayComment: z.string().optional(),
@@ -134,7 +138,7 @@ export const addMealSchema = z.object({
 });
 export type AddMeal = z.infer<typeof addMealSchema>;
 
-export const updateMealSchema = addMealSchema.omit({ date: true }).partial().strict();
+export const updateMealSchema = addMealSchema.partial().strict();
 export type UpdateMeal = z.infer<typeof updateMealSchema>;
 
 // ─── DeepSeek КБЖУ ────────────────────────────────────────────────────────────

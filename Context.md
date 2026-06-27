@@ -60,6 +60,10 @@
 - **Phase 4 usage dashboard (код):** `api_usage`, запись DeepSeek prompt/completion tokens, cost estimate, daily token limit status, dashboard в `/#/admin`
 - **Phase 9 (код):** daily limit guard для DeepSeek — `/api/analyze` возвращает `429`, когда `DEEPSEEK_DAILY_TOKEN_LIMIT` достигнут
 - **Phase 11 (код):** `/api/analytics/summary`, аналитика питания за период, карточки и Recharts графики в `/#/analytics`
+- **UX-2 (код):** логин (`username`) как главный идентификатор в таблицах админ-панели
+- **UX-3 (код):** перенос приёма пищи между днями при редактировании через `PATCH /api/meals/:id` + `date`
+- **UX-4 (код):** явные даты подъёма/отбоя (`wake_date`, `sleep_date`), правила отбоя, Excel date+time, аналитика сна
+- **UX-5 (код):** календарные периоды в аналитике (неделя/месяц/год), пустые дни, навигация prev/next
 
 ---
 
@@ -195,6 +199,7 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-27 | Cursor Agent | **UX-2…UX-5:** admin username, meal day move, wake/sleep dates, calendar analytics periods, tests/docs |
 | 2026-06-27 | Cursor Agent | **Phase 11:** analytics summary endpoint, nutrition trends, Recharts dashboard, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 9:** DeepSeek daily token limit guard, 429 blocking, admin blocked/allowed status, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 4 usage dashboard:** api_usage, DeepSeek token/cost tracking, daily limit status, admin dashboard |
@@ -210,4 +215,4 @@ PROJECT24_FOODDIARY2/
 
 ---
 
-*Версия Context.md: 2.0 · Синхронизировать с ROADMAP.md v2.3.0*
+*Версия Context.md: 2.1 · Синхронизировать с ROADMAP.md v2.3.0*

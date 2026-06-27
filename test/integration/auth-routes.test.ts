@@ -184,6 +184,50 @@ describe("diary route authorization and validation", () => {
     expect(res.body.meal.fat).toBe(12);
     expect(res.body.meal.carbs).toBe(55);
   });
+
+  it("moves a meal to another day when date is updated", async () => {
+    const auth = await registerUser("move_meal_user");
+    const { meal } = await addMeal(auth.accessToken, "2026-06-26");
+
+    await request(app)
+      .patch(`/api/meals/${meal.id}`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({ date: "2026-06-25" })
+      .expect(200);
+
+    const oldDay = await request(app)
+      .get("/api/days/2026-06-26")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+    const newDay = await request(app)
+      .get("/api/days/2026-06-25")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(oldDay.body.meals).toHaveLength(0);
+    expect(newDay.body.meals).toHaveLength(1);
+    expect(newDay.body.meals[0].id).toBe(meal.id);
+  });
+
+  it("stores explicit wake and sleep dates in day summary", async () => {
+    const auth = await registerUser("sleep_dates_user");
+    const { day } = await addMeal(auth.accessToken, "2026-06-20");
+
+    const res = await request(app)
+      .post(`/api/days/${day.id}/summary`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({
+        wakeTime: "09:00",
+        wakeDate: "2026-06-21",
+        sleepTime: "01:00",
+        sleepDate: "2026-06-21",
+        steps: 5000,
+      })
+      .expect(200);
+
+    expect(res.body.day.wakeDate).toBe("2026-06-21");
+    expect(res.body.day.sleepDate).toBe("2026-06-21");
+  });
 });
 
 describe("DeepSeek usage limits", () => {
@@ -290,6 +334,34 @@ describe("analytics routes", () => {
     expect(analytics.body.summary.totalMeals).toBe(2);
     expect(analytics.body.summary.filledDaysRatio).toBe(1);
   });
+
+  it("returns padded empty days for a calendar week range", async () => {
+    const auth = await registerUser("analytics_week_user");
+    await request(app)
+      .post("/api/meals")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({
+        date: "2026-06-24",
+        tsStart: "12:00",
+        mealType: "обед",
+        foodText: "Суп",
+        hungerBefore: 4,
+        satietyAfter: 7,
+      })
+      .expect(200);
+
+    const analytics = await request(app)
+      .get("/api/analytics/summary?from=2026-06-22&to=2026-06-28")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(analytics.body.days).toHaveLength(7);
+    expect(analytics.body.days[0].date).toBe("2026-06-22");
+    expect(analytics.body.days[6].date).toBe("2026-06-28");
+    expect(analytics.body.days.find((day: { date: string }) => day.date === "2026-06-23")?.mealsCount).toBe(0);
+    expect(analytics.body.days.find((day: { date: string }) => day.date === "2026-06-24")?.mealsCount).toBe(1);
+    expect(analytics.body.summary.periodDays).toBe(7);
+  });
 });
 
 describe("admin routes", () => {
@@ -332,6 +404,31 @@ describe("admin routes", () => {
     const listedUser = res.body.users.find((user: { username: string }) => user.username === auth.user.username);
     expect(listedUser.role).toBe("admin");
     expect(listedUser.passwordHash).toBeUndefined();
+  });
+
+  it("returns distinct username and displayName for admin user list", async () => {
+    const admin = await registerUser("admin_distinct_names");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(admin.user.username);
+
+    await request(app)
+      .post("/api/auth/register")
+      .send({
+        username: "jsmith",
+        email: "jsmith@example.com",
+        password: "password123",
+        displayName: "Dr. Smith",
+      })
+      .expect(200);
+
+    const res = await request(app)
+      .get("/api/admin/users")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    const listed = res.body.users.find((user: { username: string }) => user.username === "jsmith");
+    expect(listed.username).toBe("jsmith");
+    expect(listed.displayName).toBe("Dr. Smith");
   });
 
   it("forbids non-admin users from reading DeepSeek usage", async () => {

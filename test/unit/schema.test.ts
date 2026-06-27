@@ -35,4 +35,13 @@ describe("meal schemas", () => {
 
     expect(parsed.success).toBe(false);
   });
+
+  it("accepts date field on meal updates", () => {
+    const parsed = updateMealSchema.safeParse({
+      foodText: "Обновлённая еда",
+      date: "2026-06-25",
+    });
+
+    expect(parsed.success).toBe(true);
+  });
 });

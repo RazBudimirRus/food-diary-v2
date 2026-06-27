@@ -4,6 +4,7 @@
  */
 import ExcelJS from "exceljs";
 import type { Day, Meal } from "@shared/schema";
+import { formatDateTimeRu, resolveSleepDate, resolveWakeDate } from "@shared/dates";
 
 const MEAL_TYPES_ORDER = ["завтрак", "обед", "перекус", "ужин"];
 
@@ -189,9 +190,16 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   ws.mergeCells(rowNum, 1, rowNum, TOTAL_COLS);
   rowNum++;
 
+  const wakeDisplay = day.wakeTime
+    ? formatDateTimeRu(resolveWakeDate(day.date, day.wakeDate) ?? day.date, day.wakeTime)
+    : "";
+  const sleepDisplay = day.sleepTime
+    ? formatDateTimeRu(resolveSleepDate(day.date, day.sleepTime, day.sleepDate) ?? day.date, day.sleepTime)
+    : "";
+
   const leftFields: [string, string][] = [
-    ["Подъём", day.wakeTime ?? ""],
-    ["Отбой", day.sleepTime ?? ""],
+    ["Подъём", wakeDisplay],
+    ["Отбой", sleepDisplay],
     ["Спорт / активность", day.sportActivity ?? ""],
     ["Шаги за день", day.steps != null ? String(day.steps) : ""],
   ];

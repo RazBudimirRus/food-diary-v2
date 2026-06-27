@@ -292,8 +292,21 @@ export function registerRoutes(httpServer: Server, app: Express) {
       if (data.fat !== undefined) update.fat = data.fat;
       if (data.carbs !== undefined) update.carbs = data.carbs;
 
+      if (data.date !== undefined) {
+        const currentDay = storage.getDayById(meal.dayId);
+        const targetDay = storage.getOrCreateDay(req.user!.id, data.date);
+        if (!currentDay || targetDay.id !== meal.dayId) {
+          update.dayId = targetDay.id;
+        }
+      }
+
       const updated = storage.updateMeal(meal.id, update);
-      res.json({ meal: updated });
+      const targetDay = storage.getDayById(updated!.dayId);
+      res.json({
+        meal: updated,
+        previousDate: storage.getDayById(meal.dayId)?.date,
+        day: targetDay,
+      });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
 
@@ -365,8 +378,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
       return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
     }
     const periodDays = daysBetween(from, to);
-    if (periodDays <= 0 || periodDays > 365) {
-      return res.status(400).json({ error: "date range must be 1..365 days" });
+    if (periodDays <= 0 || periodDays > 366) {
+      return res.status(400).json({ error: "date range must be 1..366 days" });
     }
 
     res.json(storage.getNutritionAnalytics(req.user!.id, from, to));

@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken, ApiUsage } from "@shared/schema";
 import { users, days, meals, secrets, refreshTokens, apiUsage } from "@shared/schema";
+import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
 
 const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
 const sqlite = new Database(DB_PATH);
@@ -63,6 +64,8 @@ sqlite.exec(`
     date TEXT NOT NULL,
     wake_time TEXT,
     sleep_time TEXT,
+    wake_date TEXT,
+    sleep_date TEXT,
     sport_activity TEXT,
     steps INTEGER,
     day_comment TEXT,
@@ -107,6 +110,14 @@ for (const col of ["calories", "protein", "fat", "carbs"]) {
   }
 }
 
+for (const col of ["wake_date", "sleep_date"]) {
+  try {
+    sqlite.exec(`ALTER TABLE days ADD COLUMN ${col} TEXT`);
+  } catch {
+    // Колонка уже существует — игнорируем
+  }
+}
+
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
 export function getMskDate(utcMs?: number): string {
@@ -123,22 +134,25 @@ function round1(value: number): number {
   return Math.round(Number(value || 0) * 10) / 10;
 }
 
-function calculateSleepDuration(sleepTime: string | null, wakeTime: string | null): number | null {
-  if (!sleepTime || !wakeTime) return null;
-  const [sleepHours, sleepMinutes] = sleepTime.split(":").map(Number);
-  const [wakeHours, wakeMinutes] = wakeTime.split(":").map(Number);
-  if ([sleepHours, sleepMinutes, wakeHours, wakeMinutes].some((value) => !Number.isFinite(value))) return null;
-
-  let minutes = wakeHours * 60 + wakeMinutes - (sleepHours * 60 + sleepMinutes);
-  if (minutes < 0) minutes += 24 * 60;
-  return round1(minutes / 60);
-}
-
-function countInclusiveDays(fromDate: string, toDate: string): number {
-  const from = new Date(`${fromDate}T00:00:00Z`).getTime();
-  const to = new Date(`${toDate}T00:00:00Z`).getTime();
-  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return 0;
-  return Math.floor((to - from) / (24 * 60 * 60 * 1000)) + 1;
+function emptyAnalyticsDay(date: string): NutritionAnalyticsDay {
+  return {
+    date,
+    mealsCount: 0,
+    totalCalories: 0,
+    protein: 0,
+    fat: 0,
+    carbs: 0,
+    waterLitres: 0,
+    avgHunger: null,
+    avgSatiety: null,
+    wakeTime: null,
+    sleepTime: null,
+    wakeDate: null,
+    sleepDate: null,
+    sleepDuration: null,
+    steps: null,
+    sportActivity: null,
+  };
 }
 
 function calculateCurrentStreak(days: NutritionAnalyticsDay[]): number {
@@ -245,6 +259,8 @@ export interface NutritionAnalyticsDay {
   avgSatiety: number | null;
   wakeTime: string | null;
   sleepTime: string | null;
+  wakeDate: string | null;
+  sleepDate: string | null;
   sleepDuration: number | null;
   steps: number | null;
   sportActivity: string | null;
@@ -390,6 +406,8 @@ class SqliteStorage implements IStorage {
         days.date AS date,
         days.wake_time AS wakeTime,
         days.sleep_time AS sleepTime,
+        days.wake_date AS wakeDate,
+        days.sleep_date AS sleepDate,
         days.steps AS steps,
         days.sport_activity AS sportActivity,
         COUNT(meals.id) AS mealsCount,
@@ -411,6 +429,8 @@ class SqliteStorage implements IStorage {
       date: string;
       wakeTime: string | null;
       sleepTime: string | null;
+      wakeDate: string | null;
+      sleepDate: string | null;
       steps: number | null;
       sportActivity: string | null;
       mealsCount: number;
@@ -423,8 +443,18 @@ class SqliteStorage implements IStorage {
       avgSatiety: number | null;
     }>;
 
-    const analyticsDays = rows.map((row) => {
-      const sleepDuration = calculateSleepDuration(row.sleepTime, row.wakeTime);
+    const rowByDate = new Map(rows.map((row) => [row.date, row]));
+    const analyticsDays = iterateDates(fromDate, toDate).map((date) => {
+      const row = rowByDate.get(date);
+      if (!row) return emptyAnalyticsDay(date);
+
+      const sleepDuration = calculateSleepDurationHours(
+        row.date,
+        row.sleepTime,
+        row.wakeTime,
+        row.sleepDate,
+        row.wakeDate,
+      );
       return {
         date: row.date,
         mealsCount: Number(row.mealsCount),
@@ -437,6 +467,8 @@ class SqliteStorage implements IStorage {
         avgSatiety: row.avgSatiety == null ? null : round1(row.avgSatiety),
         wakeTime: row.wakeTime,
         sleepTime: row.sleepTime,
+        wakeDate: row.wakeDate,
+        sleepDate: row.sleepDate,
         sleepDuration,
         steps: row.steps,
         sportActivity: row.sportActivity,
@@ -540,7 +572,16 @@ class SqliteStorage implements IStorage {
 
   updateDaySummary(dayId: number, summary: DaySummary): Day {
     return db.update(days)
-      .set({ ...summary, steps: summary.steps ? Number(summary.steps) : null, summaryFilled: true })
+      .set({
+        wakeTime: summary.wakeTime || null,
+        sleepTime: summary.sleepTime || null,
+        wakeDate: summary.wakeDate || null,
+        sleepDate: summary.sleepDate || null,
+        sportActivity: summary.sportActivity || null,
+        steps: summary.steps ? Number(summary.steps) : null,
+        dayComment: summary.dayComment || null,
+        summaryFilled: true,
+      })
       .where(eq(days.id, dayId))
       .returning().get();
   }

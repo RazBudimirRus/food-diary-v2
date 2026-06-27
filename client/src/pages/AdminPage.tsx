@@ -67,6 +67,27 @@ function formatDateTime(value: string) {
   });
 }
 
+function AdminUserCell({
+  username,
+  email,
+  displayName,
+}: {
+  username: string;
+  email: string;
+  displayName: string | null;
+}) {
+  const showDisplayName = displayName && displayName !== username;
+  return (
+    <div>
+      <div className="font-medium" data-testid={`admin-username-${username}`}>{username}</div>
+      <div className="text-xs text-muted-foreground">{email}</div>
+      {showDisplayName && (
+        <div className="text-xs text-muted-foreground">Имя: {displayName}</div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, logout } = useAuth();
   const [resetResult, setResetResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
@@ -137,7 +158,7 @@ export default function AdminPage() {
                 Дневник
               </a>
             </Button>
-            <span className="text-xs text-muted-foreground hidden sm:block">{user?.displayName || user?.username}</span>
+            <span className="text-xs text-muted-foreground hidden sm:block">{user?.username}</span>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -267,7 +288,7 @@ export default function AdminPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Пользователь</TableHead>
+                    <TableHead>Логин</TableHead>
                     <TableHead>Роль</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
@@ -276,8 +297,11 @@ export default function AdminPage() {
                   {users.map((adminUser) => (
                     <TableRow key={adminUser.id}>
                       <TableCell>
-                        <div className="font-medium">{adminUser.displayName || adminUser.username}</div>
-                        <div className="text-xs text-muted-foreground">{adminUser.email}</div>
+                        <AdminUserCell
+                          username={adminUser.username}
+                          email={adminUser.email}
+                          displayName={adminUser.displayName}
+                        />
                       </TableCell>
                       <TableCell>{adminUser.role}</TableCell>
                       <TableCell className="text-right">
@@ -317,7 +341,7 @@ export default function AdminPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Пользователь</TableHead>
+                    <TableHead>Логин</TableHead>
                     <TableHead>Роль</TableHead>
                     <TableHead>IP</TableHead>
                     <TableHead>User-Agent</TableHead>
@@ -330,8 +354,11 @@ export default function AdminPage() {
                   {sessions.map((session) => (
                     <TableRow key={session.id}>
                       <TableCell>
-                        <div className="font-medium">{session.displayName || session.username}</div>
-                        <div className="text-xs text-muted-foreground">{session.email}</div>
+                        <AdminUserCell
+                          username={session.username}
+                          email={session.email}
+                          displayName={session.displayName}
+                        />
                       </TableCell>
                       <TableCell>{session.role}</TableCell>
                       <TableCell>{session.ip ?? "—"}</TableCell>

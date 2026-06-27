@@ -68,6 +68,10 @@ Food Diary V2 — инструмент для ведения дневника п
 | Админ-панель MVP                       |   ✅   |
 | Блокировка DeepSeek по дневному лимиту |   ✅   |
 | Аналитика питания и графики            |   ✅   |
+| Логин в админ-панели                   |   ✅   |
+| Перенос приёма между днями             |   ✅   |
+| Явные даты подъёма/отбоя               |   ✅   |
+| Календарные периоды аналитики          |   ✅   |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -383,8 +387,22 @@ food-diary-v2/
 - [x] Phase 4: admin panel MVP
 - [x] Phase 9: DeepSeek usage alerting / daily limit blocking
 - [x] Phase 11: analytics dashboard MVP
+- [x] UX-2: admin username visibility
+- [x] UX-3: move meals between days when editing
+- [x] UX-4: explicit wake/sleep dates
+- [x] UX-5: calendar analytics periods
 
 ## Changelog
+
+### [1.13.0] — 2026-06-27
+
+**feat: UX-2…UX-5 admin, meal move, sleep dates, calendar analytics**
+
+- Admin panel shows `username` as the primary identifier in users/sessions tables
+- Meal edit allows changing date; `PATCH /api/meals/:id` moves records between days
+- Day summary stores `wakeDate`/`sleepDate`; Excel and analytics use explicit date+time sleep math
+- Analytics uses calendar week/month/year periods with empty-day padding and prev/next navigation
+- Added `shared/dates.ts`, unit/integration coverage, updated E2E edit flow
 
 ### [1.12.0] — 2026-06-27
 
@@ -559,6 +577,10 @@ The app supports multiple users — each registers through the browser, data is 
 | Admin panel MVP                        |   ✅   |
 | DeepSeek daily limit blocking          |   ✅   |
 | Nutrition analytics and charts         |   ✅   |
+| Admin username visibility              |   ✅   |
+| Move meals between days                |   ✅   |
+| Explicit wake/sleep dates              |   ✅   |
+| Calendar analytics periods             |   ✅   |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -862,8 +884,22 @@ food-diary-v2/
 - [x] Phase 4: admin panel MVP
 - [x] Phase 9: DeepSeek usage alerting / daily limit blocking
 - [x] Phase 11: analytics dashboard MVP
+- [x] UX-2: admin username visibility
+- [x] UX-3: move meals between days when editing
+- [x] UX-4: explicit wake/sleep dates
+- [x] UX-5: calendar analytics periods
 
 ## Changelog
+
+### [1.13.0] — 2026-06-27
+
+**feat: UX-2…UX-5 admin, meal move, sleep dates, calendar analytics**
+
+- Admin panel shows `username` as the primary identifier in users/sessions tables
+- Meal edit allows changing date; `PATCH /api/meals/:id` moves records between days
+- Day summary stores `wakeDate`/`sleepDate`; Excel and analytics use explicit date+time sleep math
+- Analytics uses calendar week/month/year periods with empty-day padding and prev/next navigation
+- Added `shared/dates.ts`, unit/integration coverage, updated E2E edit flow
 
 ### [1.12.0] — 2026-06-27
 

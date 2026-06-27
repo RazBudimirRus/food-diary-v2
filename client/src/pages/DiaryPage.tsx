@@ -17,6 +17,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
+import {
+  formatDateTimeRu,
+  inferSleepDate,
+  resolveSleepDate,
+  resolveWakeDate,
+  addDays,
+} from "@shared/dates";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -138,10 +145,19 @@ export default function DiaryPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<AddMealFormData>(defaultForm());
   const [showSummaryDialog, setShowSummaryDialog] = useState(false);
-  const [summaryForm, setSummaryForm] = useState({ wakeTime: "", sleepTime: "", sportActivity: "", steps: "", dayComment: "" });
+  const [summaryForm, setSummaryForm] = useState({
+    wakeTime: "",
+    sleepTime: "",
+    wakeDate: "",
+    sleepDate: "",
+    sportActivity: "",
+    steps: "",
+    dayComment: "",
+  });
   const [pendingDownloadDate, setPendingDownloadDate] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
+  const [editingOriginalDate, setEditingOriginalDate] = useState<string | null>(null);
 
   // КБЖУ analysis state
   const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
@@ -188,12 +204,14 @@ export default function DiaryPage() {
       setSummaryForm({
         wakeTime: day.wakeTime ?? "",
         sleepTime: day.sleepTime ?? "",
+        wakeDate: day.wakeDate ?? activeDate,
+        sleepDate: day.sleepDate ?? inferSleepDate(activeDate, day.sleepTime) ?? activeDate,
         sportActivity: day.sportActivity ?? "",
         steps: day.steps != null ? String(day.steps) : "",
         dayComment: day.dayComment ?? "",
       });
     }
-  }, [day]);
+  }, [day, activeDate]);
 
   // Reset КБЖУ when form food/drink changes
   useEffect(() => {
@@ -261,7 +279,7 @@ export default function DiaryPage() {
   });
 
   const updateMealMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: AddMealFormData }) => {
+    mutationFn: async ({ id, data, originalDate }: { id: number; data: AddMealFormData; originalDate: string }) => {
       const payload: Record<string, unknown> = {
         tsStart: data.tsStart,
         tsEnd: data.tsEnd,
@@ -272,6 +290,7 @@ export default function DiaryPage() {
         hungerBefore: data.hungerBefore,
         satietyAfter: data.satietyAfter,
         contextNote: data.contextNote,
+        date: data.date,
       };
       if (kbjuResult) {
         payload.calories = kbjuResult.calories;
@@ -281,18 +300,28 @@ export default function DiaryPage() {
       }
       const res = await apiRequest("PATCH", `/api/meals/${id}`, payload);
       if (!res.ok) throw new Error(await res.text());
-      return res.json() as Promise<{ meal: Meal }>;
+      return { ...(await res.json() as { meal: Meal }), originalDate };
     },
-    onSuccess: ({ meal }) => {
-      queryClient.setQueryData<{ day: Day; meals: Meal[] }>([`/api/days/${activeDate}`], (old) =>
-        old ? { ...old, meals: old.meals.map((item) => item.id === meal.id ? meal : item) } : old
-      );
-      queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
+    onSuccess: ({ originalDate }) => {
+      const targetDate = form.date;
+      queryClient.invalidateQueries({ queryKey: [`/api/days/${targetDate}`] });
+      if (originalDate !== targetDate) {
+        queryClient.invalidateQueries({ queryKey: [`/api/days/${originalDate}`] });
+        if (activeDate === originalDate) {
+          setActiveDate(targetDate);
+        }
+      }
       setShowAddForm(false);
       setEditingMealId(null);
+      setEditingOriginalDate(null);
       setForm(defaultForm());
       setKbjuResult(null);
-      toast({ title: "Приём обновлён" });
+      toast({
+        title: originalDate !== targetDate ? "Приём перенесён" : "Приём обновлён",
+        description: originalDate !== targetDate
+          ? `Запись перемещена с ${formatDate(originalDate)} на ${formatDate(targetDate)}`
+          : undefined,
+      });
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
@@ -337,6 +366,7 @@ export default function DiaryPage() {
   function openAddMealForm() {
     setForm(defaultForm());
     setEditingMealId(null);
+    setEditingOriginalDate(null);
     setKbjuResult(null);
     setShowAddForm(true);
   }
@@ -344,6 +374,7 @@ export default function DiaryPage() {
   function openEditMealForm(meal: Meal) {
     setForm(formFromMeal(meal, activeDate));
     setEditingMealId(meal.id);
+    setEditingOriginalDate(activeDate);
     setKbjuResult(null);
     setShowAddForm(true);
   }
@@ -351,6 +382,7 @@ export default function DiaryPage() {
   function closeMealForm() {
     setShowAddForm(false);
     setEditingMealId(null);
+    setEditingOriginalDate(null);
     setKbjuResult(null);
   }
 
@@ -481,8 +513,18 @@ export default function DiaryPage() {
           <div className="flex items-center gap-2 flex-wrap">
             {day.summaryFilled ? (
               <div className="flex items-center gap-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 flex-wrap">
-                {day.wakeTime && <span className="flex items-center gap-1"><Sun className="h-3 w-3"/>Подъём: <b>{day.wakeTime}</b></span>}
-                {day.sleepTime && <span className="flex items-center gap-1"><Moon className="h-3 w-3"/>Отбой: <b>{day.sleepTime}</b></span>}
+                {day.wakeTime && (
+                  <span className="flex items-center gap-1">
+                    <Sun className="h-3 w-3"/>
+                    Подъём: <b>{formatDateTimeRu(resolveWakeDate(day.date, day.wakeDate) ?? day.date, day.wakeTime)}</b>
+                  </span>
+                )}
+                {day.sleepTime && (
+                  <span className="flex items-center gap-1">
+                    <Moon className="h-3 w-3"/>
+                    Отбой: <b>{formatDateTimeRu(resolveSleepDate(day.date, day.sleepTime, day.sleepDate) ?? day.date, day.sleepTime)}</b>
+                  </span>
+                )}
                 {day.steps != null && <span className="flex items-center gap-1"><Footprints className="h-3 w-3"/>Шаги: <b>{day.steps}</b></span>}
                 {day.sportActivity && <span>Спорт: <b>{day.sportActivity}</b></span>}
                 <button className="text-primary underline" onClick={() => setShowSummaryDialog(true)}>изменить</button>
@@ -612,8 +654,8 @@ export default function DiaryPage() {
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="mealDate">
                   Дата записи
-                  {isEditingMeal && (
-                    <span className="ml-2 text-muted-foreground font-normal">— изменить дату можно через новую запись</span>
+                  {isEditingMeal && editingOriginalDate && form.date !== editingOriginalDate && (
+                    <span className="ml-2 text-amber-600 font-normal">— запись будет перенесена в другой день</span>
                   )}
                   {form.date !== mskToday() && (
                     <span className="ml-2 text-amber-600 font-normal">— прошедший день</span>
@@ -626,11 +668,10 @@ export default function DiaryPage() {
                     value={form.date}
                     max={mskToday()}
                     onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
-                    disabled={isEditingMeal}
                     className="w-auto"
                     data-testid="input-meal-date"
                   />
-                  {!isEditingMeal && form.date !== mskToday() && (
+                  {form.date !== mskToday() && (
                     <button
                       type="button"
                       className="text-xs text-primary underline"
@@ -797,8 +838,8 @@ export default function DiaryPage() {
               <div className="flex gap-2 pt-1">
                 <Button
                   className="flex-1"
-                  onClick={() => isEditingMeal && editingMealId
-                    ? updateMealMutation.mutate({ id: editingMealId, data: form })
+                  onClick={() => isEditingMeal && editingMealId && editingOriginalDate
+                    ? updateMealMutation.mutate({ id: editingMealId, data: form, originalDate: editingOriginalDate })
                     : addMealMutation.mutate(form)
                   }
                   disabled={addMealMutation.isPending || updateMealMutation.isPending || !form.tsStart || !form.date}
@@ -827,11 +868,39 @@ export default function DiaryPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1"><Sun className="h-3 w-3" /> Подъём</Label>
+                <Input
+                  type="date"
+                  value={summaryForm.wakeDate}
+                  max={mskToday()}
+                  onChange={e => setSummaryForm(f => ({ ...f, wakeDate: e.target.value }))}
+                  data-testid="input-wake-date"
+                  className="mb-1"
+                />
                 <Input type="time" value={summaryForm.wakeTime} onChange={e => setSummaryForm(f => ({ ...f, wakeTime: e.target.value }))} data-testid="input-wake-time" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs flex items-center gap-1"><Moon className="h-3 w-3" /> Отбой</Label>
-                <Input type="time" value={summaryForm.sleepTime} onChange={e => setSummaryForm(f => ({ ...f, sleepTime: e.target.value }))} data-testid="input-sleep-time" />
+                <Input
+                  type="date"
+                  value={summaryForm.sleepDate}
+                  max={addDays(activeDate, 1)}
+                  onChange={e => setSummaryForm(f => ({ ...f, sleepDate: e.target.value }))}
+                  data-testid="input-sleep-date"
+                  className="mb-1"
+                />
+                <Input
+                  type="time"
+                  value={summaryForm.sleepTime}
+                  onChange={e => {
+                    const sleepTime = e.target.value;
+                    setSummaryForm(f => ({
+                      ...f,
+                      sleepTime,
+                      sleepDate: inferSleepDate(activeDate, sleepTime) ?? f.sleepDate,
+                    }));
+                  }}
+                  data-testid="input-sleep-time"
+                />
               </div>
             </div>
             <div className="space-y-1">
