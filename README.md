@@ -72,6 +72,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | Перенос приёма между днями             |   ✅   |
 | Явные даты подъёма/отбоя               |   ✅   |
 | Календарные периоды аналитики          |   ✅   |
+| Самостоятельный сброс пароля по email  |   ✅   |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -362,6 +363,8 @@ food-diary-v2/
 | ------ | ----------------------- | :----: | ---------------------------------------------- |
 | POST   | `/api/auth/register`    |   —    | Регистрация пользователя                       |
 | POST   | `/api/auth/login`       |   —    | Вход: access token в JSON + refresh cookie     |
+| POST   | `/api/auth/forgot-password` | — | Запрос ссылки сброса пароля на email (SMTP) |
+| POST   | `/api/auth/reset-password` | — | Установить новый пароль по токену из письма |
 | POST   | `/api/auth/refresh`     | cookie | Обновить access token по refresh cookie        |
 | POST   | `/api/auth/logout`      | cookie | Выход: отзывает refresh token и очищает cookie |
 | GET    | `/api/auth/me`          |   ✅   | Текущий пользователь                           |
@@ -391,8 +394,18 @@ food-diary-v2/
 - [x] UX-3: move meals between days when editing
 - [x] UX-4: explicit wake/sleep dates
 - [x] UX-5: calendar analytics periods
+- [x] Phase 5: email password reset
 
 ## Changelog
+
+### [1.15.0] — 2026-06-27
+
+**feat: Phase 5 self-service password reset**
+
+- Added `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`
+- Password reset tokens in SQLite (1 hour TTL, single use)
+- SMTP email via nodemailer; login form «Забыли пароль?»; `/#/reset-password` page
+- Rate limit 3 forgot-password requests per 15 min per IP; no user enumeration
 
 ### [1.13.0] — 2026-06-27
 
@@ -581,6 +594,7 @@ The app supports multiple users — each registers through the browser, data is 
 | Move meals between days                |   ✅   |
 | Explicit wake/sleep dates              |   ✅   |
 | Calendar analytics periods             |   ✅   |
+| Self-service password reset by email   |   ✅   |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -859,6 +873,8 @@ food-diary-v2/
 | ------ | ----------------------- | :----: | ----------------------------------------------- |
 | POST   | `/api/auth/register`    |   —    | Register a new user                             |
 | POST   | `/api/auth/login`       |   —    | Login: access token in JSON + refresh cookie    |
+| POST   | `/api/auth/forgot-password` | — | Request password reset link by email (SMTP) |
+| POST   | `/api/auth/reset-password` | — | Set new password using token from email |
 | POST   | `/api/auth/refresh`     | cookie | Refresh access token from refresh cookie        |
 | POST   | `/api/auth/logout`      | cookie | Logout: revokes refresh token and clears cookie |
 | GET    | `/api/auth/me`          |   ✅   | Current user info                               |
@@ -888,8 +904,18 @@ food-diary-v2/
 - [x] UX-3: move meals between days when editing
 - [x] UX-4: explicit wake/sleep dates
 - [x] UX-5: calendar analytics periods
+- [x] Phase 5: email password reset
 
 ## Changelog
+
+### [1.15.0] — 2026-06-27
+
+**feat: Phase 5 self-service password reset**
+
+- Added `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`
+- Password reset tokens in SQLite (1 hour TTL, single use)
+- SMTP email via nodemailer; login form «Забыли пароль?»; `/#/reset-password` page
+- Rate limit 3 forgot-password requests per 15 min per IP; no user enumeration
 
 ### [1.13.0] — 2026-06-27
 

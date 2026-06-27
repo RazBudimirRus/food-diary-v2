@@ -120,6 +120,11 @@ app.use((req, res, next) => {
     storage.deleteExpiredOrRevokedRefreshTokens();
   }, 60 * 60 * 1000);
 
+  storage.deleteExpiredPasswordResetTokens();
+  setInterval(() => {
+    storage.deleteExpiredPasswordResetTokens();
+  }, 60 * 60 * 1000);
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

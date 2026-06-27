@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import crypto from "crypto";
 
 interface AuthResponse {
   accessToken: string;
@@ -557,5 +558,62 @@ describe("admin routes", () => {
       .post("/api/auth/login")
       .send({ username: target.user.username, password: reset.body.temporaryPassword })
       .expect(200);
+  });
+});
+
+describe("password reset routes", () => {
+  it("returns 503 when SMTP is not configured", async () => {
+    await request(app)
+      .post("/api/auth/forgot-password")
+      .send({ email: "anyone@example.com" })
+      .expect(503);
+  });
+
+  it("resets password with a valid token and revokes old login", async () => {
+    const auth = await registerUser("self_reset_user");
+    const { storage } = await import("../../server/storage");
+    const { hashToken } = await import("../../server/auth");
+    const rawToken = crypto.randomUUID();
+
+    storage.createPasswordResetToken({
+      token: hashToken(rawToken),
+      userId: auth.user.id,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    await request(app)
+      .post("/api/auth/reset-password")
+      .send({ token: rawToken, password: "newpassword456" })
+      .expect(200);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ username: auth.user.username, password: "password123" })
+      .expect(401);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ username: auth.user.username, password: "newpassword456" })
+      .expect(200);
+  });
+
+  it("returns the same forgot-password response for known and unknown emails", async () => {
+    const mail = await import("../../server/mail");
+    vi.spyOn(mail, "isSmtpConfigured").mockReturnValue(true);
+    vi.spyOn(mail, "sendPasswordResetEmail").mockResolvedValue(undefined);
+    process.env.PUBLIC_URL = "https://fooddiary.razbudimir.com";
+
+    const known = await request(app)
+      .post("/api/auth/forgot-password")
+      .send({ email: "self_reset_user@example.com" })
+      .expect(200);
+
+    const unknown = await request(app)
+      .post("/api/auth/forgot-password")
+      .send({ email: "missing-user@example.com" })
+      .expect(200);
+
+    expect(known.body.message).toBe(unknown.body.message);
+    vi.restoreAllMocks();
   });
 });

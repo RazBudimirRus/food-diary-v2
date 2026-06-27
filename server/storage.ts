@@ -2,8 +2,8 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken, ApiUsage } from "@shared/schema";
-import { users, days, meals, secrets, refreshTokens, apiUsage } from "@shared/schema";
+import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken, ApiUsage, PasswordResetToken } from "@shared/schema";
+import { users, days, meals, secrets, refreshTokens, apiUsage, passwordResetTokens } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
 
 const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
@@ -58,6 +58,16 @@ sqlite.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_api_usage_timestamp ON api_usage(timestamp);
   CREATE INDEX IF NOT EXISTS idx_api_usage_user_id ON api_usage(user_id);
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    user_id INTEGER NOT NULL,
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
   CREATE TABLE IF NOT EXISTS days (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -187,6 +197,10 @@ export interface IStorage {
   revokeRefreshSessionById(id: number): boolean;
   revokeUserRefreshTokens(userId: number): void;
   deleteExpiredOrRevokedRefreshTokens(nowIso?: string): void;
+  createPasswordResetToken(data: { token: string; userId: number; expiresAt: string }): PasswordResetToken;
+  getPasswordResetToken(tokenHash: string): PasswordResetToken | undefined;
+  markPasswordResetTokenUsed(id: number): void;
+  deleteExpiredPasswordResetTokens(nowIso?: string): void;
 
   // Secrets (encrypted in DB)
   getSecret(userId: number, key: string): Secret | undefined;
@@ -532,6 +546,28 @@ class SqliteStorage implements IStorage {
 
   deleteExpiredOrRevokedRefreshTokens(nowIso = new Date().toISOString()) {
     sqlite.prepare("DELETE FROM refresh_tokens WHERE revoked = 1 OR expires_at <= ?").run(nowIso);
+  }
+
+  createPasswordResetToken(data: { token: string; userId: number; expiresAt: string }): PasswordResetToken {
+    return db.insert(passwordResetTokens).values({
+      token: data.token,
+      userId: data.userId,
+      expiresAt: data.expiresAt,
+      used: false,
+      createdAt: new Date().toISOString(),
+    }).returning().get();
+  }
+
+  getPasswordResetToken(tokenHash: string) {
+    return db.select().from(passwordResetTokens).where(eq(passwordResetTokens.token, tokenHash)).get();
+  }
+
+  markPasswordResetTokenUsed(id: number) {
+    db.update(passwordResetTokens).set({ used: true }).where(eq(passwordResetTokens.id, id)).run();
+  }
+
+  deleteExpiredPasswordResetTokens(nowIso = new Date().toISOString()) {
+    sqlite.prepare("DELETE FROM password_reset_tokens WHERE used = 1 OR expires_at <= ?").run(nowIso);
   }
 
   getSecret(userId: number, key: string) {

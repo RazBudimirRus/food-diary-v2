@@ -5,7 +5,7 @@ import cookieParser from "cookie-parser";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage, getMskDate, getMskTime } from "./storage";
 import { generateDayReport } from "./excel";
-import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema, updateMealSchema, type InsertMeal } from "@shared/schema";
+import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema, updateMealSchema, forgotPasswordSchema, resetPasswordSchema, type InsertMeal } from "@shared/schema";
 import {
   hashPassword, verifyPassword, signToken,
   requireAuth, requireAdmin, encryptSecret, decryptSecret,
@@ -14,6 +14,7 @@ import {
   type AuthRequest,
 } from "./auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
+import { isSmtpConfigured, sendPasswordResetEmail } from "./mail";
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
@@ -25,6 +26,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
     standardHeaders: "draft-8",
     legacyHeaders: false,
     message: { error: "Слишком много попыток входа. Попробуйте позже." },
+  });
+  const forgotPasswordLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 3,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(req.ip || req.socket.remoteAddress || "0.0.0.0"),
+    message: { error: "Слишком много запросов на сброс пароля. Попробуйте позже." },
   });
   const mealCreateLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -67,6 +76,15 @@ export function registerRoutes(httpServer: Server, app: Express) {
   function generateTemporaryPassword(): string {
     return crypto.randomBytes(9).toString("base64url");
   }
+
+  function passwordResetExpiresAt(): Date {
+    return new Date(Date.now() + 60 * 60 * 1000);
+  }
+
+  const forgotPasswordResponse = {
+    ok: true,
+    message: "Если email зарегистрирован, мы отправили ссылку для сброса пароля.",
+  };
 
   function readPositiveNumber(value: string | undefined, fallback: number): number {
     const parsed = Number(value);
@@ -169,6 +187,56 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.get("/api/auth/me", requireAuth, (req: AuthRequest, res) => {
     const u = req.user!;
     res.json(publicUser(u));
+  });
+
+  /** POST /api/auth/forgot-password */
+  app.post("/api/auth/forgot-password", forgotPasswordLimiter, async (req, res) => {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    if (!isSmtpConfigured()) {
+      return res.status(503).json({ error: "Сброс пароля по email временно недоступен" });
+    }
+
+    const user = storage.getUserByEmail(parsed.data.email);
+    if (user) {
+      const rawToken = crypto.randomUUID();
+      storage.createPasswordResetToken({
+        token: hashToken(rawToken),
+        userId: user.id,
+        expiresAt: passwordResetExpiresAt().toISOString(),
+      });
+
+      const publicUrl = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
+      const resetUrl = `${publicUrl}/#/reset-password?token=${rawToken}`;
+
+      try {
+        await sendPasswordResetEmail(user.email, resetUrl);
+      } catch (error) {
+        console.error("Failed to send password reset email:", error);
+      }
+    }
+
+    res.json(forgotPasswordResponse);
+  });
+
+  /** POST /api/auth/reset-password */
+  app.post("/api/auth/reset-password", async (req, res) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const tokenHash = hashToken(parsed.data.token);
+    const record = storage.getPasswordResetToken(tokenHash);
+    if (!record || record.used || new Date(record.expiresAt).getTime() <= Date.now()) {
+      return res.status(400).json({ error: "Ссылка для сброса пароля недействительна или истекла" });
+    }
+
+    const passwordHash = await hashPassword(parsed.data.password);
+    storage.updateUserPassword(record.userId, passwordHash);
+    storage.markPasswordResetTokenUsed(record.id);
+    storage.revokeUserRefreshTokens(record.userId);
+
+    res.json({ ok: true });
   });
 
   // ── Secrets (encrypted key-value store per user) ───────────────────────────

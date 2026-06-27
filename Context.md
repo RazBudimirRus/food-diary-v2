@@ -64,6 +64,7 @@
 - **UX-3 (код):** перенос приёма пищи между днями при редактировании через `PATCH /api/meals/:id` + `date`
 - **UX-4 (код):** явные даты подъёма/отбоя (`wake_date`, `sleep_date`), правила отбоя, Excel date+time, аналитика сна
 - **UX-5 (код):** календарные периоды в аналитике (неделя/месяц/год), пустые дни, навигация prev/next
+- **Phase 5 (код):** самостоятельный сброс пароля по email — `forgot-password`, `reset-password`, `password_reset_tokens`, SMTP/nodemailer, `/#/reset-password`
 
 ---
 
@@ -199,7 +200,8 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
-| 2026-06-27 | Cursor Agent | **UX-2…UX-5:** admin username, meal day move, wake/sleep dates, calendar analytics periods, tests/docs |
+| 2026-06-27 | Cursor Agent | **Phase 5:** email password reset, SMTP mailer, forgot/reset API, ResetPassword page |
+| 2026-06-27 | Cursor Agent | Revert Phase 7 WAF (отложена) |
 | 2026-06-27 | Cursor Agent | **Phase 11:** analytics summary endpoint, nutrition trends, Recharts dashboard, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 9:** DeepSeek daily token limit guard, 429 blocking, admin blocked/allowed status, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 4 usage dashboard:** api_usage, DeepSeek token/cost tracking, daily limit status, admin dashboard |

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function AuthPage() {
   const { login, register } = useAuth();
@@ -22,6 +23,9 @@ export default function AuthPage() {
   const [rPassword, setRPassword] = useState("");
   const [rPassword2, setRPassword2] = useState("");
   const [rDisplayName, setRDisplayName] = useState("");
+
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [fEmail, setFEmail] = useState("");
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -46,6 +50,26 @@ export default function AuthPage() {
       await register(rUsername, rEmail, rPassword, rDisplayName || undefined);
     } catch (err: any) {
       toast({ title: "Ошибка регистрации", description: err.message, variant: "destructive" });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    try {
+      const res = await apiRequest("POST", "/api/auth/forgot-password", { email: fEmail });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || "Не удалось отправить запрос");
+      toast({
+        title: "Проверьте почту",
+        description: body.message || "Если email зарегистрирован, мы отправили ссылку для сброса.",
+      });
+      setShowForgotPassword(false);
+      setFEmail("");
+    } catch (err: any) {
+      toast({ title: "Ошибка", description: err.message, variant: "destructive" });
     } finally {
       setPending(false);
     }
@@ -78,6 +102,37 @@ export default function AuthPage() {
 
           {/* LOGIN */}
           <TabsContent value="login">
+            {showForgotPassword ? (
+              <form onSubmit={handleForgotPassword}>
+                <CardContent className="space-y-3 pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Введите email, указанный при регистрации. Мы отправим ссылку для сброса пароля.
+                  </p>
+                  <div className="space-y-1">
+                    <Label htmlFor="f-email" className="text-xs">Email</Label>
+                    <Input
+                      id="f-email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      value={fEmail}
+                      onChange={(e) => setFEmail(e.target.value)}
+                      data-testid="input-forgot-email"
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={pending || !fEmail} data-testid="btn-forgot-password">
+                    {pending ? "Отправляю..." : "Отправить ссылку"}
+                  </Button>
+                  <button
+                    type="button"
+                    className="w-full text-xs text-primary underline"
+                    onClick={() => setShowForgotPassword(false)}
+                  >
+                    Вернуться ко входу
+                  </button>
+                </CardContent>
+              </form>
+            ) : (
             <form onSubmit={handleLogin}>
               <CardContent className="space-y-3 pt-4">
                 <div className="space-y-1">
@@ -99,8 +154,17 @@ export default function AuthPage() {
                 <Button type="submit" className="w-full" disabled={pending || !lUsername || !lPassword} data-testid="btn-login">
                   {pending ? "Вхожу..." : "Войти"}
                 </Button>
+                <button
+                  type="button"
+                  className="w-full text-xs text-primary underline"
+                  onClick={() => setShowForgotPassword(true)}
+                  data-testid="btn-show-forgot-password"
+                >
+                  Забыли пароль?
+                </button>
               </CardContent>
             </form>
+            )}
           </TabsContent>
 
           {/* REGISTER */}

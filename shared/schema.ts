@@ -47,6 +47,30 @@ export const refreshTokens = sqliteTable("refresh_tokens", {
 
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 
+// ─── Password Reset Tokens ───────────────────────────────────────────────────
+export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  token: text("token").notNull().unique(),
+  userId: integer("user_id").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  used: integer("used", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(""),
+});
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().uuid(),
+  password: z.string().min(8, "Минимум 8 символов"),
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
 // ─── App Secrets (encrypted in DB) ───────────────────────────────────────────
 // Arbitrary key-value secrets per user (for future integrations)
 export const secrets = sqliteTable("secrets", {

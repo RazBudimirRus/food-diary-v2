@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { Toaster } from "@/components/ui/toaster";
 import DiaryPage from "@/pages/DiaryPage";
 import AuthPage from "@/pages/AuthPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/not-found";
 
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
@@ -47,7 +48,16 @@ function Routes() {
     );
   }
 
-  if (!user) return <AuthPage />;
+  if (!user) {
+    return (
+      <Router hook={useHashLocation}>
+        <Switch>
+          <Route path="/reset-password" component={ResetPasswordPage} />
+          <Route component={AuthPage} />
+        </Switch>
+      </Router>
+    );
+  }
 
   return (
     <Router hook={useHashLocation}>
