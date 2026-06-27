@@ -13,7 +13,10 @@
 {$DOMAIN:fooddiary.razbudimir.com} {
 	tls /etc/ssl/razbudimir/fullchain.pem /etc/ssl/razbudimir/privkey.pem
 
-	reverse_proxy api:5000
+	reverse_proxy api:5000 {
+		# Phase 7 — Cloudflare passes real client IP; API reads CF-Connecting-IP
+		header_up CF-Connecting-IP {http.request.header.CF-Connecting-IP}
+	}
 
 	encode gzip zstd
 

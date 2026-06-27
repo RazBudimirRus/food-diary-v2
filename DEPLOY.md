@@ -165,3 +165,60 @@ docker compose start api
 ```
 
 > **Важно:** никогда не используйте `docker compose down -v` — флаг `-v` удалит named volumes (не bind mount, но лучше избегать).
+
+---
+
+## 14. Cloudflare WAF (Phase 7)
+
+Проксирование: **DNS → Cloudflare → VPS (Caddy) → API**.
+
+### 14.1. DNS в Cloudflare
+
+1. Добавьте зону `razbudimir.com` в Cloudflare (если ещё нет).
+2. A-запись `fooddiary` → `149.33.12.166`, статус **Proxied** (оранжевое облако).
+3. Дождитесь активации SSL.
+
+### 14.2. SSL/TLS
+
+| Режим | Когда |
+|-------|--------|
+| **Full (strict)** | На сервере валидный origin cert (`certs/fullchain.pem`) — рекомендуется |
+| Full | Только если origin cert самоподписанный (не рекомендуется) |
+
+Не включайте **Full (strict)** до появления валидного сертификата на origin — иначе **526**.
+
+Альтернатива: [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/) в `certs/` вместо wildcard.
+
+### 14.3. Firewall (опционально)
+
+Cloudflare → **Security** → **WAF** → custom rules (бесплатно до 5 правил):
+
+| Правило | Выражение | Действие |
+|---------|-----------|----------|
+| Только РФ (опционально) | `(ip.geoip.country ne "RU")` | Block |
+| Брутфорс логина | `(http.request.uri.path eq "/api/auth/login")` | Rate limit (например 10 / 15 min) |
+
+На уровне приложения уже есть rate-limit `/api/auth/login` (10 / 15 min / IP). После Phase 7 IP берётся из `CF-Connecting-IP`.
+
+### 14.4. Проверка после включения прокси
+
+```bash
+# С сервера — origin напрямую
+curl -I https://fooddiary.razbudimir.com/api/now
+
+# Должен быть cf-ray в ответе (через Cloudflare)
+curl -sI https://fooddiary.razbudimir.com/api/now | grep -i cf-ray
+
+# В админке: IP активных сессий = реальный клиент, не IP edge Cloudflare
+```
+
+### 14.5. Обновление стека
+
+После `git pull` с Phase 7:
+
+```bash
+cd /home/razbudimir/food_app   # или /srv/foodbot
+docker compose up -d --build
+```
+
+`TRUST_PROXY=1` должен оставаться в `.env`.

@@ -514,6 +514,31 @@ else
 fi
 
 # =============================================================================
+section "14" "Cloudflare / WAF (Phase 7)"
+# =============================================================================
+
+if [[ -f "$ENV_FILE" ]] && grep -qE '^TRUST_PROXY=1' "$ENV_FILE"; then
+  ok "TRUST_PROXY=1" "Express trusts reverse proxy headers"
+else
+  warn "TRUST_PROXY not set to 1" "required behind Caddy/Cloudflare for correct client IP"
+fi
+
+if [[ -f "${DEPLOY_DIR}/server/client-ip.ts" ]]; then
+  ok "CF-Connecting-IP helper" "server/client-ip.ts present"
+else
+  warn "client-ip helper missing" "deploy Phase 7 code for Cloudflare client IP"
+fi
+
+if [[ -n "$DOMAIN_VAL" ]]; then
+  CF_RAY=$(curl -sI --max-time 15 "https://${DOMAIN_VAL}/api/now" 2>/dev/null | grep -i '^cf-ray:' || true)
+  if [[ -n "$CF_RAY" ]]; then
+    ok "Cloudflare proxy" "cf-ray header present"
+  else
+    skip "Cloudflare proxy not detected" "enable orange-cloud DNS when ready (Phase 7)"
+  fi
+fi
+
+# =============================================================================
 # ── Final Summary Panel ───────────────────────────────────────────────────────
 # =============================================================================
 _raw ""

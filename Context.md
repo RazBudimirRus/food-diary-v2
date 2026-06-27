@@ -64,6 +64,7 @@
 - **UX-3 (код):** перенос приёма пищи между днями при редактировании через `PATCH /api/meals/:id` + `date`
 - **UX-4 (код):** явные даты подъёма/отбоя (`wake_date`, `sleep_date`), правила отбоя, Excel date+time, аналитика сна
 - **UX-5 (код):** календарные периоды в аналитике (неделя/месяц/год), пустые дни, навигация prev/next
+- **Phase 7 foundation (код):** `getClientIp` / `CF-Connecting-IP`, rate-limit и refresh sessions по реальному IP, `DEPLOY.md` §14
 
 ---
 
@@ -199,6 +200,7 @@ PROJECT24_FOODDIARY2/
 | Дата | Кто | Что |
 |------|-----|-----|
 | 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
+| 2026-06-27 | Cursor Agent | **Phase 7 foundation:** CF-Connecting-IP client IP, rate-limit/sessions, DEPLOY §14, preflight §14 |
 | 2026-06-27 | Cursor Agent | **UX-2…UX-5:** admin username, meal day move, wake/sleep dates, calendar analytics periods, tests/docs |
 | 2026-06-27 | Cursor Agent | **Phase 11:** analytics summary endpoint, nutrition trends, Recharts dashboard, integration coverage |
 | 2026-06-27 | Cursor Agent | **Phase 9:** DeepSeek daily token limit guard, 429 blocking, admin blocked/allowed status, integration coverage |

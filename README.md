@@ -391,8 +391,17 @@ food-diary-v2/
 - [x] UX-3: move meals between days when editing
 - [x] UX-4: explicit wake/sleep dates
 - [x] UX-5: calendar analytics periods
+- [ ] Phase 7: Cloudflare WAF (code ready; enable proxy in DNS)
 
 ## Changelog
+
+### [1.14.0] — 2026-06-27
+
+**feat: Phase 7 Cloudflare client IP foundation**
+
+- Added `getClientIp()` — prefers `CF-Connecting-IP`, then `X-Forwarded-For`
+- Login rate limit and refresh session audit use real client IP behind Cloudflare
+- Caddy forwards `CF-Connecting-IP` to API; `DEPLOY.md` §14 Cloudflare checklist; preflight §14
 
 ### [1.13.0] — 2026-06-27
 
@@ -888,8 +897,17 @@ food-diary-v2/
 - [x] UX-3: move meals between days when editing
 - [x] UX-4: explicit wake/sleep dates
 - [x] UX-5: calendar analytics periods
+- [ ] Phase 7: Cloudflare WAF (code ready; enable proxy in DNS)
 
 ## Changelog
+
+### [1.14.0] — 2026-06-27
+
+**feat: Phase 7 Cloudflare client IP foundation**
+
+- Added `getClientIp()` — prefers `CF-Connecting-IP`, then `X-Forwarded-For`
+- Login rate limit and refresh session audit use real client IP behind Cloudflare
+- Caddy forwards `CF-Connecting-IP` to API; `DEPLOY.md` §14 Cloudflare checklist; preflight §14
 
 ### [1.13.0] — 2026-06-27
 
