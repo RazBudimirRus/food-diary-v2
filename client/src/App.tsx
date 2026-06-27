@@ -1,22 +1,53 @@
-import { lazy, Suspense } from "react";
-import { Switch, Route, Router } from "wouter";
+import { lazy, Suspense, createContext, useContext } from "react";
+import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { Toaster } from "@/components/ui/toaster";
+import { useTheme } from "@/hooks/useTheme";
 import DiaryPage from "@/pages/DiaryPage";
 import AuthPage from "@/pages/AuthPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/not-found";
 
-const AdminPage = lazy(() => import("@/pages/AdminPage"));
+// ── Theme context ─────────────────────────────────────────────────────────────
+interface ThemeContextValue {
+  theme: "light" | "dark";
+  toggle: () => void;
+  isDark: boolean;
+}
+const ThemeContext = createContext<ThemeContextValue>({
+  theme: "light",
+  toggle: () => {},
+  isDark: false,
+});
+export const useAppTheme = () => useContext(ThemeContext);
+
+// ── Lazy pages ────────────────────────────────────────────────────────────────
+const AdminPage     = lazy(() => import("@/pages/AdminPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
+
+// ── Page transition wrapper ───────────────────────────────────────────────────
+function PageFade({ children }: { children: React.ReactNode }) {
+  // Re-mounts with key change to re-trigger animation
+  return (
+    <div
+      className="animate-fade-in"
+      style={{ animation: "pageFadeIn 0.18s ease-out both" }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="text-muted-foreground text-sm">Загрузка...</div>
+      <div className="flex flex-col items-center gap-3">
+        <img src="/favicon-32x32.png" alt="" className="w-8 h-8 opacity-60 animate-pulse" />
+        <div className="text-muted-foreground text-sm">Загрузка...</div>
+      </div>
     </div>
   );
 }
@@ -28,8 +59,12 @@ function AdminRoute() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-sm rounded-lg border bg-card p-6 text-center shadow-sm">
           <h1 className="text-lg font-semibold">Доступ запрещён</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Админ-панель доступна только пользователям с ролью admin.</p>
-          <a href="#/" className="mt-4 inline-block text-sm text-primary underline">Вернуться в дневник</a>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Админ-панель доступна только пользователям с ролью admin.
+          </p>
+          <a href="#/" className="mt-4 inline-block text-sm text-primary underline">
+            Вернуться в дневник
+          </a>
         </div>
       </div>
     );
@@ -37,16 +72,25 @@ function AdminRoute() {
   return <AdminPage />;
 }
 
+function AnimatedRoutes() {
+  const [location] = useLocation();
+
+  return (
+    <PageFade key={location}>
+      <Switch>
+        <Route path="/"          component={DiaryPage} />
+        <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/admin"     component={AdminRoute} />
+        <Route                   component={NotFound} />
+      </Switch>
+    </PageFade>
+  );
+}
+
 function Routes() {
   const { user, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-muted-foreground text-sm">Загрузка...</div>
-      </div>
-    );
-  }
+  if (loading) return <PageLoader />;
 
   if (!user) {
     return (
@@ -62,24 +106,23 @@ function Routes() {
   return (
     <Router hook={useHashLocation}>
       <Suspense fallback={<PageLoader />}>
-        <Switch>
-          <Route path="/" component={DiaryPage} />
-          <Route path="/analytics" component={AnalyticsPage} />
-          <Route path="/admin" component={AdminRoute} />
-          <Route component={NotFound} />
-        </Switch>
+        <AnimatedRoutes />
       </Suspense>
     </Router>
   );
 }
 
 export default function App() {
+  const themeValue = useTheme();
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Routes />
-        <Toaster />
-      </AuthProvider>
-    </QueryClientProvider>
+    <ThemeContext.Provider value={themeValue}>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <Routes />
+          <Toaster />
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeContext.Provider>
   );
 }

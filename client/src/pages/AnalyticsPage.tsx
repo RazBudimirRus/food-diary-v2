@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import { useAppTheme } from "@/App";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
-import { ArrowLeft, BarChart3, ChevronLeft, ChevronRight, Download, LogOut } from "lucide-react";
+import { ArrowLeft, BarChart3, ChevronLeft, ChevronRight, Download, LogOut, Moon, Sun } from "lucide-react";
 import {
   type AnalyticsPeriodType,
   formatAnalyticsPeriodLabel,
@@ -142,6 +143,7 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 
 export default function AnalyticsPage() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useAppTheme();
   const [periodType, setPeriodType] = useState<AnalyticsPeriodType>("month");
   const [anchorDate, setAnchorDate] = useState(mskToday());
   const range = useMemo(
@@ -235,6 +237,9 @@ export default function AnalyticsPage() {
               </Button>
             )}
             <span className="text-xs text-muted-foreground hidden sm:block">{user?.username}</span>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleTheme} title={theme === "dark" ? "Светлая тема" : "Тёмная тема"} data-testid="btn-toggle-theme-analytics">
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти">
               <LogOut className="h-4 w-4" />
             </Button>

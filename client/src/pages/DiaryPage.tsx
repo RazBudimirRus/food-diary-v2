@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
+import { useAppTheme } from "@/App";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -140,6 +141,7 @@ function formFromMeal(meal: Meal, date: string): AddMealFormData {
 
 export default function DiaryPage() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useAppTheme();
   const { toast } = useToast();
   const [activeDate, setActiveDate] = useState<string>(mskToday());
   const [showAddForm, setShowAddForm] = useState(false);
@@ -472,6 +474,9 @@ export default function DiaryPage() {
               Отчёт
             </Button>
             <span className="text-xs text-muted-foreground hidden sm:block">{user?.displayName || user?.username}</span>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleTheme} title={theme === "dark" ? "Светлая тема" : "Тёмная тема"} data-testid="btn-toggle-theme">
+              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти" data-testid="btn-logout">
               <LogOut className="h-4 w-4" />
             </Button>
@@ -549,10 +554,26 @@ export default function DiaryPage() {
         )}
 
         {!isLoading && meals.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
-            <Utensils className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">Нет записей за {formatDate(activeDate)}</p>
-            <p className="text-xs mt-1">Добавьте первый приём пищи</p>
+          <div className="text-center py-14 text-muted-foreground">
+            <div className="relative inline-flex items-center justify-center mb-4">
+              <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                <Utensils className="h-9 w-9 text-primary/40" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
+                <span className="text-xs">🌅</span>
+              </div>
+            </div>
+            <p className="text-sm font-medium text-foreground/70">
+              {isToday ? "Сегодня ещё нет записей" : `Нет записей за ${formatDate(activeDate)}`}
+            </p>
+            <p className="text-xs mt-1.5 max-w-xs mx-auto">
+              {isToday
+                ? "Нажмите «+ Добавить приём» чтобы начать вести дневник питания"
+                : "В этот день записи не вносились"}
+            </p>
+            {isToday && (
+              <p className="text-xs mt-3 text-muted-foreground/60">Совет: нажмите N для быстрого добавления</p>
+            )}
           </div>
         )}
 
