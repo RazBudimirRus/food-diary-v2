@@ -220,6 +220,78 @@ describe("DeepSeek usage limits", () => {
   });
 });
 
+describe("analytics routes", () => {
+  it("requires auth for nutrition analytics", async () => {
+    await request(app)
+      .get("/api/analytics/summary?from=2026-06-01&to=2026-06-30")
+      .expect(401);
+  });
+
+  it("returns per-user nutrition analytics summary", async () => {
+    const auth = await registerUser("analytics_user");
+    await request(app)
+      .post("/api/meals")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({
+        date: "2026-06-20",
+        tsStart: "08:30",
+        mealType: "завтрак",
+        foodText: "Овсянка",
+        waterUnits: 1,
+        hungerBefore: 4,
+        satietyAfter: 7,
+        calories: 350,
+        protein: 12,
+        fat: 8,
+        carbs: 55,
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/meals")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({
+        date: "2026-06-20",
+        tsStart: "13:00",
+        mealType: "обед",
+        foodText: "Курица и рис",
+        waterUnits: 2,
+        hungerBefore: 3,
+        satietyAfter: 8,
+        calories: 650,
+        protein: 40,
+        fat: 18,
+        carbs: 80,
+      })
+      .expect(200);
+
+    const dayRes = await request(app)
+      .get("/api/days/2026-06-20")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .post(`/api/days/${dayRes.body.day.id}/summary`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({ wakeTime: "07:00", sleepTime: "23:30", steps: 8000 })
+      .expect(200);
+
+    const analytics = await request(app)
+      .get("/api/analytics/summary?from=2026-06-20&to=2026-06-20")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(analytics.body.days).toHaveLength(1);
+    expect(analytics.body.days[0].mealsCount).toBe(2);
+    expect(analytics.body.days[0].totalCalories).toBe(1000);
+    expect(analytics.body.days[0].protein).toBe(52);
+    expect(analytics.body.days[0].waterLitres).toBe(1.5);
+    expect(analytics.body.days[0].sleepDuration).toBe(7.5);
+    expect(analytics.body.summary.totalMeals).toBe(2);
+    expect(analytics.body.summary.filledDaysRatio).toBe(1);
+  });
+});
+
 describe("admin routes", () => {
   it("forbids non-admin users from reading active sessions", async () => {
     const auth = await registerUser("admin_forbidden_user");

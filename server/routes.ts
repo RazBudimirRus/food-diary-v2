@@ -73,6 +73,16 @@ export function registerRoutes(httpServer: Server, app: Express) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
+  function isDateString(value: unknown): value is string {
+    return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  }
+
+  function daysBetween(fromDate: string, toDate: string): number {
+    const from = new Date(`${fromDate}T00:00:00Z`).getTime();
+    const to = new Date(`${toDate}T00:00:00Z`).getTime();
+    return Math.floor((to - from) / (24 * 60 * 60 * 1000)) + 1;
+  }
+
   function deepseekDailyLimitStatus(now = new Date()) {
     const dailyTokenLimit = readPositiveNumber(process.env.DEEPSEEK_DAILY_TOKEN_LIMIT, 0);
     const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -344,6 +354,22 @@ export function registerRoutes(httpServer: Server, app: Express) {
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // ── Analytics ───────────────────────────────────────────────────────────────
+
+  app.get("/api/analytics/summary", requireAuth, (req: AuthRequest, res) => {
+    const from = req.query.from;
+    const to = req.query.to;
+    if (!isDateString(from) || !isDateString(to)) {
+      return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+    }
+    const periodDays = daysBetween(from, to);
+    if (periodDays <= 0 || periodDays > 365) {
+      return res.status(400).json({ error: "date range must be 1..365 days" });
+    }
+
+    res.json(storage.getNutritionAnalytics(req.user!.id, from, to));
   });
 
   // ── Admin ──────────────────────────────────────────────────────────────────

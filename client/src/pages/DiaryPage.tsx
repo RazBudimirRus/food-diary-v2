@@ -427,6 +427,9 @@ export default function DiaryPage() {
             </Button>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" asChild data-testid="link-analytics">
+              <a href="#/analytics">Аналитика</a>
+            </Button>
             {user?.role === "admin" && (
               <Button size="sm" variant="outline" asChild data-testid="link-admin">
                 <a href="#/admin">Админ</a>

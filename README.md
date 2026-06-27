@@ -67,6 +67,7 @@ Food Diary V2 — инструмент для ведения дневника п
 | Unit/integration/E2E tests + CI        |   ✅   |
 | Админ-панель MVP                       |   ✅   |
 | Блокировка DeepSeek по дневному лимиту |   ✅   |
+| Аналитика питания и графики            |   ✅   |
 | Распознавание фото                     | 🔜 V2  |
 
 ### Excel-отчёт
@@ -368,6 +369,7 @@ food-diary-v2/
 | PATCH  | `/api/meals/:id`        |   ✅   | Обновить запись                                |
 | POST   | `/api/days/:id/summary` |   ✅   | Сохранить итоги дня                            |
 | GET    | `/api/report/:date`     |   ✅   | Скачать Excel (202 если итоги не заполнены)    |
+| GET    | `/api/analytics/summary` |   ✅   | Сводка аналитики питания за период             |
 | GET    | `/api/now`              |   —    | Текущие дата и время МСК                       |
 
 ## Roadmap
@@ -380,9 +382,18 @@ food-diary-v2/
 - [x] UX-1: edit existing meal entries
 - [x] Phase 4: admin panel MVP
 - [x] Phase 9: DeepSeek usage alerting / daily limit blocking
-- [ ] Phase 11: analytics dashboard
+- [x] Phase 11: analytics dashboard MVP
 
 ## Changelog
+
+### [1.12.0] — 2026-06-27
+
+**feat: Phase 11 analytics dashboard MVP**
+
+- Added `/api/analytics/summary?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- Aggregates meals, calories, БЖУ, water, hunger/satiety, sleep and steps per day
+- Added `/#/analytics` page with period switches, summary cards and Recharts graphs
+- Added integration coverage for analytics auth and per-user aggregates
 
 ### [1.11.0] — 2026-06-27
 
@@ -547,6 +558,7 @@ The app supports multiple users — each registers through the browser, data is 
 | Unit/integration/E2E tests + CI        |   ✅   |
 | Admin panel MVP                        |   ✅   |
 | DeepSeek daily limit blocking          |   ✅   |
+| Nutrition analytics and charts         |   ✅   |
 | Photo recognition                      | 🔜 V2  |
 
 ### Excel Report
@@ -836,6 +848,7 @@ food-diary-v2/
 | PATCH  | `/api/meals/:id`        |   ✅   | Update entry                                    |
 | POST   | `/api/days/:id/summary` |   ✅   | Save day summary                                |
 | GET    | `/api/report/:date`     |   ✅   | Download Excel (202 if summary needed)          |
+| GET    | `/api/analytics/summary` |   ✅   | Nutrition analytics summary for a date range    |
 | GET    | `/api/now`              |   —    | Current MSK date and time                       |
 
 ## Roadmap
@@ -848,9 +861,18 @@ food-diary-v2/
 - [x] UX-1: edit existing meal entries
 - [x] Phase 4: admin panel MVP
 - [x] Phase 9: DeepSeek usage alerting / daily limit blocking
-- [ ] Phase 11: analytics dashboard
+- [x] Phase 11: analytics dashboard MVP
 
 ## Changelog
+
+### [1.12.0] — 2026-06-27
+
+**feat: Phase 11 analytics dashboard MVP**
+
+- Added `/api/analytics/summary?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- Aggregates meals, calories, macros, water, hunger/satiety, sleep and steps per day
+- Added `/#/analytics` page with period switches, summary cards and Recharts charts
+- Added integration coverage for analytics auth and per-user aggregates
 
 ### [1.11.0] — 2026-06-27
 

@@ -119,6 +119,37 @@ export function getMskTime(): string {
   return d.toISOString().slice(11, 16);
 }
 
+function round1(value: number): number {
+  return Math.round(Number(value || 0) * 10) / 10;
+}
+
+function calculateSleepDuration(sleepTime: string | null, wakeTime: string | null): number | null {
+  if (!sleepTime || !wakeTime) return null;
+  const [sleepHours, sleepMinutes] = sleepTime.split(":").map(Number);
+  const [wakeHours, wakeMinutes] = wakeTime.split(":").map(Number);
+  if ([sleepHours, sleepMinutes, wakeHours, wakeMinutes].some((value) => !Number.isFinite(value))) return null;
+
+  let minutes = wakeHours * 60 + wakeMinutes - (sleepHours * 60 + sleepMinutes);
+  if (minutes < 0) minutes += 24 * 60;
+  return round1(minutes / 60);
+}
+
+function countInclusiveDays(fromDate: string, toDate: string): number {
+  const from = new Date(`${fromDate}T00:00:00Z`).getTime();
+  const to = new Date(`${toDate}T00:00:00Z`).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return 0;
+  return Math.floor((to - from) / (24 * 60 * 60 * 1000)) + 1;
+}
+
+function calculateCurrentStreak(days: NutritionAnalyticsDay[]): number {
+  let streak = 0;
+  for (let index = days.length - 1; index >= 0; index -= 1) {
+    if (days[index].mealsCount <= 0) break;
+    streak += 1;
+  }
+  return streak;
+}
+
 // ── Storage interface ─────────────────────────────────────────────────────────
 
 export interface IStorage {
@@ -133,6 +164,7 @@ export interface IStorage {
   listActiveRefreshSessions(nowIso?: string): AdminSession[];
   recordApiUsage(data: InsertApiUsage): ApiUsage;
   getApiUsageSummary(fromIso: string, toIso: string): ApiUsageSummary;
+  getNutritionAnalytics(userId: number, fromDate: string, toDate: string): NutritionAnalyticsSummary;
 
   // Refresh tokens (hashed in DB)
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken;
@@ -199,6 +231,38 @@ export interface ApiUsageSummary {
   tokensOut: number;
   costEstimate: number;
   byDay: ApiUsageDay[];
+}
+
+export interface NutritionAnalyticsDay {
+  date: string;
+  mealsCount: number;
+  totalCalories: number;
+  protein: number;
+  fat: number;
+  carbs: number;
+  waterLitres: number;
+  avgHunger: number | null;
+  avgSatiety: number | null;
+  wakeTime: string | null;
+  sleepTime: string | null;
+  sleepDuration: number | null;
+  steps: number | null;
+  sportActivity: string | null;
+}
+
+export interface NutritionAnalyticsSummary {
+  days: NutritionAnalyticsDay[];
+  summary: {
+    filledDays: number;
+    periodDays: number;
+    filledDaysRatio: number;
+    currentStreak: number;
+    avgCalories: number;
+    avgSleep: number | null;
+    totalCalories: number;
+    totalWaterLitres: number;
+    totalMeals: number;
+  };
 }
 
 class SqliteStorage implements IStorage {
@@ -318,6 +382,91 @@ class SqliteStorage implements IStorage {
       costEstimate: 0,
       byDay,
     });
+  }
+
+  getNutritionAnalytics(userId: number, fromDate: string, toDate: string): NutritionAnalyticsSummary {
+    const rows = sqlite.prepare(`
+      SELECT
+        days.date AS date,
+        days.wake_time AS wakeTime,
+        days.sleep_time AS sleepTime,
+        days.steps AS steps,
+        days.sport_activity AS sportActivity,
+        COUNT(meals.id) AS mealsCount,
+        COALESCE(SUM(meals.calories), 0) AS totalCalories,
+        COALESCE(SUM(meals.protein), 0) AS protein,
+        COALESCE(SUM(meals.fat), 0) AS fat,
+        COALESCE(SUM(meals.carbs), 0) AS carbs,
+        COALESCE(SUM(meals.water_units), 0) AS waterUnits,
+        AVG(meals.hunger_before) AS avgHunger,
+        AVG(meals.satiety_after) AS avgSatiety
+      FROM days
+      LEFT JOIN meals ON meals.day_id = days.id
+      WHERE days.user_id = ?
+        AND days.date >= ?
+        AND days.date <= ?
+      GROUP BY days.id
+      ORDER BY days.date ASC
+    `).all(userId, fromDate, toDate) as Array<{
+      date: string;
+      wakeTime: string | null;
+      sleepTime: string | null;
+      steps: number | null;
+      sportActivity: string | null;
+      mealsCount: number;
+      totalCalories: number;
+      protein: number;
+      fat: number;
+      carbs: number;
+      waterUnits: number;
+      avgHunger: number | null;
+      avgSatiety: number | null;
+    }>;
+
+    const analyticsDays = rows.map((row) => {
+      const sleepDuration = calculateSleepDuration(row.sleepTime, row.wakeTime);
+      return {
+        date: row.date,
+        mealsCount: Number(row.mealsCount),
+        totalCalories: round1(row.totalCalories),
+        protein: round1(row.protein),
+        fat: round1(row.fat),
+        carbs: round1(row.carbs),
+        waterLitres: round1(Number(row.waterUnits) * 0.5),
+        avgHunger: row.avgHunger == null ? null : round1(row.avgHunger),
+        avgSatiety: row.avgSatiety == null ? null : round1(row.avgSatiety),
+        wakeTime: row.wakeTime,
+        sleepTime: row.sleepTime,
+        sleepDuration,
+        steps: row.steps,
+        sportActivity: row.sportActivity,
+      };
+    });
+
+    const periodDays = countInclusiveDays(fromDate, toDate);
+    const filledDays = analyticsDays.filter((day) => day.mealsCount > 0).length;
+    const totalMeals = analyticsDays.reduce((sum, day) => sum + day.mealsCount, 0);
+    const totalCalories = analyticsDays.reduce((sum, day) => sum + day.totalCalories, 0);
+    const totalWaterLitres = analyticsDays.reduce((sum, day) => sum + day.waterLitres, 0);
+    const daysWithCalories = analyticsDays.filter((day) => day.totalCalories > 0);
+    const daysWithSleep = analyticsDays.filter((day) => day.sleepDuration != null);
+
+    return {
+      days: analyticsDays,
+      summary: {
+        filledDays,
+        periodDays,
+        filledDaysRatio: periodDays > 0 ? round1(filledDays / periodDays) : 0,
+        currentStreak: calculateCurrentStreak(analyticsDays),
+        avgCalories: daysWithCalories.length ? round1(totalCalories / daysWithCalories.length) : 0,
+        avgSleep: daysWithSleep.length
+          ? round1(daysWithSleep.reduce((sum, day) => sum + (day.sleepDuration ?? 0), 0) / daysWithSleep.length)
+          : null,
+        totalCalories: round1(totalCalories),
+        totalWaterLitres: round1(totalWaterLitres),
+        totalMeals,
+      },
+    };
   }
 
   createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken {
