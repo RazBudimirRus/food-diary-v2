@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or, like, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type {
   User,
@@ -397,6 +397,7 @@ export interface IStorage {
   getUserById(id: number): User | undefined;
   getUserByUsername(username: string): User | undefined;
   getUserByEmail(email: string): User | undefined;
+  searchUsers(q: string, limit?: number): User[];
   createUser(data: {
     username: string;
     email: string;
@@ -588,6 +589,18 @@ class SqliteStorage implements IStorage {
 
   getUserByEmail(email: string) {
     return db.select().from(users).where(eq(users.email, email)).get();
+  }
+
+  searchUsers(q: string, limit = 10): User[] {
+    const lower = `%${q.toLowerCase()}%`;
+    return db
+      .select()
+      .from(users)
+      .where(
+        or(like(sql`lower(${users.username})`, lower), like(sql`lower(coalesce(${users.displayName}, ''))`, lower)),
+      )
+      .limit(limit)
+      .all();
   }
 
   createUser(data: {

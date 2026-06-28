@@ -750,18 +750,32 @@ export function registerRoutes(httpServer: Server, app: Express) {
     res.json({ patients });
   });
 
+  /** GET /api/doctor/search-users?q=... */
+  app.get("/api/doctor/search-users", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const q = ((req.query.q as string) || "").trim();
+    if (q.length < 2) return res.json({ users: [] });
+    const results = storage.searchUsers(q, 10);
+    // Return only safe fields
+    const safe = results.map((u) => ({ id: u.id, username: u.username, displayName: u.displayName }));
+    res.json({ users: safe });
+  });
+
   /** POST /api/doctor/patients/:id/assign */
   app.post("/api/doctor/patients/:id/assign", requireAuth, requireDoctor, (req: AuthRequest, res) => {
     const patientId = parseInt(req.params.id, 10);
     const doctor = storage.getDoctorByUserId(req.user!.id);
-    if (!doctor) return res.status(400).json({ error: "Сначала заполните профиль врача" });
+    if (!doctor)
+      return res.status(400).json({ error: "Сначала заполните профиль врача — перейдите на вкладку Профиль" });
+    if (patientId === req.user!.id) return res.status(400).json({ error: "Нельзя добавить себя в качестве пациента" });
     const patient = storage.getUserById(patientId);
-    if (!patient) return res.status(404).json({ error: "Пользователь не найден" });
+    if (!patient) return res.status(404).json({ error: "Пользователь не найден в системе" });
+    if (patient.role === "admin")
+      return res.status(400).json({ error: "Нельзя добавить администратора в качестве пациента" });
     try {
       const dp = storage.assignPatient(doctor.id, patientId);
       res.json({ doctorPatient: dp });
     } catch (e: any) {
-      res.status(409).json({ error: "Пациент уже привязан" });
+      res.status(409).json({ error: "Этот пациент уже привязан к вам" });
     }
   });
 

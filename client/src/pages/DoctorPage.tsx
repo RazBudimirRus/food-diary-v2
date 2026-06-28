@@ -94,15 +94,29 @@ export default function DoctorPage() {
   });
   const patients = patientsData?.patients ?? [];
 
-  const [assignUsername, setAssignUsername] = useState("");
-  const [allUsers, setAllUsers] = useState<{ id: number; username: string; displayName?: string }[]>([]);
-  const [userSearchDone, setUserSearchDone] = useState(false);
+  const [assignQuery, setAssignQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ id: number; username: string; displayName?: string }[]>([]);
+  const [searchDone, setSearchDone] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const searchUser = async () => {
-    const r = await apiCall(`/api/admin/users`).catch(() => null);
-    if (r?.users) {
-      setAllUsers(r.users);
-      setUserSearchDone(true);
+    setSearchError(null);
+    setAssignError(null);
+    const q = assignQuery.trim();
+    if (q.length < 2) {
+      setSearchError("Введите минимум 2 символа для поиска");
+      return;
+    }
+    try {
+      const r = await apiCall(`/api/doctor/search-users?q=${encodeURIComponent(q)}`);
+      setSearchResults(r.users ?? []);
+      setSearchDone(true);
+      if ((r.users ?? []).length === 0) {
+        setSearchError("Пользователи не найдены. Проверьте имя пользователя или отображаемое имя.");
+      }
+    } catch (e: any) {
+      setSearchError(e.message || "Ошибка поиска. Попробуйте ещё раз.");
     }
   };
 
@@ -110,11 +124,13 @@ export default function DoctorPage() {
     mutationFn: (patientId: number) => apiCall(`/api/doctor/patients/${patientId}/assign`, { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/doctor/patients"] });
-      setAssignUsername("");
-      setUserSearchDone(false);
+      setAssignQuery("");
+      setSearchDone(false);
+      setSearchResults([]);
+      setAssignError(null);
       toast({ title: "Пациент привязан" });
     },
-    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => setAssignError(e.message),
   });
 
   const removePatient = useMutation({
@@ -182,41 +198,41 @@ export default function DoctorPage() {
                 </p>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="username пациента"
-                    value={assignUsername}
+                    placeholder="Имя пользователя или отображаемое имя"
+                    value={assignQuery}
                     onChange={(e) => {
-                      setAssignUsername(e.target.value);
-                      setUserSearchDone(false);
+                      setAssignQuery(e.target.value);
+                      setSearchDone(false);
+                      setSearchError(null);
+                      setAssignError(null);
                     }}
+                    onKeyDown={(e) => e.key === "Enter" && searchUser()}
                     className="h-9 text-sm"
                   />
                   <Button size="sm" variant="outline" onClick={searchUser} className="shrink-0">
                     Найти
                   </Button>
                 </div>
-                {userSearchDone && (
+                {searchError && <p className="text-sm text-destructive">{searchError}</p>}
+                {assignError && <p className="text-sm text-destructive">{assignError}</p>}
+                {searchDone && searchResults.length > 0 && (
                   <div className="space-y-1">
-                    {allUsers
-                      .filter((u) => u.username.toLowerCase().includes(assignUsername.toLowerCase()))
-                      .slice(0, 5)
-                      .map((u) => (
-                        <div key={u.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
-                          <span className="text-sm">
-                            {u.displayName || u.username}{" "}
-                            <span className="text-muted-foreground text-xs">@{u.username}</span>
-                          </span>
-                          <Button
-                            size="sm"
-                            className="h-7 text-xs"
-                            onClick={() => assign.mutate(u.id)}
-                            disabled={assign.isPending}
-                          >
-                            Привязать
-                          </Button>
-                        </div>
-                      ))}
-                    {allUsers.filter((u) => u.username.toLowerCase().includes(assignUsername.toLowerCase())).length ===
-                      0 && <p className="text-sm text-muted-foreground">Пользователь не найден</p>}
+                    {searchResults.map((u) => (
+                      <div key={u.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
+                        <span className="text-sm">
+                          {u.displayName || u.username}{" "}
+                          <span className="text-muted-foreground text-xs">@{u.username}</span>
+                        </span>
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => assign.mutate(u.id)}
+                          disabled={assign.isPending}
+                        >
+                          {assign.isPending ? "..." : "Привязать"}
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </CardContent>
