@@ -286,14 +286,42 @@ for (const col of ["wake_date", "sleep_date"]) {
   }
 }
 
-// Миграция: расширяем role enum для doctor
+// Миграция: расширяем role enum — убираем старый CHECK(role IN ('user','admin'))
+// SQLite не поддерживает ALTER COLUMN, единственный способ — recreation pattern
 try {
-  sqlite.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
-} catch {
-  // already exists
+  // Проверяем, есть ли ещё ограничение на 'doctor'
+  const roleCheck = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as
+    | { sql: string }
+    | undefined;
+
+  if (roleCheck?.sql?.includes("'user', 'admin'") || roleCheck?.sql?.includes("'user','admin'")) {
+    // Пересоздаём таблицу users без CHECK constraint на role
+    sqlite.exec(`
+      PRAGMA foreign_keys = OFF;
+
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        display_name TEXT,
+        role TEXT NOT NULL DEFAULT 'user',
+        pd_consent_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      INSERT INTO users_new SELECT id, username, email, password_hash, display_name, role, pd_consent_at, created_at FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      PRAGMA foreign_keys = ON;
+    `);
+    console.info("[migration] users table recreated — CHECK constraint on role removed");
+  }
+} catch (e) {
+  console.error("[migration] role constraint removal failed:", e);
 }
-// Обновляем CHECK constraint через пересоздание таблицы не нужно — SQLite не enforces
-// runtime check update; достаточно нового DEFAULT в CREATE TABLE
 
 // Миграция: dietary_restrictions в user_profiles (Phase 20)
 try {
