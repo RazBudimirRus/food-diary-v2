@@ -34,9 +34,9 @@
 | v1.4.0 · 2026-06-26  |             Фазы 6 + 3 | ✅ Реализовано | HTTPS/Caddy, secure cookies/proxy, SQLite WAL, backup scripts                                               |
 | v1.5.0 · 2026-06-27  |        Фазы 10 + 2 + 1 | ✅ Реализовано | Refresh sessions, idle timeout, Helmet/CORS/rate-limit, IDOR/PATCH fixes, tests/CI                          |
 | v1.6.0 · 2026-06-27  |                   UX-1 | ✅ Реализовано | Редактирование приёма пищи через PATCH, обновление Query cache, integration + E2E                           |
-| v1.7.0 · 2026-06-27  |      Фаза 4 foundation | 🚧 Частично    | `user/admin` роли, `requireAdmin`, `ADMIN_BOOTSTRAP_USERNAME`, read-only sessions                           |
-| v1.8.0 · 2026-06-27  |        Фаза 4 sessions | 🚧 Частично    | Admin revoke одной refresh-сессии или всех refresh-сессий пользователя                                      |
-| v1.9.0 · 2026-06-27  |           Фаза 4 reset | 🚧 Частично    | Admin user list + reset password с временным паролем и revoke refresh sessions                              |
+| v1.7.0 · 2026-06-27  |      Фаза 4 foundation | ✅ Реализовано | `user/admin` роли, `requireAdmin`, `ADMIN_BOOTSTRAP_USERNAME`, read-only sessions                           |
+| v1.8.0 · 2026-06-27  |        Фаза 4 sessions | ✅ Реализовано | Admin revoke одной refresh-сессии или всех refresh-сессий пользователя                                      |
+| v1.9.0 · 2026-06-27  |           Фаза 4 reset | ✅ Реализовано | Admin user list + reset password с временным паролем и revoke refresh sessions                              |
 | v1.10.0 · 2026-06-27 | Фаза 4 usage dashboard | ✅ MVP         | `api_usage`, DeepSeek token/cost tracking, dashboard, daily limit status                                    |
 | v1.11.0 · 2026-06-27 |     Фаза 9 limit guard | ✅ Реализовано | Блокировка `/api/analyze` при достижении `DEEPSEEK_DAILY_TOKEN_LIMIT`                                       |
 | v1.12.0 · 2026-06-27 |      Фаза 11 analytics | ✅ MVP         | `/api/analytics/summary`, cards, Recharts graphs, calories/БЖУ/water/sleep trends                           |
@@ -45,6 +45,7 @@
 | v1.15.0 · 2026-06-27 |  Фаза 5 password reset | ✅ Реализовано | forgot/reset password by email, SMTP, `/#/reset-password`                                                   |
 | v2.5.0 · 2026-06-28  |         Фаза 14 mobile | ✅ Реализовано | BottomNav, PWA, TodayWidget, OnboardingTour, dark mode toggle, keyboard shortcuts                           |
 | v2.6.0 · 2026-06-28  |   Bugfix #1–5 + README | ✅ Реализовано | dark theme fix (toggleTheme), header two-row layout, analytics back nav, onboarding mobile pos/localStorage |
+| v2.7.0 · 2026-06-28  |   Фаза 4 комплит | ✅ Реализовано | Подтверждено полное реализование Admin Panel: users, sessions revoke, password reset, DeepSeek usage dashboard |
 
 > Прод-сервер может отставать от `main`: после коммитов Phase 10/2/1 нужен отдельный деплой на VPS.
 
