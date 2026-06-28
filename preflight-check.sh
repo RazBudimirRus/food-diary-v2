@@ -158,13 +158,18 @@ if [[ -n "$HOST_WEB_SERVER" ]]; then
   fi
 fi
 
-# APP_PORT — should NOT be published on host when using Caddy.
-# But if using nginx/apache integration, it just needs to be free for Docker internal use.
+# APP_PORT — check who is holding it.
+# docker-proxy on this port = our own container published it = OK.
+# Anything else on this port = conflict.
 if ss -tlnp 2>/dev/null | grep -q ":${APP_PORT} "; then
   PROC=$(ss -tlnp 2>/dev/null | grep ":${APP_PORT} " | awk '{print $NF}' | head -1)
-  warn "Port $APP_PORT (App API): in use on host" "$PROC — API should only be accessible inside Docker network"
+  if echo "$PROC" | grep -q "docker-proxy"; then
+    ok "Port $APP_PORT (App API): in use by Docker" "our container is running — OK"
+  else
+    warn "Port $APP_PORT (App API): in use by unknown process" "$PROC — expected docker-proxy or free"
+  fi
 else
-  ok "Port $APP_PORT (App API): free" "will be used internally by Docker"
+  ok "Port $APP_PORT (App API): free" "will be bound by Docker on first start"
 fi
 
 # Ports 80 and 443 — only warn if in use AND not by a web server we can integrate with
@@ -656,7 +661,23 @@ else
   fail "scripts/backup.sh missing"
 fi
 
+# Check crontab for root AND for the real (non-root) user if running via sudo
+_CRON_FOUND=0
 if crontab -l 2>/dev/null | grep -qF "scripts/backup.sh"; then
+  _CRON_FOUND=1
+fi
+if [[ $_CRON_FOUND -eq 0 && -n "${SUDO_USER:-}" ]]; then
+  if crontab -u "$SUDO_USER" -l 2>/dev/null | grep -qF "scripts/backup.sh"; then
+    _CRON_FOUND=1
+  fi
+fi
+# Also check /etc/cron.d and /var/spool/cron/crontabs/*
+if [[ $_CRON_FOUND -eq 0 ]]; then
+  if grep -rqF "scripts/backup.sh" /etc/cron.d/ /var/spool/cron/crontabs/ 2>/dev/null; then
+    _CRON_FOUND=1
+  fi
+fi
+if [[ $_CRON_FOUND -eq 1 ]]; then
   ok "Backup cron" "installed"
 else
   warn "Backup cron not installed" "sudo bash scripts/install-backup-cron.sh"
