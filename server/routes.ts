@@ -4,13 +4,34 @@ import crypto from "crypto";
 import cookieParser from "cookie-parser";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage, getMskDate, getMskTime } from "./storage";
-import { generateDayReport } from "./excel";
-import { addMealSchema, daySummarySchema, registerSchema, loginSchema, analyzeSchema, updateMealSchema, forgotPasswordSchema, resetPasswordSchema, type InsertMeal } from "@shared/schema";
+import { generateDayReport, generateRangeReport } from "./excel";
 import {
-  hashPassword, verifyPassword, signToken,
-  requireAuth, requireAdmin, encryptSecret, decryptSecret,
-  refreshCookieOptions, clearRefreshCookieOptions, clearLegacyAuthCookieOptions,
-  generateRefreshToken, hashToken, getRefreshExpiresAt, getRefreshCookieName,
+  addMealSchema,
+  daySummarySchema,
+  registerSchema,
+  loginSchema,
+  analyzeSchema,
+  updateMealSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  upsertUserProfileSchema,
+  type InsertMeal,
+} from "@shared/schema";
+import {
+  hashPassword,
+  verifyPassword,
+  signToken,
+  requireAuth,
+  requireAdmin,
+  encryptSecret,
+  decryptSecret,
+  refreshCookieOptions,
+  clearRefreshCookieOptions,
+  clearLegacyAuthCookieOptions,
+  generateRefreshToken,
+  hashToken,
+  getRefreshExpiresAt,
+  getRefreshCookieName,
   type AuthRequest,
 } from "./auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
@@ -40,19 +61,30 @@ export function registerRoutes(httpServer: Server, app: Express) {
     limit: 60,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    keyGenerator: (req: AuthRequest) => req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || "0.0.0.0")}`,
+    keyGenerator: (req: AuthRequest) =>
+      req.user ? `user:${req.user.id}` : `ip:${ipKeyGenerator(req.ip || req.socket.remoteAddress || "0.0.0.0")}`,
     message: { error: "Слишком много запросов. Попробуйте позже." },
   });
 
-  function publicUser(user: { id: number; username: string; email: string; displayName?: string | null; role: "user" | "admin" }) {
+  function publicUser(user: {
+    id: number;
+    username: string;
+    email: string;
+    displayName?: string | null;
+    role: "user" | "admin";
+  }) {
     return { id: user.id, username: user.username, email: user.email, displayName: user.displayName, role: user.role };
   }
 
   function paramValue(value: string | string[] | undefined): string {
-    return Array.isArray(value) ? value[0] : value ?? "";
+    return Array.isArray(value) ? value[0] : (value ?? "");
   }
 
-  function issueSession(req: AuthRequest, res: any, user: { id: number; username: string; email: string; displayName?: string | null; role: "user" | "admin" }) {
+  function issueSession(
+    req: AuthRequest,
+    res: any,
+    user: { id: number; username: string; email: string; displayName?: string | null; role: "user" | "admin" },
+  ) {
     const rawRefreshToken = generateRefreshToken();
     const expiresAt = getRefreshExpiresAt();
 
@@ -125,11 +157,13 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     const { username, email, password, displayName } = parsed.data;
 
-    if (storage.getUserByUsername(username)) return res.status(409).json({ error: "Пользователь с таким именем уже существует" });
+    if (storage.getUserByUsername(username))
+      return res.status(409).json({ error: "Пользователь с таким именем уже существует" });
     if (storage.getUserByEmail(email)) return res.status(409).json({ error: "Email уже зарегистрирован" });
 
     const passwordHash = await hashPassword(password);
-    const user = storage.createUser({ username, email, passwordHash, displayName });
+    const pdConsentAt = new Date().toISOString();
+    const user = storage.createUser({ username, email, passwordHash, displayName, pdConsentAt });
 
     res.json(issueSession(req, res, user));
   });
@@ -275,7 +309,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const day = storage.getOrCreateDay(req.user!.id, paramValue(req.params.date));
       const mealsData = storage.getMealsByDay(day.id);
       res.json({ day, meals: mealsData });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.post("/api/days/:id/summary", requireAuth, (req: AuthRequest, res) => {
@@ -288,7 +324,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
       const day = storage.updateDaySummary(existingDay.id, parsed.data);
       res.json({ day });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ── Meals ──────────────────────────────────────────────────────────────────
@@ -322,7 +360,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
         carbs: data.carbs ?? null,
       });
       res.json({ meal, day });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.delete("/api/meals/:id", requireAuth, (req: AuthRequest, res) => {
@@ -332,7 +372,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
       if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
       storage.deleteMeal(meal.id);
       res.json({ ok: true });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   app.patch("/api/meals/:id", requireAuth, (req: AuthRequest, res) => {
@@ -375,7 +417,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
         previousDate: storage.getDayById(meal.dayId)?.date,
         day: targetDay,
       });
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ── Report ─────────────────────────────────────────────────────────────────
@@ -396,7 +440,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
       res.send(buf);
-    } catch (e: any) { res.status(500).json({ error: e.message }); }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ── DeepSeek КБЖУ ─────────────────────────────────────────────────────────────
@@ -508,6 +554,89 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     storage.revokeUserRefreshTokens(userId);
     res.json({ user: publicUser(user), temporaryPassword });
+  });
+
+  // ── Phase 16: 152-ФЗ ────────────────────────────────────────────────────────
+
+  /** DELETE /api/user/me — full account deletion (152-ФЗ) */
+  app.delete("/api/user/me", requireAuth, (req: AuthRequest, res) => {
+    try {
+      storage.deleteUser(req.user!.id);
+      res.clearCookie(refreshCookieName, clearRefreshCookieOptions());
+      res.clearCookie("token", clearLegacyAuthCookieOptions());
+      res.json({ ok: true, message: "Аккаунт и все данные удалены" });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** GET /api/user/export — export all personal data as JSON (152-ФЗ) */
+  app.get("/api/user/export", requireAuth, (req: AuthRequest, res) => {
+    try {
+      const data = storage.getUserAllData(req.user!.id);
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent("my_data.json")}`);
+      res.send(JSON.stringify(data, null, 2));
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Phase 17: Анкета пользователя ────────────────────────────────────────────
+
+  /** GET /api/user/profile */
+  app.get("/api/user/profile", requireAuth, (req: AuthRequest, res) => {
+    const profile = storage.getUserProfile(req.user!.id);
+    res.json({ profile: profile ?? null });
+  });
+
+  /** PUT /api/user/profile */
+  app.put("/api/user/profile", requireAuth, (req: AuthRequest, res) => {
+    const parsed = upsertUserProfileSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const profile = storage.upsertUserProfile(req.user!.id, parsed.data);
+      res.json({ profile });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Phase 21: Расширенные отчёты ────────────────────────────────────────────
+
+  /**
+   * GET /api/report/range?from=YYYY-MM-DD&to=YYYY-MM-DD
+   * Multi-day Excel report (Phase 21)
+   */
+  app.get("/api/report/range", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const from = paramValue(req.query.from as string);
+      const to = paramValue(req.query.to as string);
+      if (!isDateString(from) || !isDateString(to)) {
+        return res.status(400).json({ error: "Некорректные даты. Формат: YYYY-MM-DD" });
+      }
+      if (from > to) return res.status(400).json({ error: "Дата начала позже даты окончания" });
+      const maxDays = 90;
+      if (daysBetween(from, to) > maxDays) {
+        return res.status(400).json({ error: `Максимальный период для отчёта — ${maxDays} дней` });
+      }
+
+      const days = storage.getDaysInRange(req.user!.id, from, to);
+      if (!days.length) return res.status(404).json({ error: "За указанный период записей нет" });
+
+      const mealsByDayId = new Map<number, import("@shared/schema").Meal[]>();
+      for (const day of days) {
+        mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
+      }
+
+      const buf = await generateRangeReport(days, mealsByDayId);
+      const filename = `Дневник_питания_${from}_${to}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.send(buf);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
   });
 
   // ── Misc ─────────────────────────────────────────────────────────────

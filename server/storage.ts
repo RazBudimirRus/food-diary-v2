@@ -2,8 +2,28 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq, and } from "drizzle-orm";
 import * as schema from "@shared/schema";
-import type { User, Day, Meal, InsertMeal, DaySummary, Secret, RefreshToken, ApiUsage, PasswordResetToken } from "@shared/schema";
-import { users, days, meals, secrets, refreshTokens, apiUsage, passwordResetTokens } from "@shared/schema";
+import type {
+  User,
+  Day,
+  Meal,
+  InsertMeal,
+  DaySummary,
+  Secret,
+  RefreshToken,
+  ApiUsage,
+  PasswordResetToken,
+  UserProfile,
+} from "@shared/schema";
+import {
+  users,
+  days,
+  meals,
+  secrets,
+  refreshTokens,
+  apiUsage,
+  passwordResetTokens,
+  userProfiles,
+} from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
 import {
   computeMealTimingMetrics,
@@ -111,7 +131,30 @@ sqlite.exec(`
     carbs REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS user_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    gender TEXT DEFAULT 'unspecified',
+    height_cm REAL,
+    weight_kg REAL,
+    activity_level TEXT DEFAULT 'medium',
+    target_kcal REAL,
+    target_protein REAL,
+    target_fat REAL,
+    target_carbs REAL,
+    onboarding_skipped INTEGER DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
 `);
+
+// Миграция: добавляем pd_consent_at в users (152-ФЗ)
+try {
+  sqlite.exec("ALTER TABLE users ADD COLUMN pd_consent_at TEXT");
+} catch {
+  // Колонка уже существует — игнорируем
+}
 
 try {
   sqlite.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin'))");
@@ -200,9 +243,19 @@ export interface IStorage {
   getUserById(id: number): User | undefined;
   getUserByUsername(username: string): User | undefined;
   getUserByEmail(email: string): User | undefined;
-  createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User;
+  createUser(data: {
+    username: string;
+    email: string;
+    passwordHash: string;
+    displayName?: string;
+    pdConsentAt?: string;
+  }): User;
   bootstrapAdminByUsername(username: string): User | undefined;
   updateUserPassword(userId: number, passwordHash: string): User | undefined;
+  deleteUser(userId: number): void;
+  getUserAllData(userId: number): { user: User | undefined; days: Day[]; meals: Meal[]; apiUsage: ApiUsage[] };
+  getUserProfile(userId: number): UserProfile | undefined;
+  upsertUserProfile(userId: number, data: Partial<UserProfile>): UserProfile;
   listUsers(): User[];
   listActiveRefreshSessions(nowIso?: string): AdminSession[];
   recordApiUsage(data: InsertApiUsage): ApiUsage;
@@ -210,7 +263,13 @@ export interface IStorage {
   getNutritionAnalytics(userId: number, fromDate: string, toDate: string): NutritionAnalyticsSummary;
 
   // Refresh tokens (hashed in DB)
-  createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken;
+  createRefreshToken(data: {
+    token: string;
+    userId: number;
+    expiresAt: string;
+    userAgent?: string | null;
+    ip?: string | null;
+  }): RefreshToken;
   getRefreshToken(token: string): RefreshToken | undefined;
   revokeRefreshToken(token: string): void;
   revokeRefreshSessionById(id: number): boolean;
@@ -229,6 +288,7 @@ export interface IStorage {
   // Days
   getDayById(id: number): Day | undefined;
   getDayByDate(userId: number, date: string): Day | undefined;
+  getDaysInRange(userId: number, startDate: string, endDate: string): Day[];
   getOrCreateDay(userId: number, date: string): Day;
   updateDaySummary(dayId: number, summary: DaySummary): Day;
 
@@ -339,15 +399,74 @@ class SqliteStorage implements IStorage {
     return db.select().from(users).where(eq(users.email, email)).get();
   }
 
-  createUser(data: { username: string; email: string; passwordHash: string; displayName?: string }): User {
-    return db.insert(users).values({
-      username: data.username,
-      email: data.email,
-      passwordHash: data.passwordHash,
-      displayName: data.displayName ?? null,
-      role: "user",
-      createdAt: new Date().toISOString(),
-    }).returning().get();
+  createUser(data: {
+    username: string;
+    email: string;
+    passwordHash: string;
+    displayName?: string;
+    pdConsentAt?: string;
+  }): User {
+    return db
+      .insert(users)
+      .values({
+        username: data.username,
+        email: data.email,
+        passwordHash: data.passwordHash,
+        displayName: data.displayName ?? null,
+        role: "user",
+        pdConsentAt: data.pdConsentAt ?? null,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  deleteUser(userId: number): void {
+    // Cascade delete in correct FK order
+    sqlite.prepare("DELETE FROM api_usage WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM refresh_tokens WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM secrets WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM user_profiles WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM meals WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM days WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  }
+
+  getUserAllData(userId: number): { user: User | undefined; days: Day[]; meals: Meal[]; apiUsage: ApiUsage[] } {
+    return {
+      user: this.getUserById(userId),
+      days: db.select().from(days).where(eq(days.userId, userId)).all(),
+      meals: db.select().from(meals).where(eq(meals.userId, userId)).all(),
+      apiUsage: db.select().from(apiUsage).where(eq(apiUsage.userId, userId)).all(),
+    };
+  }
+
+  getUserProfile(userId: number): UserProfile | undefined {
+    return db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).get();
+  }
+
+  upsertUserProfile(userId: number, data: Partial<UserProfile>): UserProfile {
+    const existing = this.getUserProfile(userId);
+    if (existing) {
+      const { id: _id, userId: _userId, ...rest } = data;
+      return db
+        .update(userProfiles)
+        .set({ ...rest, updatedAt: new Date().toISOString() })
+        .where(eq(userProfiles.userId, userId))
+        .returning()
+        .get();
+    }
+    const { id: _id, userId: _userId, ...rest } = data;
+    return db
+      .insert(userProfiles)
+      .values({
+        userId,
+        ...rest,
+        updatedAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
   }
 
   bootstrapAdminByUsername(username: string): User | undefined {
@@ -362,11 +481,17 @@ class SqliteStorage implements IStorage {
   }
 
   listUsers(): User[] {
-    return db.select().from(users).all().sort((a, b) => a.username.localeCompare(b.username));
+    return db
+      .select()
+      .from(users)
+      .all()
+      .sort((a, b) => a.username.localeCompare(b.username));
   }
 
   listActiveRefreshSessions(nowIso = new Date().toISOString()): AdminSession[] {
-    return sqlite.prepare(`
+    return sqlite
+      .prepare(
+        `
       SELECT
         refresh_tokens.id AS id,
         refresh_tokens.user_id AS userId,
@@ -383,22 +508,30 @@ class SqliteStorage implements IStorage {
       WHERE refresh_tokens.revoked = 0
         AND refresh_tokens.expires_at > ?
       ORDER BY refresh_tokens.created_at DESC
-    `).all(nowIso) as AdminSession[];
+    `,
+      )
+      .all(nowIso) as AdminSession[];
   }
 
   recordApiUsage(data: InsertApiUsage): ApiUsage {
-    return db.insert(apiUsage).values({
-      userId: data.userId,
-      endpoint: data.endpoint,
-      tokensIn: data.tokensIn,
-      tokensOut: data.tokensOut,
-      costEstimate: data.costEstimate,
-      timestamp: data.timestamp ?? new Date().toISOString(),
-    }).returning().get();
+    return db
+      .insert(apiUsage)
+      .values({
+        userId: data.userId,
+        endpoint: data.endpoint,
+        tokensIn: data.tokensIn,
+        tokensOut: data.tokensOut,
+        costEstimate: data.costEstimate,
+        timestamp: data.timestamp ?? new Date().toISOString(),
+      })
+      .returning()
+      .get();
   }
 
   getApiUsageSummary(fromIso: string, toIso: string): ApiUsageSummary {
-    const rows = sqlite.prepare(`
+    const rows = sqlite
+      .prepare(
+        `
       SELECT
         substr(timestamp, 1, 10) AS date,
         COUNT(*) AS requests,
@@ -411,7 +544,9 @@ class SqliteStorage implements IStorage {
         AND timestamp < ?
       GROUP BY substr(timestamp, 1, 10)
       ORDER BY date DESC
-    `).all(fromIso, toIso) as Array<{
+    `,
+      )
+      .all(fromIso, toIso) as Array<{
       date: string;
       requests: number;
       tokensIn: number;
@@ -428,25 +563,30 @@ class SqliteStorage implements IStorage {
       costEstimate: Number(row.costEstimate),
     }));
 
-    return byDay.reduce<ApiUsageSummary>((summary, day) => ({
-      totalRequests: summary.totalRequests + day.requests,
-      tokensIn: summary.tokensIn + day.tokensIn,
-      tokensOut: summary.tokensOut + day.tokensOut,
-      totalTokens: summary.totalTokens + day.totalTokens,
-      costEstimate: summary.costEstimate + day.costEstimate,
-      byDay: summary.byDay,
-    }), {
-      totalRequests: 0,
-      tokensIn: 0,
-      tokensOut: 0,
-      totalTokens: 0,
-      costEstimate: 0,
-      byDay,
-    });
+    return byDay.reduce<ApiUsageSummary>(
+      (summary, day) => ({
+        totalRequests: summary.totalRequests + day.requests,
+        tokensIn: summary.tokensIn + day.tokensIn,
+        tokensOut: summary.tokensOut + day.tokensOut,
+        totalTokens: summary.totalTokens + day.totalTokens,
+        costEstimate: summary.costEstimate + day.costEstimate,
+        byDay: summary.byDay,
+      }),
+      {
+        totalRequests: 0,
+        tokensIn: 0,
+        tokensOut: 0,
+        totalTokens: 0,
+        costEstimate: 0,
+        byDay,
+      },
+    );
   }
 
   getNutritionAnalytics(userId: number, fromDate: string, toDate: string): NutritionAnalyticsSummary {
-    const rows = sqlite.prepare(`
+    const rows = sqlite
+      .prepare(
+        `
       SELECT
         days.date AS date,
         days.wake_time AS wakeTime,
@@ -470,7 +610,9 @@ class SqliteStorage implements IStorage {
         AND days.date <= ?
       GROUP BY days.id
       ORDER BY days.date ASC
-    `).all(userId, fromDate, toDate) as Array<{
+    `,
+      )
+      .all(userId, fromDate, toDate) as Array<{
       date: string;
       wakeTime: string | null;
       sleepTime: string | null;
@@ -488,7 +630,9 @@ class SqliteStorage implements IStorage {
       avgSatiety: number | null;
     }>;
 
-    const mealRows = sqlite.prepare(`
+    const mealRows = sqlite
+      .prepare(
+        `
       SELECT
         days.date AS date,
         meals.ts_start AS tsStart,
@@ -503,7 +647,9 @@ class SqliteStorage implements IStorage {
         AND days.date >= ?
         AND days.date <= ?
       ORDER BY days.date ASC, meals.ts_start ASC
-    `).all(userId, fromDate, toDate) as Array<{
+    `,
+      )
+      .all(userId, fromDate, toDate) as Array<{
       date: string;
       tsStart: string;
       mealType: string;
@@ -567,7 +713,10 @@ class SqliteStorage implements IStorage {
     });
 
     const sleepDebtSeries = computeSleepDebtSeries(baseDays);
-    const rollingCalories = computeRollingAverage(baseDays.map((d) => d.totalCalories), 7);
+    const rollingCalories = computeRollingAverage(
+      baseDays.map((d) => d.totalCalories),
+      7,
+    );
     const analyticsDays = baseDays.map((day, index) => ({
       ...day,
       sleepDebt: sleepDebtSeries.get(day.date) ?? null,
@@ -582,11 +731,7 @@ class SqliteStorage implements IStorage {
     const daysWithCalories = analyticsDays.filter((day) => day.totalCalories > 0);
     const daysWithSleep = analyticsDays.filter((day) => day.sleepDuration != null);
 
-    const insights = computePeriodInsights(
-      analyticsDays,
-      mealRows,
-      mealsByDate,
-    );
+    const insights = computePeriodInsights(analyticsDays, mealRows, mealsByDate);
 
     return {
       days: analyticsDays,
@@ -607,16 +752,26 @@ class SqliteStorage implements IStorage {
     };
   }
 
-  createRefreshToken(data: { token: string; userId: number; expiresAt: string; userAgent?: string | null; ip?: string | null }): RefreshToken {
-    return db.insert(refreshTokens).values({
-      token: data.token,
-      userId: data.userId,
-      expiresAt: data.expiresAt,
-      revoked: false,
-      createdAt: new Date().toISOString(),
-      userAgent: data.userAgent ?? null,
-      ip: data.ip ?? null,
-    }).returning().get();
+  createRefreshToken(data: {
+    token: string;
+    userId: number;
+    expiresAt: string;
+    userAgent?: string | null;
+    ip?: string | null;
+  }): RefreshToken {
+    return db
+      .insert(refreshTokens)
+      .values({
+        token: data.token,
+        userId: data.userId,
+        expiresAt: data.expiresAt,
+        revoked: false,
+        createdAt: new Date().toISOString(),
+        userAgent: data.userAgent ?? null,
+        ip: data.ip ?? null,
+      })
+      .returning()
+      .get();
   }
 
   getRefreshToken(token: string) {
@@ -641,13 +796,17 @@ class SqliteStorage implements IStorage {
   }
 
   createPasswordResetToken(data: { token: string; userId: number; expiresAt: string }): PasswordResetToken {
-    return db.insert(passwordResetTokens).values({
-      token: data.token,
-      userId: data.userId,
-      expiresAt: data.expiresAt,
-      used: false,
-      createdAt: new Date().toISOString(),
-    }).returning().get();
+    return db
+      .insert(passwordResetTokens)
+      .values({
+        token: data.token,
+        userId: data.userId,
+        expiresAt: data.expiresAt,
+        used: false,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
   }
 
   getPasswordResetToken(tokenHash: string) {
@@ -663,25 +822,44 @@ class SqliteStorage implements IStorage {
   }
 
   getSecret(userId: number, key: string) {
-    return db.select().from(secrets).where(and(eq(secrets.userId, userId), eq(secrets.key, key))).get();
+    return db
+      .select()
+      .from(secrets)
+      .where(and(eq(secrets.userId, userId), eq(secrets.key, key)))
+      .get();
   }
 
   setSecret(userId: number, key: string, encryptedValue: string, iv: string): Secret {
     // upsert
     const existing = this.getSecret(userId, key);
     if (existing) {
-      return db.update(secrets)
+      return db
+        .update(secrets)
         .set({ encryptedValue, iv, updatedAt: new Date().toISOString() })
         .where(eq(secrets.id, existing.id))
-        .returning().get();
+        .returning()
+        .get();
     }
-    return db.insert(secrets).values({
-      userId, key, encryptedValue, iv, updatedAt: new Date().toISOString(),
-    }).returning().get();
+    return db
+      .insert(secrets)
+      .values({
+        userId,
+        key,
+        encryptedValue,
+        iv,
+        updatedAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
   }
 
   listSecretKeys(userId: number): string[] {
-    return db.select({ key: secrets.key }).from(secrets).where(eq(secrets.userId, userId)).all().map(r => r.key);
+    return db
+      .select({ key: secrets.key })
+      .from(secrets)
+      .where(eq(secrets.userId, userId))
+      .all()
+      .map((r) => r.key);
   }
 
   getDayById(id: number) {
@@ -689,7 +867,30 @@ class SqliteStorage implements IStorage {
   }
 
   getDayByDate(userId: number, date: string) {
-    return db.select().from(days).where(and(eq(days.userId, userId), eq(days.date, date))).get();
+    return db
+      .select()
+      .from(days)
+      .where(and(eq(days.userId, userId), eq(days.date, date)))
+      .get();
+  }
+
+  getDaysInRange(userId: number, startDate: string, endDate: string): Day[] {
+    return sqlite
+      .prepare("SELECT * FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date ASC")
+      .all(userId, startDate, endDate)
+      .map((row: any) => ({
+        id: row.id,
+        userId: row.user_id,
+        date: row.date,
+        wakeTime: row.wake_time,
+        sleepTime: row.sleep_time,
+        wakeDate: row.wake_date,
+        sleepDate: row.sleep_date,
+        sportActivity: row.sport_activity,
+        steps: row.steps,
+        dayComment: row.day_comment,
+        summaryFilled: !!row.summary_filled,
+      })) as Day[];
   }
 
   getOrCreateDay(userId: number, date: string): Day {
@@ -699,7 +900,8 @@ class SqliteStorage implements IStorage {
   }
 
   updateDaySummary(dayId: number, summary: DaySummary): Day {
-    return db.update(days)
+    return db
+      .update(days)
       .set({
         wakeTime: summary.wakeTime || null,
         sleepTime: summary.sleepTime || null,
@@ -711,16 +913,25 @@ class SqliteStorage implements IStorage {
         summaryFilled: true,
       })
       .where(eq(days.id, dayId))
-      .returning().get();
+      .returning()
+      .get();
   }
 
   getMealsByDay(dayId: number): Meal[] {
-    return db.select().from(meals).where(eq(meals.dayId, dayId)).all()
+    return db
+      .select()
+      .from(meals)
+      .where(eq(meals.dayId, dayId))
+      .all()
       .sort((a, b) => a.tsStart.localeCompare(b.tsStart));
   }
 
   addMeal(data: InsertMeal): Meal {
-    return db.insert(meals).values({ ...data, createdAt: new Date().toISOString() }).returning().get();
+    return db
+      .insert(meals)
+      .values({ ...data, createdAt: new Date().toISOString() })
+      .returning()
+      .get();
   }
 
   updateMeal(id: number, data: Partial<InsertMeal>) {

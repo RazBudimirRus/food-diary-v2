@@ -9,7 +9,10 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name"),
-  role: text("role", { enum: ["user", "admin"] }).notNull().default("user"),
+  role: text("role", { enum: ["user", "admin"] })
+    .notNull()
+    .default("user"),
+  pdConsentAt: text("pd_consent_at"), // ISO timestamp when user consented (152-ФЗ)
   createdAt: text("created_at").notNull().default(""),
 });
 
@@ -19,10 +22,15 @@ export type User = typeof users.$inferSelect;
 export type UserRole = User["role"];
 
 export const registerSchema = z.object({
-  username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/, "Только буквы, цифры и _"),
+  username: z
+    .string()
+    .min(3)
+    .max(32)
+    .regex(/^[a-zA-Z0-9_]+$/, "Только буквы, цифры и _"),
   email: z.string().email(),
   password: z.string().min(8, "Минимум 8 символов"),
   displayName: z.string().min(1).max(64).optional(),
+  pdConsent: z.literal(true, { errorMap: () => ({ message: "Необходимо согласие на обработку персональных данных" }) }),
 });
 
 export const loginSchema = z.object({
@@ -88,7 +96,7 @@ export type Secret = typeof secrets.$inferSelect;
 export const days = sqliteTable("days", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull(),
-  date: text("date").notNull(),             // YYYY-MM-DD MSK
+  date: text("date").notNull(), // YYYY-MM-DD MSK
   wakeTime: text("wake_time"),
   sleepTime: text("sleep_time"),
   wakeDate: text("wake_date"),
@@ -104,10 +112,26 @@ export type InsertDay = z.infer<typeof insertDaySchema>;
 export type Day = typeof days.$inferSelect;
 
 export const daySummarySchema = z.object({
-  wakeTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
-  sleepTime: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
-  wakeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
-  sleepDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("")),
+  wakeTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional()
+    .or(z.literal("")),
+  sleepTime: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional()
+    .or(z.literal("")),
+  wakeDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
+  sleepDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .or(z.literal("")),
   sportActivity: z.string().optional(),
   steps: z.coerce.number().int().min(0).optional().or(z.literal("")),
   dayComment: z.string().optional(),
@@ -144,7 +168,11 @@ export type Meal = typeof meals.$inferSelect;
 
 export const addMealSchema = z.object({
   tsStart: z.string().regex(/^\d{2}:\d{2}$/, "Формат ЧЧ:ММ"),
-  tsEnd: z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal("")),
+  tsEnd: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .optional()
+    .or(z.literal("")),
   mealType: z.enum(["завтрак", "обед", "перекус", "ужин"]),
   foodText: z.string().optional(),
   drinkText: z.string().optional(),
@@ -153,7 +181,10 @@ export const addMealSchema = z.object({
   satietyAfter: z.coerce.number().int().min(0).max(10),
   contextNote: z.string().optional(),
   rawInput: z.string().optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   // КБЖУ (опционально, если уже посчитано)
   calories: z.coerce.number().min(0).optional(),
   protein: z.coerce.number().min(0).optional(),
@@ -192,3 +223,34 @@ export const apiUsage = sqliteTable("api_usage", {
 });
 
 export type ApiUsage = typeof apiUsage.$inferSelect;
+
+// ─── User Profiles (Фаза 17 — анкета пользователя) ────────────────────────────
+export const userProfiles = sqliteTable("user_profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().unique(),
+  gender: text("gender", { enum: ["male", "female", "unspecified"] }).default("unspecified"),
+  heightCm: real("height_cm"),
+  weightKg: real("weight_kg"),
+  activityLevel: text("activity_level", { enum: ["minimal", "medium", "high"] }).default("medium"),
+  targetKcal: real("target_kcal"),
+  targetProtein: real("target_protein"),
+  targetFat: real("target_fat"),
+  targetCarbs: real("target_carbs"),
+  onboardingSkipped: integer("onboarding_skipped", { mode: "boolean" }).default(false),
+  updatedAt: text("updated_at").notNull().default(""),
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+
+export const upsertUserProfileSchema = z.object({
+  gender: z.enum(["male", "female", "unspecified"]).optional(),
+  heightCm: z.coerce.number().min(100).max(250).optional().nullable(),
+  weightKg: z.coerce.number().min(30).max(300).optional().nullable(),
+  activityLevel: z.enum(["minimal", "medium", "high"]).optional(),
+  targetKcal: z.coerce.number().min(0).optional().nullable(),
+  targetProtein: z.coerce.number().min(0).optional().nullable(),
+  targetFat: z.coerce.number().min(0).optional().nullable(),
+  targetCarbs: z.coerce.number().min(0).optional().nullable(),
+  onboardingSkipped: z.boolean().optional(),
+});
+export type UpsertUserProfile = z.infer<typeof upsertUserProfileSchema>;

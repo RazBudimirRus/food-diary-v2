@@ -1,4 +1,4 @@
-import { lazy, Suspense, createContext, useContext } from "react";
+import { lazy, Suspense, createContext, useContext, useEffect, useState } from "react";
 import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,7 +9,11 @@ import { useTheme } from "@/hooks/useTheme";
 import DiaryPage from "@/pages/DiaryPage";
 import AuthPage from "@/pages/AuthPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
+import PrivacyPage from "@/pages/PrivacyPage";
 import NotFound from "@/pages/not-found";
+import { Footer } from "@/components/Footer";
+import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
+import { apiRequest } from "@/lib/queryClient";
 
 // ── Theme context ─────────────────────────────────────────────────────────────
 interface ThemeContextValue {
@@ -29,10 +33,10 @@ export const useAppTheme = () => useContext(ThemeContext);
 // ── Lazy pages ────────────────────────────────────────────────────────────────
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
+const AboutPage = lazy(() => import("@/pages/AboutPage"));
 
 // ── Page transition wrapper ───────────────────────────────────────────────────
 function PageFade({ children }: { children: React.ReactNode }) {
-  // Re-mounts with key change to re-trigger animation
   return (
     <div className="animate-fade-in" style={{ animation: "pageFadeIn 0.18s ease-out both" }}>
       {children}
@@ -71,18 +75,49 @@ function AdminRoute() {
   return <AdminPage />;
 }
 
+// ── Profile questionnaire hook ────────────────────────────────────────────────
+function useProfileOnboarding() {
+  const { user } = useAuth();
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  useEffect(() => {
+    if (!user || checked) return;
+    setChecked(true);
+    apiRequest("GET", "/api/user/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        const profile = data?.profile;
+        // Show if no profile yet OR onboarding was not skipped/completed
+        if (!profile || (!profile.onboardingSkipped && !profile.heightCm && !profile.weightKg)) {
+          setShowQuestionnaire(true);
+        }
+      })
+      .catch(() => {});
+  }, [user, checked]);
+
+  return { showQuestionnaire, closeQuestionnaire: () => setShowQuestionnaire(false) };
+}
+
 function AnimatedRoutes() {
   const [location] = useLocation();
+  const { showQuestionnaire, closeQuestionnaire } = useProfileOnboarding();
 
   return (
-    <PageFade key={location}>
-      <Switch>
-        <Route path="/" component={DiaryPage} />
-        <Route path="/analytics" component={AnalyticsPage} />
-        <Route path="/admin" component={AdminRoute} />
-        <Route component={NotFound} />
-      </Switch>
-    </PageFade>
+    <>
+      <ProfileQuestionnaire open={showQuestionnaire} onClose={closeQuestionnaire} />
+      <PageFade key={location}>
+        <Switch>
+          <Route path="/" component={DiaryPage} />
+          <Route path="/analytics" component={AnalyticsPage} />
+          <Route path="/admin" component={AdminRoute} />
+          <Route path="/about" component={AboutPage} />
+          <Route path="/privacy" component={PrivacyPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </PageFade>
+      <Footer />
+    </>
   );
 }
 
@@ -96,6 +131,7 @@ function Routes() {
       <Router hook={useHashLocation}>
         <Switch>
           <Route path="/reset-password" component={ResetPasswordPage} />
+          <Route path="/privacy" component={PrivacyPage} />
           <Route component={AuthPage} />
         </Switch>
       </Router>

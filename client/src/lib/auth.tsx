@@ -57,7 +57,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function register(username: string, email: string, password: string, displayName?: string) {
-    const r = await apiRequest("POST", "/api/auth/register", { username, email, password, displayName });
+    // pdConsent checkbox is validated in AuthPage before calling register
+    const r = await apiRequest("POST", "/api/auth/register", {
+      username,
+      email,
+      password,
+      displayName,
+      pdConsent: true,
+    });
     if (!r.ok) {
       const err = await r.json();
       throw new Error(err.error ?? "Ошибка регистрации");
@@ -71,7 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     rememberSession(null, null);
   }
 
-  return <Ctx.Provider value={{ user, accessToken: accessTokenState, loading, login, register, logout }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ user, accessToken: accessTokenState, loading, login, register, logout }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAuth() {

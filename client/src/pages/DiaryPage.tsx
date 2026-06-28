@@ -7,6 +7,8 @@ import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { TodayWidget } from "@/components/TodayWidget";
 import { BottomNav } from "@/components/BottomNav";
+import { Footer } from "@/components/Footer";
+import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -49,13 +51,29 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
-import { formatDateTimeRu, inferSleepDate, resolveSleepDate, resolveWakeDate, addDays } from "@shared/dates";
+import {
+  formatDateTimeRu,
+  inferSleepDate,
+  resolveSleepDate,
+  resolveWakeDate,
+  addDays,
+  getCalendarWeekRange,
+} from "@shared/dates";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(dateStr: string): string {
   const [y, m, d] = dateStr.split("-");
   return `${d}.${m}.${y}`;
+}
+
+const DAY_NAMES_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"] as const;
+
+/** Returns "Ср · 25.06" for a given YYYY-MM-DD string */
+function formatDateWithWeekday(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-");
+  const dayOfWeek = DAY_NAMES_SHORT[new Date(`${y}-${m}-${d}T12:00:00Z`).getUTCDay()];
+  return `${dayOfWeek} · ${d}.${m}`;
 }
 
 function mskToday(): string {
@@ -195,6 +213,14 @@ export default function DiaryPage() {
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
   const [editingOriginalDate, setEditingOriginalDate] = useState<string | null>(null);
 
+  // Report range dialog state (Phase 21)
+  const [showRangeDialog, setShowRangeDialog] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState<string>(mskToday());
+  const [rangeTo, setRangeTo] = useState<string>(mskToday());
+
+  // Profile questionnaire (Phase 17)
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+
   // КБЖУ analysis state
   const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
   const [kbjuLoading, setKbjuLoading] = useState(false);
@@ -244,6 +270,18 @@ export default function DiaryPage() {
   const day = data?.day;
   const meals = data?.meals ?? [];
   const isEditingMeal = editingMealId !== null;
+
+  // Fetch user profile to decide whether to show the onboarding questionnaire (Phase 17)
+  const { data: profileData } = useQuery<{ profile: any | null }>({
+    queryKey: ["/api/user/profile"],
+  });
+
+  useEffect(() => {
+    if (profileData === undefined) return;
+    const p = profileData?.profile;
+    const isEmpty = !p || (!p.onboardingSkipped && p.heightCm == null && p.weightKg == null);
+    if (isEmpty) setShowProfileDialog(true);
+  }, [profileData]);
 
   // Check if DeepSeek is available
   useEffect(() => {
@@ -442,6 +480,27 @@ export default function DiaryPage() {
     setKbjuResult(null);
   }
 
+  /** Phase 21: download multi-day range report */
+  async function downloadRangeReport(from: string, to: string) {
+    try {
+      const res = await apiRequest("GET", `/api/report/range?from=${from}&to=${to}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: "Ошибка", description: data.error || "Не удалось сформировать отчёт", variant: "destructive" });
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `Дневник_питания_${from}_${to}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "Файл загружен" });
+    } catch {
+      toast({ title: "Ошибка", description: "Нет соединения с сервером", variant: "destructive" });
+    }
+  }
+
   async function downloadReport(date: string, force = false) {
     const res = await apiRequest("GET", `/api/report/${date}${force ? "?force=1" : ""}`);
     if (res.status === 202) {
@@ -461,6 +520,34 @@ export default function DiaryPage() {
     a.click();
     URL.revokeObjectURL(a.href);
     toast({ title: "Файл загружен" });
+  }
+
+  /** Download a multi-day Excel report for [from, to] (Phase 21) */
+  async function downloadRangeReport(from: string, to: string) {
+    if (from > to) {
+      toast({ title: "Ошибка", description: "Дата начала позже даты окончания", variant: "destructive" });
+      return;
+    }
+    const res = await apiRequest("GET", `/api/report/range?from=${from}&to=${to}`);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}) as any);
+      toast({ title: "Ошибка", description: d.error || "Не удалось сформировать отчёт", variant: "destructive" });
+      return;
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `Дневник_питания_${from}_${to}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast({ title: "Файл загружен" });
+  }
+
+  /** Download report for the calendar week containing the active date */
+  function downloadWeekReport() {
+    const { from, to } = getCalendarWeekRange(activeDate);
+    const today = mskToday();
+    downloadRangeReport(from, to > today ? today : to);
   }
 
   // ── Summary totals ─────────────────────────────────────────────────────────
@@ -530,17 +617,35 @@ export default function DiaryPage() {
                   </a>
                 </Button>
               )}
-              {/* Download report — icon only on mobile */}
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-8 w-8 sm:w-auto sm:px-3"
-                onClick={() => downloadReport(activeDate)}
-                data-testid="btn-download-report"
-              >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline ml-1">Отчёт</span>
-              </Button>
+              {/* Download report dropdown — Phase 21 */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-8 w-8 sm:w-auto sm:px-3"
+                    data-testid="btn-download-report"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline ml-1">Отчёт</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => downloadReport(activeDate)}>
+                    За день ({formatDate(activeDate)})
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadWeekReport}>За текущую неделю</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setRangeFrom(activeDate);
+                      setRangeTo(activeDate);
+                      setShowRangeDialog(true);
+                    }}
+                  >
+                    За период…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <span className="text-xs text-muted-foreground hidden sm:block">
                 {user?.displayName || user?.username}
               </span>
@@ -615,8 +720,10 @@ export default function DiaryPage() {
               onClick={() => setActiveDate(mskToday())}
               data-testid="btn-date-label"
             >
-              {isToday ? "Сегодня" : formatDate(activeDate)}
-              {isToday && <span className="text-xs text-muted-foreground ml-1">({formatDate(activeDate)})</span>}
+              {isToday ? "Сегодня" : formatDateWithWeekday(activeDate)}
+              {isToday && (
+                <span className="text-xs text-muted-foreground ml-1">({formatDateWithWeekday(activeDate)})</span>
+              )}
             </button>
             <Button
               variant="ghost"
@@ -1112,6 +1219,9 @@ export default function DiaryPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Footer (UX-9 / legal) */}
+        <Footer />
       </main>
 
       {/* ── Day Summary Dialog ──────────────────────────────────────────────── */}
@@ -1257,6 +1367,41 @@ export default function DiaryPage() {
 
       {/* Bottom navigation (mobile only) */}
       <BottomNav isAdmin={user?.role === "admin"} currentPath={location} />
+
+      {/* ── Report range dialog (Phase 21) ──────────────────────────────────── */}
+      <Dialog open={showRangeDialog} onOpenChange={setShowRangeDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Отчёт за период</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">С</Label>
+              <Input type="date" value={rangeFrom} onChange={(e) => setRangeFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">По</Label>
+              <Input type="date" value={rangeTo} onChange={(e) => setRangeTo(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowRangeDialog(false)}>
+              Отмена
+            </Button>
+            <Button
+              onClick={() => {
+                setShowRangeDialog(false);
+                downloadRangeReport(rangeFrom, rangeTo);
+              }}
+            >
+              Скачать
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Profile questionnaire (Phase 17) ────────────────────────────────── */}
+      <ProfileQuestionnaire open={showProfileDialog} onClose={() => setShowProfileDialog(false)} />
 
       {/* PWA install prompt */}
       <PwaInstallBanner
