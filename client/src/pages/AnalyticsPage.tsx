@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useAppTheme } from "@/App";
+import { BottomNav } from "@/components/BottomNav";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -144,6 +146,7 @@ function InsightRow({ label, value }: { label: string; value: string }) {
 export default function AnalyticsPage() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useAppTheme();
+  const [location] = useLocation();
   const [periodType, setPeriodType] = useState<AnalyticsPeriodType>("month");
   const [anchorDate, setAnchorDate] = useState(mskToday());
   const range = useMemo(
@@ -224,7 +227,7 @@ export default function AnalyticsPage() {
             <span className="font-semibold text-base">Аналитика питания</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" asChild>
+            <Button size="sm" variant="outline" className="hidden sm:flex" asChild>
               <a href="#/">
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Дневник
@@ -247,7 +250,7 @@ export default function AnalyticsPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+      <main className="max-w-5xl mx-auto px-4 py-4 space-y-4 pb-24 sm:pb-4">
         <div className="flex flex-wrap items-center gap-2">
           {PERIODS.map((period) => (
             <Button
@@ -285,7 +288,7 @@ export default function AnalyticsPage() {
 
         {data && insights && (
           <>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs text-muted-foreground">Заполнено дней</div>
@@ -628,6 +631,8 @@ export default function AnalyticsPage() {
           </>
         )}
       </main>
+
+      <BottomNav isAdmin={user?.role === "admin"} currentPath={location} />
     </div>
   );
 }

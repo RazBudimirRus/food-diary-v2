@@ -77,3 +77,12 @@
 .dark .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ── Phase 14: touch-friendly slider thumbs ─────────────────────────────── */
+@media (max-width: 640px) {
+  [data-testid="slider-hunger"] [role="slider"],
+  [data-testid="slider-satiety"] [role="slider"] {
+    width: 24px !important;
+    height: 24px !important;
+  }
+}

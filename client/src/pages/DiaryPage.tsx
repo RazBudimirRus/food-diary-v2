@@ -1,9 +1,13 @@
 import { useCallback, useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useAppTheme } from "@/App";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useOnboardingTour } from "@/hooks/useOnboardingTour";
+import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { TodayWidget } from "@/components/TodayWidget";
+import { BottomNav } from "@/components/BottomNav";
+import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -16,9 +20,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Trash2, Download, Plus, ChevronLeft, ChevronRight, Clock, Pencil,
   Utensils, Droplets, Activity, Sun, Moon, Footprints, LogOut,
-  Calculator, Flame
+  Calculator, Flame, MoreVertical, BarChart3, Shield,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
@@ -146,6 +153,8 @@ function formFromMeal(meal: Meal, date: string): AddMealFormData {
 export default function DiaryPage() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useAppTheme();
+  const [location] = useLocation();
+  const pwa = usePwaInstall();
   const { toast } = useToast();
   const [activeDate, setActiveDate] = useState<string>(mskToday());
   const [showAddForm, setShowAddForm] = useState(false);
@@ -481,31 +490,66 @@ export default function DiaryPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" asChild data-testid="link-analytics">
-              <a href="#/analytics">Аналитика</a>
+          <div className="flex items-center gap-1.5">
+            {/* Desktop nav links (hidden on mobile — moved to BottomNav) */}
+            <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-analytics">
+              <a href="#/analytics">
+                <BarChart3 className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Аналитика</span>
+              </a>
             </Button>
             {user?.role === "admin" && (
-              <Button size="sm" variant="outline" asChild data-testid="link-admin">
-                <a href="#/admin">Админ</a>
+              <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-admin">
+                <a href="#/admin">
+                  <Shield className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Админ</span>
+                </a>
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={() => downloadReport(activeDate)} data-testid="btn-download-report">
-              <Download className="h-4 w-4 mr-1" />
-              Отчёт
+            {/* Download report — icon only on mobile */}
+            <Button size="icon" variant="outline" className="h-8 w-8 sm:w-auto sm:px-3" onClick={() => downloadReport(activeDate)} data-testid="btn-download-report">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Отчёт</span>
             </Button>
             <span className="text-xs text-muted-foreground hidden sm:block">{user?.displayName || user?.username}</span>
+            {/* Theme toggle */}
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleTheme} title={theme === "dark" ? "Светлая тема" : "Тёмная тема"} data-testid="btn-toggle-theme">
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти" data-testid="btn-logout">
+            {/* More menu on mobile: logout + analytics + admin */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-8 w-8 sm:hidden" aria-label="Меню">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <a href="#/analytics" className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" /> Аналитика
+                  </a>
+                </DropdownMenuItem>
+                {user?.role === "admin" && (
+                  <DropdownMenuItem asChild>
+                    <a href="#/admin" className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" /> Админ
+                    </a>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">
+                  <LogOut className="h-4 w-4" /> Выйти
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Logout button on desktop */}
+            <Button size="icon" variant="ghost" className="h-8 w-8 hidden sm:flex" onClick={logout} title="Выйти" data-testid="btn-logout">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+      <main className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24 sm:pb-4">
         {/* Today widget — only shown for today */}
         {isToday && (
           <TodayWidget
@@ -636,21 +680,21 @@ export default function DiaryPage() {
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost" size="icon"
-                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
                       onClick={() => openEditMealForm(meal)}
                       title="Редактировать"
                       data-testid={`btn-edit-meal-${meal.id}`}
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost" size="icon"
-                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
                       onClick={() => setDeleteConfirmId(meal.id)}
-                      title="Удалить"
+                      title="удалить"
                       data-testid={`btn-delete-meal-${meal.id}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -737,7 +781,7 @@ export default function DiaryPage() {
               </div>
 
               {/* Time + type row */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs" htmlFor="tsStart">Время начала</Label>
                   <Input
@@ -787,7 +831,7 @@ export default function DiaryPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs" htmlFor="drinkText">Что пил</Label>
                   <Input
@@ -888,9 +932,9 @@ export default function DiaryPage() {
                 />
               </div>
 
-              <div className="flex gap-2 pt-1">
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <Button
-                  className="flex-1"
+                  className="w-full sm:flex-1 h-11"
                   onClick={() => isEditingMeal && editingMealId && editingOriginalDate
                     ? updateMealMutation.mutate({ id: editingMealId, data: form, originalDate: editingOriginalDate })
                     : addMealMutation.mutate(form)
@@ -902,7 +946,7 @@ export default function DiaryPage() {
                     ? "Сохраняю..."
                     : isEditingMeal ? "Сохранить изменения" : "Сохранить"}
                 </Button>
-                <Button variant="outline" onClick={closeMealForm} data-testid="btn-cancel-meal">
+                <Button variant="outline" className="w-full sm:w-auto h-11" onClick={closeMealForm} data-testid="btn-cancel-meal">
                   Отмена
                 </Button>
               </div>
@@ -1013,6 +1057,18 @@ export default function DiaryPage() {
         active={tourActive}
         onNext={tourNext}
         onSkip={tourSkip}
+      />
+
+      {/* Bottom navigation (mobile only) */}
+      <BottomNav isAdmin={user?.role === "admin"} currentPath={location} />
+
+      {/* PWA install prompt */}
+      <PwaInstallBanner
+        show={pwa.showBanner}
+        isIos={pwa.isIosSafari}
+        canInstall={pwa.canInstall}
+        onInstall={pwa.install}
+        onDismiss={pwa.dismiss}
       />
     </div>
   );

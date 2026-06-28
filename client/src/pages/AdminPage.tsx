@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
+import { BottomNav } from "@/components/BottomNav";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,6 +92,7 @@ function AdminUserCell({
 
 export default function AdminPage() {
   const { user, logout } = useAuth();
+  const [location] = useLocation();
   const [resetResult, setResetResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
   const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
@@ -166,7 +169,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-4 space-y-4">
+      <main className="max-w-5xl mx-auto px-4 py-4 space-y-4 pb-24 sm:pb-4">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -398,6 +401,8 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </main>
+
+      <BottomNav isAdmin currentPath={location} />
     </div>
   );
 }
