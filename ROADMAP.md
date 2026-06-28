@@ -1784,6 +1784,68 @@ PHOTO_MAX_PER_USER=500
 - При клике — полноразмерное фото в модальном окне
 - На мобильном — возможность снять фото через камеру (input accept="image/\*" capture)
 
+## Фаза 25 — GigaChat как второй AI-анализатор КБЖУ
+
+> **Статус:** 📋 Запланировано
+> **Приоритет:** Высокий
+> **Сложность:** Средняя
+
+### Зачем
+
+DeepSeek — единственный AI-бэкенд для анализа КБЖУ. При недоступности API или исчерпании лимита пользователь теряет функционал. GigaChat от Сбера — российский LLM с собственным API, что снижает зависимость от иностранных сервисов и соответствует требованиям 152-ФЗ о локализации данных.
+
+### 25.1 Исследование GigaChat API
+
+- Изучить [документацию GigaChat API](https://developers.sber.ru/portal/products/gigachat) (Сбер Developer Portal)
+- Понять схему авторизации: OAuth 2.0 (`/oauth/token` с `client_credentials`), scope `GIGACHAT_API_PERS` или `GIGACHAT_API_B2B`
+- Разобраться с форматом запроса: REST `/chat/completions` (совместим с OpenAI Chat API)
+- Особенности: самоподписанный TLS-сертификат Сбера — нужен `NODE_EXTRA_CA_CERTS` или `rejectUnauthorized: false` (только для GigaChat endpoint)
+- Лимиты бесплатного плана и стоимость токенов
+- Получить `GIGACHAT_CLIENT_ID` и `GIGACHAT_CLIENT_SECRET` через кабинет разработчика
+
+### 25.2 Архитектура dual-AI
+
+```
+.env:
+  AI_PROVIDER=deepseek          # 'deepseek' | 'gigachat' | 'auto'
+  GIGACHAT_CLIENT_ID=...
+  GIGACHAT_CLIENT_SECRET=...
+  GIGACHAT_SCOPE=GIGACHAT_API_PERS
+```
+
+- Новый модуль `server/gigachat.ts` — клиент с авто-обновлением OAuth токена (TTL ~30 мин)
+- Абстракция `server/ai.ts` — единая функция `analyzeKBJU(text, profile)` которая роутит вызов в зависимости от `AI_PROVIDER`:
+  - `deepseek` — текущее поведение
+  - `gigachat` — новый клиент
+  - `auto` — пробует DeepSeek, при ошибке/лимите автоматически переключается на GigaChat
+- Все роуты `/api/analyze` используют `ai.ts`, не вызывают DeepSeek напрямую
+
+### 25.3 Промпт-адаптация
+
+- GigaChat лучше понимает русский язык нативно — убрать из промпта `Отвечай строго на русском`
+- Формат ответа тот же: JSON `{ calories, protein, fat, carbs }` — добавить в промпт явный пример
+- Проверить, поддерживает ли GigaChat `response_format: { type: "json_object" }` (как OpenAI) — если нет, парсить через regex fallback
+
+### 25.4 UI и Admin Panel
+
+- В AdminPage добавить блок «AI Provider»:
+  - Текущий активный провайдер
+  - Переключатель DeepSeek / GigaChat / Auto
+  - Статус доступности каждого провайдера (ping)
+- В логах usage — колонка `provider` (`deepseek` / `gigachat`) для отслеживания
+
+### 25.5 Конфигурация `.env.example`
+
+```bash
+# AI Provider
+AI_PROVIDER=auto                        # deepseek | gigachat | auto
+GIGACHAT_CLIENT_ID=<client_id>
+GIGACHAT_CLIENT_SECRET=<client_secret>
+GIGACHAT_SCOPE=GIGACHAT_API_PERS       # GIGACHAT_API_PERS | GIGACHAT_API_B2B
+```
+
+---
+
 ## Фаза 24 — Аудит-лог действий (Admin & Doctor Audit Log)
 
 > **Статус:** 📋 Запланировано
@@ -1898,6 +1960,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 | 22   | AI + FatSecret база продуктов          | Средний     | Высокая   | 📋 Запланировано               |
 | 23   | Фото питания в S3 (VK Object Storage)  | Средний     | Высокая   | ✅ Реализовано (v2.9.0)        |
 | 24   | Аудит-лог действий (Admin & Doctor)    | Высокий     | Средняя   | 📋 Запланировано               |
+| 25   | GigaChat (Сбер) — второй AI-помощник   | Средний     | Высокая   | 📋 Запланировано               |
 | UX-1 | Редактирование приёма пищи             | Высокий     | Низкая    | ✅ Реализовано в v1.6.0        |
 | UX-2 | Логин пользователя в админке           | Высокий     | Низкая    | ✅ Реализовано в v1.13.0       |
 | UX-3 | Перенос приёма между днями             | Высокий     | Средняя   | ✅ Реализовано в v1.13.0       |
