@@ -48,6 +48,7 @@ import {
   BarChart3,
   Shield,
   HelpCircle,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
@@ -646,6 +647,17 @@ export default function DiaryPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {/* Profile button + username — desktop only */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 hidden sm:flex"
+                onClick={() => setShowProfileDialog(true)}
+                title="Моя анкета"
+                data-testid="btn-open-profile"
+              >
+                <ClipboardList className="h-4 w-4" />
+              </Button>
               <span className="text-xs text-muted-foreground hidden sm:block">
                 {user?.displayName || user?.username}
               </span>
@@ -680,6 +692,9 @@ export default function DiaryPage() {
                       </a>
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem onClick={() => setShowProfileDialog(true)} className="flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4" /> Моя анкета
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={triggerTour} className="flex items-center gap-2">
                     <HelpCircle className="h-4 w-4" /> Показать подсказки
                   </DropdownMenuItem>
