@@ -1,6 +1,6 @@
 # Food Diary V2 — Caddy reverse proxy (Phase 6)
-# TLS: wildcard *.razbudimir.com — mount certs to /etc/ssl/razbudimir in container
-# DOMAIN env var (default: fooddiary.razbudimir.com) — see docker-compose.yml
+# TLS: wildcard cert — mount certs to /etc/ssl/razbudimir in container
+# DOMAIN must be set in .env — no hardcoded fallback (Caddy will fail fast if missing)
 
 {
 	# JSON access logs
@@ -10,7 +10,7 @@
 	}
 }
 
-{$DOMAIN:fooddiary.razbudimir.com} {
+{$DOMAIN} {
 	tls /etc/ssl/razbudimir/fullchain.pem /etc/ssl/razbudimir/privkey.pem
 
 	reverse_proxy api:5000

@@ -253,10 +253,15 @@ section "5" "Web Server Integration"
 # =============================================================================
 
 # Resolve DOMAIN for config generation (read from .env or use default)
-_DOMAIN="fooddiary.razbudimir.com"
+# Read DOMAIN from .env — no hardcoded fallback
+_DOMAIN=""
 if [[ -f "${DEPLOY_DIR}/.env" ]]; then
   _D=$(grep '^DOMAIN=' "${DEPLOY_DIR}/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
   [[ -n "$_D" ]] && _DOMAIN="$_D"
+fi
+if [[ -z "$_DOMAIN" ]]; then
+  fail "DOMAIN not set" "add DOMAIN=your-domain.example.com to ${DEPLOY_DIR}/.env before deploy"
+  _DOMAIN="__DOMAIN_NOT_SET__"  # sentinel so config output stays readable
 fi
 _PORT="${APP_PORT:-5000}"
 
@@ -568,9 +573,14 @@ else
   fail "docker-compose: caddy service missing" "add caddy service OR configure host nginx/apache as reverse proxy"
 fi
 
-DOMAIN_VAL="fooddiary.razbudimir.com"
+# Read DOMAIN from .env — no hardcoded fallback
+DOMAIN_VAL=""
 if [[ -f "$ENV_FILE" ]]; then
-  DOMAIN_VAL=$(grep '^DOMAIN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo "$DOMAIN_VAL")
+  DOMAIN_VAL=$(grep '^DOMAIN=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+fi
+if [[ -z "$DOMAIN_VAL" ]]; then
+  fail "DOMAIN not set in .env" "add DOMAIN=your-domain.example.com to $ENV_FILE"
+  DOMAIN_VAL="__DOMAIN_NOT_SET__"
 fi
 
 if getent hosts "$DOMAIN_VAL" &>/dev/null; then
