@@ -47,7 +47,10 @@ type Tab = "patients" | "diary";
 async function apiCall(path: string, opts?: RequestInit) {
   const method = (opts?.method ?? "GET") as string;
   const body = opts?.body as string | undefined;
-  return apiRequest(method, path, body ? JSON.parse(body) : undefined);
+  const res = await apiRequest(method, path, body ? JSON.parse(body) : undefined);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || res.statusText);
+  return json;
 }
 
 export default function DoctorPage() {

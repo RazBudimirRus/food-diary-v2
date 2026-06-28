@@ -16,6 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient as qc } from "@/lib/queryClient";
+
+async function api(method: string, path: string, body?: unknown) {
+  const res = await apiRequest(method, path, body);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || res.statusText);
+  return json;
+}
 import { useAuth } from "@/lib/auth";
 import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { BottomNav } from "@/components/BottomNav";
@@ -61,7 +68,7 @@ export default function ProfilePage() {
   // ── Fetch full me (with lastLoginAt) ─────────────────────────────────────
   const { data: me, isLoading: meLoading } = useQuery<MeResponse>({
     queryKey: ["/api/auth/me"],
-    queryFn: () => apiRequest("GET", "/api/auth/me"),
+    queryFn: () => api("GET", "/api/auth/me"),
   });
 
   // ── Display name form ─────────────────────────────────────────────────────
@@ -71,7 +78,7 @@ export default function ProfilePage() {
   }, [me?.displayName]);
 
   const saveName = useMutation({
-    mutationFn: () => apiRequest("PUT", "/api/profile", { displayName }),
+    mutationFn: () => api("PUT", "/api/profile", { displayName }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
       toast({ title: "Имя обновлено" });
@@ -82,7 +89,7 @@ export default function ProfilePage() {
   // ── Password reset ────────────────────────────────────────────────────────
   const [resetSent, setResetSent] = useState(false);
   const sendReset = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/auth/forgot-password", { email: me?.email }),
+    mutationFn: () => api("POST", "/api/auth/forgot-password", { email: me?.email }),
     onSuccess: () => {
       setResetSent(true);
       toast({ title: "Письмо отправлено", description: `Проверьте ${me?.email}` });
@@ -94,7 +101,7 @@ export default function ProfilePage() {
   const isDoctor = user?.role === "doctor" || user?.role === "admin";
   const { data: doctorData } = useQuery<{ doctor: Doctor | null }>({
     queryKey: ["/api/doctor/profile"],
-    queryFn: () => apiRequest("GET", "/api/doctor/profile"),
+    queryFn: () => api("GET", "/api/doctor/profile"),
     enabled: isDoctor,
   });
 
@@ -110,7 +117,7 @@ export default function ProfilePage() {
   }, [doctorData?.doctor]);
 
   const saveDoctor = useMutation({
-    mutationFn: () => apiRequest("PUT", "/api/doctor/profile", doctorForm),
+    mutationFn: () => api("PUT", "/api/doctor/profile", doctorForm),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/doctor/profile"] });
       toast({ title: "Профиль врача сохранён" });

@@ -601,15 +601,11 @@ class SqliteStorage implements IStorage {
   }
 
   searchUsers(q: string, limit = 10): User[] {
-    const lower = `%${q.toLowerCase()}%`;
-    return db
-      .select()
-      .from(users)
-      .where(
-        or(like(sql`lower(${users.username})`, lower), like(sql`lower(coalesce(${users.displayName}, ''))`, lower)),
-      )
-      .limit(limit)
-      .all();
+    const results = db.select().from(users).all();
+    const ql = q.toLowerCase();
+    return results
+      .filter((u) => u.username.toLowerCase().includes(ql) || (u.displayName?.toLowerCase().includes(ql) ?? false))
+      .slice(0, limit);
   }
 
   createUser(data: {
