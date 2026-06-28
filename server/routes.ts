@@ -791,8 +791,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (patientId === req.user!.id) return res.status(400).json({ error: "Нельзя добавить себя в качестве пациента" });
     const patient = storage.getUserById(patientId);
     if (!patient) return res.status(404).json({ error: "Пользователь не найден в системе" });
-    if (patient.role === "admin")
-      return res.status(400).json({ error: "Нельзя добавить администратора в качестве пациента" });
+    // admin может быть пациентом: врач читает только дневник, не управляет аккаунтом
     try {
       const dp = storage.assignPatient(doctor.id, patientId);
       res.json({ doctorPatient: dp });
