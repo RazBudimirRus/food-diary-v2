@@ -1,4 +1,4 @@
-import { lazy, Suspense, createContext, useContext, useEffect, useState } from "react";
+import { lazy, Suspense, createContext, useContext } from "react";
 import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -12,8 +12,6 @@ import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import PrivacyPage from "@/pages/PrivacyPage";
 import NotFound from "@/pages/not-found";
 import { Footer } from "@/components/Footer";
-import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
-import { apiRequest } from "@/lib/queryClient";
 
 // ── Theme context ─────────────────────────────────────────────────────────────
 interface ThemeContextValue {
@@ -75,37 +73,11 @@ function AdminRoute() {
   return <AdminPage />;
 }
 
-// ── Profile questionnaire hook ────────────────────────────────────────────────
-function useProfileOnboarding() {
-  const { user } = useAuth();
-  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => {
-    if (!user || checked) return;
-    setChecked(true);
-    apiRequest("GET", "/api/user/profile")
-      .then((r) => r.json())
-      .then((data) => {
-        const profile = data?.profile;
-        // Show if no profile yet OR onboarding was not skipped/completed
-        if (!profile || (!profile.onboardingSkipped && !profile.heightCm && !profile.weightKg)) {
-          setShowQuestionnaire(true);
-        }
-      })
-      .catch(() => {});
-  }, [user, checked]);
-
-  return { showQuestionnaire, closeQuestionnaire: () => setShowQuestionnaire(false) };
-}
-
 function AnimatedRoutes() {
   const [location] = useLocation();
-  const { showQuestionnaire, closeQuestionnaire } = useProfileOnboarding();
 
   return (
     <>
-      <ProfileQuestionnaire open={showQuestionnaire} onClose={closeQuestionnaire} />
       <PageFade key={location}>
         <Switch>
           <Route path="/" component={DiaryPage} />

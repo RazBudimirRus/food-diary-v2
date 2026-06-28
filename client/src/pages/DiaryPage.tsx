@@ -7,7 +7,6 @@ import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { TodayWidget } from "@/components/TodayWidget";
 import { BottomNav } from "@/components/BottomNav";
-import { Footer } from "@/components/Footer";
 import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -272,16 +271,16 @@ export default function DiaryPage() {
   const meals = data?.meals ?? [];
   const isEditingMeal = editingMealId !== null;
 
-  // Fetch user profile to decide whether to show the onboarding questionnaire (Phase 17)
+  // Auto-show profile questionnaire on first login (Phase 17)
   const { data: profileData } = useQuery<{ profile: any | null }>({
     queryKey: ["/api/user/profile"],
+    staleTime: Infinity, // fetch once per session
   });
-
   useEffect(() => {
     if (profileData === undefined) return;
     const p = profileData?.profile;
-    const isEmpty = !p || (!p.onboardingSkipped && p.heightCm == null && p.weightKg == null);
-    if (isEmpty) setShowProfileDialog(true);
+    const needsOnboarding = !p || (!p.onboardingSkipped && p.heightCm == null && p.weightKg == null);
+    if (needsOnboarding) setShowProfileDialog(true);
   }, [profileData]);
 
   // Check if DeepSeek is available
@@ -1234,9 +1233,6 @@ export default function DiaryPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* Footer (UX-9 / legal) */}
-        <Footer />
       </main>
 
       {/* ── Day Summary Dialog ──────────────────────────────────────────────── */}
