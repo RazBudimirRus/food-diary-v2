@@ -4,7 +4,7 @@
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Stethoscope, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock } from "lucide-react";
+import { Stethoscope, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
