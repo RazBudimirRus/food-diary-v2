@@ -134,6 +134,29 @@ Food Diary V2 — инструмент для ведения дневника п
 - Docker >= 24 + Docker Compose plugin
 - Минимум 1 GB RAM, 5 GB свободного диска
 
+---
+
+### ⚡ Быстрый старт — интерактивный установщик
+
+Самый простой способ установки — один скрипт, который ведёт тебя по шагам:
+
+```bash
+git clone https://github.com/RazBudimirRus/food-diary-v2.git /srv/foodbot
+cd /srv/foodbot
+sudo bash install.sh
+```
+
+Установщик автоматически:
+1. **Запускает preflight-check.sh** и показывает отчёт о готовности сервера
+2. **Спрашивает подтверждение** — ты явно отвечаешь что видел отчёт
+3. **Запрашивает домен** приложения и сразу прописывает его в `.env` (DOMAIN, PUBLIC_URL, ALLOWED_ORIGINS)
+4. **Генерирует секреты** (JWT_SECRET, ENCRYPTION_KEY) если не заданы
+5. **Запускает** `docker compose up -d --build` и проверяет что API ответил
+
+Если хочешь установить вручную — продолжай с Шага 0 ниже.
+
+---
+
 ### Шаг 0. Проверка готовности сервера
 
 Перед установкой обязательно запустите скрипт проверки:
@@ -143,7 +166,7 @@ wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food
 sudo bash preflight-check.sh
 ```
 
-Скрипт проверяет 11 параметров (OS, RAM, диск, сеть, Docker, порты, firewall, переменные окружения, API health) и выводит цветной отчёт. При наличии типовых проблем запустите с флагом `--fix`:
+Скрипт проверяет 13 параметров (OS, RAM, диск, сеть, Docker, порты, nginx/apache интеграция, firewall, .env, API health) и выводит цветной отчёт с готовыми конфигами для интеграции с существующим nginx/apache. При наличии типовых проблем запустите с флагом `--fix`:
 
 ```bash
 sudo bash preflight-check.sh --fix
@@ -305,6 +328,7 @@ food-diary-v2/
 ├── docker-compose.yml           # Один сервис: api
 ├── Dockerfile.api               # Node.js контейнер
 ├── Caddyfile                    # Конфиг reverse proxy
+├── install.sh                    # Интерактивный установщик (preflight → домен → .env → запуск)
 ├── preflight-check.sh           # Скрипт проверки сервера перед установкой
 ├── DEPLOY.md                    # Детальный гайд по деплою (RU)
 └── .env.example                 # Шаблон переменных окружения
@@ -433,6 +457,29 @@ Generated in the doctor's agreed format:
 - Docker >= 24 + Docker Compose plugin
 - At least 1 GB RAM, 5 GB free disk
 
+---
+
+### ⚡ Quick Start — interactive installer
+
+The easiest way to install — one script that guides you through each step:
+
+```bash
+git clone https://github.com/RazBudimirRus/food-diary-v2.git /srv/foodbot
+cd /srv/foodbot
+sudo bash install.sh
+```
+
+The installer automatically:
+1. **Runs preflight-check.sh** and shows the server readiness report
+2. **Asks for confirmation** — you explicitly acknowledge you've read the report
+3. **Asks for your domain** and writes it into `.env` (DOMAIN, PUBLIC_URL, ALLOWED_ORIGINS)
+4. **Generates secrets** (JWT_SECRET, ENCRYPTION_KEY) if not already set
+5. **Runs** `docker compose up -d --build` and verifies the API responds
+
+To install manually instead — follow Step 0 below.
+
+---
+
 ### Step 0. Server readiness check
 
 Run the preflight script before installing:
@@ -442,7 +489,7 @@ wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food
 sudo bash preflight-check.sh
 ```
 
-The script checks 11 parameters (OS, RAM, disk, network, Docker, ports, firewall, environment variables, API health) and outputs a color-coded report. For automatic fixing of common issues:
+The script checks 13 parameters (OS, RAM, disk, network, Docker, ports, nginx/apache integration, firewall, .env, API health) and outputs a color-coded report with ready-to-use nginx/apache vhost configs. For automatic fixing of common issues:
 
 ```bash
 sudo bash preflight-check.sh --fix
