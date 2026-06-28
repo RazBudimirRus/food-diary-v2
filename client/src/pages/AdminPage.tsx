@@ -435,7 +435,11 @@ export default function AdminPage() {
         </Card>
       </main>
 
-      <BottomNav isAdmin currentPath={location} />
+      <BottomNav
+        isAdmin={user?.role === "admin"}
+        isDoctor={user?.role === "doctor" || user?.role === "admin"}
+        currentPath={location}
+      />
     </div>
   );
 }

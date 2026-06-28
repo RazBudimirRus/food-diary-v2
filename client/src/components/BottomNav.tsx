@@ -3,12 +3,12 @@
  * Shown only on sm breakpoint and below (hidden sm:flex → actually flex sm:hidden).
  * Receives `isAdmin` and `currentPath` to highlight active tab.
  */
-import { Utensils, BarChart3, Shield, Info, Stethoscope } from "lucide-react";
+import { Utensils, BarChart3, Shield, Info, Stethoscope, UserCircle } from "lucide-react";
 
 interface BottomNavProps {
   isAdmin: boolean;
   isDoctor?: boolean;
-  currentPath: "/" | "/analytics" | "/admin" | "/about" | "/doctor" | string;
+  currentPath: "/" | "/analytics" | "/admin" | "/about" | "/doctor" | "/profile" | string;
 }
 
 interface NavItemProps {
@@ -70,6 +70,12 @@ export function BottomNav({ isAdmin, isDoctor, currentPath }: BottomNavProps) {
         />
       )}
       <NavItem icon={<Info className="h-5 w-5" />} label="О нас" href="#/about" active={currentPath === "/about"} />
+      <NavItem
+        icon={<UserCircle className="h-5 w-5" />}
+        label="Профиль"
+        href="#/profile"
+        active={currentPath === "/profile"}
+      />
     </nav>
   );
 }

@@ -33,6 +33,7 @@ const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const DoctorPage = lazy(() => import("@/pages/DoctorPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const AboutPage = lazy(() => import("@/pages/AboutPage"));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
 
 // ── Page transition wrapper ───────────────────────────────────────────────────
 function PageFade({ children }: { children: React.ReactNode }) {
@@ -78,8 +79,16 @@ function DoctorRoute() {
   const { user } = useAuth();
   if (user?.role !== "doctor" && user?.role !== "admin") {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <p className="text-muted-foreground text-sm">Кабинет врача доступен только пользователям с ролью doctor.</p>
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-sm rounded-lg border bg-card p-6 text-center shadow-sm">
+          <h1 className="text-lg font-semibold">Доступ запрещён</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Кабинет врача доступен только пользователям с ролью doctor.
+          </p>
+          <a href="#/" className="mt-4 inline-block text-sm text-primary underline">
+            Вернуться в дневник
+          </a>
+        </div>
       </div>
     );
   }
@@ -102,6 +111,7 @@ function AnimatedRoutes() {
           <Route path="/admin" component={AdminRoute} />
           <Route path="/doctor" component={DoctorRoute} />
           <Route path="/about" component={AboutPage} />
+          <Route path="/profile" component={ProfilePage} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route component={NotFound} />
         </Switch>

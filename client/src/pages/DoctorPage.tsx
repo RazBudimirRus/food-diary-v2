@@ -4,14 +4,17 @@
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Stethoscope, Users, BookOpen, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock, Save } from "lucide-react";
+import { Stethoscope, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
+import { BottomNav } from "@/components/BottomNav";
+import { useLocation } from "wouter";
 
 interface Meal {
   id: number;
@@ -39,53 +42,25 @@ interface Doctor {
   telegramUrl?: string;
 }
 
-type Tab = "patients" | "diary" | "profile";
+type Tab = "patients" | "diary";
 
-function apiCall(path: string, opts?: RequestInit) {
-  return fetch(path, {
-    ...opts,
-    headers: { "Content-Type": "application/json", ...(opts?.headers ?? {}) },
-  }).then(async (r) => {
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || r.statusText);
-    return j;
-  });
+async function apiCall(path: string, opts?: RequestInit) {
+  const method = (opts?.method ?? "GET") as string;
+  const body = opts?.body as string | undefined;
+  return apiRequest(method, path, body ? JSON.parse(body) : undefined);
 }
 
 export default function DoctorPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [location] = useLocation();
 
   const [tab, setTab] = useState<Tab>("patients");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [diaryDate, setDiaryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notifyTitle, setNotifyTitle] = useState("");
   const [notifyBody, setNotifyBody] = useState("");
-
-  // ── Profile form ──────────────────────────────────────────────────────────
-  const [profileForm, setProfileForm] = useState({ fullName: "", phone: "", telegramUrl: "" });
-
-  const { data: doctorData } = useQuery<{ doctor: Doctor | null }>({
-    queryKey: ["/api/doctor/profile"],
-    onSuccess: (d) => {
-      if (d.doctor) {
-        setProfileForm({
-          fullName: d.doctor.fullName,
-          phone: d.doctor.phone ?? "",
-          telegramUrl: d.doctor.telegramUrl ?? "",
-        });
-      }
-    },
-  });
-
-  const saveProfile = useMutation({
-    mutationFn: () => apiCall("/api/doctor/profile", { method: "PUT", body: JSON.stringify(profileForm) }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/doctor/profile"] });
-      toast({ title: "Профиль сохранён" });
-    },
-    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
-  });
 
   // ── Patients ──────────────────────────────────────────────────────────────
   const { data: patientsData, isLoading: patientsLoading } = useQuery<{ patients: Patient[] }>({
@@ -162,19 +137,35 @@ export default function DoctorPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-card/90 backdrop-blur">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
-          <Stethoscope className="h-5 w-5 text-primary" />
-          <h1 className="font-semibold text-base">Кабинет врача</h1>
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <a
+              href="#/"
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="text-sm hidden sm:inline">Дневник</span>
+            </a>
+            <span className="text-muted-foreground/40 hidden sm:inline">|</span>
+            <Stethoscope className="h-4 w-4 text-primary" />
+            <h1 className="font-semibold text-base">Кабинет врача</h1>
+          </div>
+          <a
+            href="#/profile"
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+          >
+            Профиль врача
+          </a>
         </div>
       </header>
 
       {/* Tabs */}
       <div className="max-w-2xl mx-auto px-4 pt-4">
         <div className="flex gap-1 mb-4 border rounded-lg p-1 bg-muted/40">
-          {(["patients", "diary", "profile"] as Tab[]).map((t) => (
+          {(["patients", "diary"] as Tab[]).map((t) => (
             <button
               key={t}
               className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
@@ -182,7 +173,7 @@ export default function DoctorPage() {
               }`}
               onClick={() => setTab(t)}
             >
-              {t === "patients" ? "Пациенты" : t === "diary" ? "Дневник" : "Профиль"}
+              {t === "patients" ? "Пациенты" : "Дневник"}
             </button>
           ))}
         </div>
@@ -373,51 +364,13 @@ export default function DoctorPage() {
             )}
           </div>
         )}
-
-        {/* ── Profile tab ── */}
-        {tab === "profile" && (
-          <Card>
-            <CardContent className="px-4 py-3 space-y-3">
-              <p className="text-sm font-medium">Профиль врача</p>
-              <div className="space-y-1">
-                <Label className="text-xs">ФИО *</Label>
-                <Input
-                  value={profileForm.fullName}
-                  onChange={(e) => setProfileForm((f) => ({ ...f, fullName: e.target.value }))}
-                  placeholder="Иванов Иван Иванович"
-                  className="h-9 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Телефон</Label>
-                <Input
-                  value={profileForm.phone}
-                  onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))}
-                  placeholder="+7 (900) 000-00-00"
-                  className="h-9 text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Telegram</Label>
-                <Input
-                  value={profileForm.telegramUrl}
-                  onChange={(e) => setProfileForm((f) => ({ ...f, telegramUrl: e.target.value }))}
-                  placeholder="https://t.me/username"
-                  className="h-9 text-sm"
-                />
-              </div>
-              <Button
-                className="w-full"
-                disabled={!profileForm.fullName || saveProfile.isPending}
-                onClick={() => saveProfile.mutate()}
-              >
-                <Save className="h-4 w-4 mr-2" />
-                {saveProfile.isPending ? "Сохранение..." : "Сохранить профиль"}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
       </div>
+
+      <BottomNav
+        isAdmin={user?.role === "admin"}
+        isDoctor={user?.role === "doctor" || user?.role === "admin"}
+        currentPath={location}
+      />
     </div>
   );
 }

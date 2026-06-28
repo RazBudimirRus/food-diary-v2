@@ -14,6 +14,7 @@ export const users = sqliteTable("users", {
     .default("user"),
   pdConsentAt: text("pd_consent_at"), // ISO timestamp when user consented (152-ФЗ)
   createdAt: text("created_at").notNull().default(""),
+  lastLoginAt: text("last_login_at"),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, passwordHash: true });

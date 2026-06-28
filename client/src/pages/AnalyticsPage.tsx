@@ -812,7 +812,11 @@ export default function AnalyticsPage() {
         )}
       </main>
 
-      <BottomNav isAdmin={user?.role === "admin"} currentPath={location} />
+      <BottomNav
+        isAdmin={user?.role === "admin"}
+        isDoctor={user?.role === "doctor" || user?.role === "admin"}
+        currentPath={location}
+      />
     </div>
   );
 }

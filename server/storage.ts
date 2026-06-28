@@ -330,6 +330,13 @@ try {
   // уже есть
 }
 
+// Миграция: last_login_at в users
+try {
+  sqlite.exec("ALTER TABLE users ADD COLUMN last_login_at TEXT");
+} catch {
+  // уже есть
+}
+
 // Миграция: role 'doctor' support — update users CHECK via no-op (SQLite не перепроверяет)
 // existing rows with role='user'/'admin' не затронуты
 
@@ -407,6 +414,8 @@ export interface IStorage {
   }): User;
   bootstrapAdminByUsername(username: string): User | undefined;
   updateUserPassword(userId: number, passwordHash: string): User | undefined;
+  updateUserProfile(userId: number, data: { displayName?: string }): User | undefined;
+  setLastLogin(userId: number): void;
   deleteUser(userId: number): void;
   getUserAllData(userId: number): { user: User | undefined; days: Day[]; meals: Meal[]; apiUsage: ApiUsage[] };
   getUserProfile(userId: number): UserProfile | undefined;
@@ -682,6 +691,17 @@ class SqliteStorage implements IStorage {
 
   updateUserPassword(userId: number, passwordHash: string): User | undefined {
     return db.update(users).set({ passwordHash }).where(eq(users.id, userId)).returning().get();
+  }
+
+  updateUserProfile(userId: number, data: { displayName?: string }): User | undefined {
+    const updates: Partial<typeof users.$inferInsert> = {};
+    if (data.displayName !== undefined) updates.displayName = data.displayName;
+    if (Object.keys(updates).length === 0) return this.getUserById(userId);
+    return db.update(users).set(updates).where(eq(users.id, userId)).returning().get();
+  }
+
+  setLastLogin(userId: number): void {
+    db.update(users).set({ lastLoginAt: new Date().toISOString() }).where(eq(users.id, userId)).run();
   }
 
   listUsers(): User[] {

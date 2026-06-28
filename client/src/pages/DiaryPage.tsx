@@ -54,6 +54,7 @@ import {
   Camera,
   Star,
   Stethoscope,
+  UserCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
@@ -663,6 +664,12 @@ export default function DiaryPage() {
                   </a>
                 </Button>
               )}
+              <Button size="sm" variant="outline" className="hidden sm:flex" asChild>
+                <a href="#/profile">
+                  <UserCircle className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Профиль</span>
+                </a>
+              </Button>
               {/* Download report dropdown — Phase 21 */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

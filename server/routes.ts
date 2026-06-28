@@ -115,9 +115,19 @@ export function registerRoutes(httpServer: Server, app: Express) {
     username: string;
     email: string;
     displayName?: string | null;
-    role: "user" | "admin";
+    role: string;
+    createdAt?: string;
+    lastLoginAt?: string | null;
   }) {
-    return { id: user.id, username: user.username, email: user.email, displayName: user.displayName, role: user.role };
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt,
+    };
   }
 
   function paramValue(value: string | string[] | undefined): string {
@@ -224,6 +234,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Неверный логин или пароль" });
 
+    storage.setLastLogin(user.id);
     res.json(issueSession(req, res, user));
   });
 
@@ -265,6 +276,17 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.get("/api/auth/me", requireAuth, (req: AuthRequest, res) => {
     const u = req.user!;
     res.json(publicUser(u));
+  });
+
+  /** PUT /api/profile — update displayName */
+  app.put("/api/profile", requireAuth, (req: AuthRequest, res) => {
+    const { displayName } = req.body;
+    if (displayName !== undefined && (typeof displayName !== "string" || displayName.length > 64)) {
+      return res.status(400).json({ error: "Некорректное имя" });
+    }
+    const updated = storage.updateUserProfile(req.user!.id, { displayName });
+    if (!updated) return res.status(404).json({ error: "Пользователь не найден" });
+    res.json(publicUser(updated));
   });
 
   /** POST /api/auth/forgot-password */
