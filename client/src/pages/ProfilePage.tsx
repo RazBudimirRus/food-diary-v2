@@ -98,7 +98,7 @@ export default function ProfilePage() {
   });
 
   // ── Doctor profile ────────────────────────────────────────────────────────
-  const isDoctor = user?.role === "doctor" || user?.role === "admin";
+  const isDoctor = user?.role === "doctor";
   const { data: doctorData } = useQuery<{ doctor: Doctor | null }>({
     queryKey: ["/api/doctor/profile"],
     queryFn: () => api("GET", "/api/doctor/profile"),
