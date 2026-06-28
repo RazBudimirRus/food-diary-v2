@@ -9,7 +9,7 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name"),
-  role: text("role", { enum: ["user", "admin"] })
+  role: text("role", { enum: ["user", "doctor", "admin"] })
     .notNull()
     .default("user"),
   pdConsentAt: text("pd_consent_at"), // ISO timestamp when user consented (152-ФЗ)
