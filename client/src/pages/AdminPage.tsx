@@ -137,21 +137,20 @@ export default function AdminPage() {
     },
   });
 
+  const setRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/set-role`, { role });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+    },
+  });
+
   function revokeAllUserSessions(userId: number, username: string) {
     if (!window.confirm(`Отозвать все refresh-сессии пользователя ${username}?`)) return;
     revokeUserSessionsMutation.mutate(userId);
-  }
-
-  async function setUserRole(userId: number, username: string, currentRole: string) {
-    const roles = ["user", "doctor", "admin"];
-    const next = roles[(roles.indexOf(currentRole) + 1) % roles.length];
-    if (!window.confirm(`Сменить роль ${username}: ${currentRole} → ${next}?`)) return;
-    await fetch(`/api/admin/users/${userId}/set-role`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: next }),
-    });
-    window.location.reload();
   }
 
   function resetUserPassword(userId: number, username: string) {
@@ -324,13 +323,22 @@ export default function AdminPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        <button
-                          className="text-xs underline text-muted-foreground hover:text-foreground"
-                          onClick={() => setUserRole(adminUser.id, adminUser.username, adminUser.role)}
-                          title="Клик — сменить роль"
+                        <select
+                          className="text-xs rounded border border-input bg-background px-2 py-1 cursor-pointer
+                                     focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                          value={adminUser.role}
+                          disabled={setRoleMutation.isPending}
+                          onChange={(e) => {
+                            const newRole = e.target.value;
+                            if (newRole !== adminUser.role) {
+                              setRoleMutation.mutate({ userId: adminUser.id, role: newRole });
+                            }
+                          }}
                         >
-                          {adminUser.role}
-                        </button>
+                          <option value="user">user</option>
+                          <option value="doctor">doctor</option>
+                          <option value="admin">admin</option>
+                        </select>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
