@@ -136,15 +136,47 @@ else
   fail "DNS resolution failed" "getent hosts github.com"
 fi
 
-# Ports
-for port_entry in "$APP_PORT:App API" "$CADDY_HTTP_PORT:HTTP (Caddy)" "$CADDY_HTTPS_PORT:HTTPS (Caddy)"; do
+# ── Port checks ──────────────────────────────────────────────────────────────
+# Detect whether a host web server is running and already proxying to us.
+# If nginx/apache handles 80/443 and proxy_passes to APP_PORT — that is OK:
+# it means the integration mode is in use (no Caddy needed).
+HOST_WEB_SERVER=""   # will be set to "nginx" or "apache2" if found running
+HOST_WEB_PROXYING=0  # 1 if the web server already routes to APP_PORT
+
+for svc in nginx apache2; do
+  if systemctl is-active --quiet "$svc" 2>/dev/null; then
+    HOST_WEB_SERVER="$svc"
+    break
+  fi
+done
+
+# Check if the running web server has a proxy_pass / ProxyPass to our APP_PORT
+if [[ -n "$HOST_WEB_SERVER" ]]; then
+  if grep -rqE "proxy_pass[[:space:]]+http://localhost:${APP_PORT}|proxy_pass[[:space:]]+http://127\.0\.0\.1:${APP_PORT}|ProxyPass[[:space:]]+[^[:space:]]+[[:space:]]+http://localhost:${APP_PORT}|ProxyPass[[:space:]]+[^[:space:]]+[[:space:]]+http://127\.0\.0\.1:${APP_PORT}" \
+       /etc/nginx /etc/apache2 2>/dev/null; then
+    HOST_WEB_PROXYING=1
+  fi
+fi
+
+# APP_PORT — should NOT be published on host when using Caddy.
+# But if using nginx/apache integration, it just needs to be free for Docker internal use.
+if ss -tlnp 2>/dev/null | grep -q ":${APP_PORT} "; then
+  PROC=$(ss -tlnp 2>/dev/null | grep ":${APP_PORT} " | awk '{print $NF}' | head -1)
+  warn "Port $APP_PORT (App API): in use on host" "$PROC — API should only be accessible inside Docker network"
+else
+  ok "Port $APP_PORT (App API): free" "will be used internally by Docker"
+fi
+
+# Ports 80 and 443 — only warn if in use AND not by a web server we can integrate with
+for port_entry in "$CADDY_HTTP_PORT:HTTP" "$CADDY_HTTPS_PORT:HTTPS"; do
   port="${port_entry%%:*}"; label="${port_entry##*:}"
   if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
     PROC=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1)
-    if [[ $port -eq $APP_PORT ]]; then
-      warn "Port $port ($label): IN USE on host" "$PROC — Phase 6: API should be internal (no host publish)"
+    if [[ -n "$HOST_WEB_SERVER" ]]; then
+      # nginx or apache is running — this is integration mode, not a conflict
+      ok "Port $port ($label): in use by $HOST_WEB_SERVER" "integration mode — Caddy not needed (see section [5])"
     else
-      warn "Port $port ($label): in use" "$PROC — Caddy container won't bind"
+      warn "Port $port ($label): in use" "$PROC — if using Caddy container, it won't bind this port"
     fi
   else
     ok "Port $port ($label): free"
@@ -214,19 +246,124 @@ if [[ -n "${SUDO_USER:-}" ]]; then
 fi
 
 # =============================================================================
-section "5" "Web Server Conflicts"
+section "5" "Web Server Integration"
+# =============================================================================
+# Strategy: if nginx or apache2 is running, we INTEGRATE (add a new vhost)
+# rather than removing the existing server. Multiple apps share 443 via SNI.
 # =============================================================================
 
-for svc in nginx apache2; do
-  if systemctl is-active --quiet "$svc" 2>/dev/null; then
-    warn "Host $svc: running" "will conflict on port 80 — disable before install"
-    info "Fix: sudo systemctl stop $svc && sudo systemctl disable $svc"
-  elif command -v "$svc" &>/dev/null; then
-    ok "Host $svc: installed but stopped" "no conflict"
+# Resolve DOMAIN for config generation (read from .env or use default)
+_DOMAIN="fooddiary.razbudimir.com"
+if [[ -f "${DEPLOY_DIR}/.env" ]]; then
+  _D=$(grep '^DOMAIN=' "${DEPLOY_DIR}/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)
+  [[ -n "$_D" ]] && _DOMAIN="$_D"
+fi
+_PORT="${APP_PORT:-5000}"
+
+_nginx_conf() {
+  echo "server {"
+  echo "    listen 80;"
+  echo "    server_name ${_DOMAIN};"
+  echo "    return 301 https://\$host\$request_uri;"
+  echo "}"
+  echo ""
+  echo "server {"
+  echo "    listen 443 ssl;"
+  echo "    server_name ${_DOMAIN};"
+  echo ""
+  echo "    ssl_certificate     /path/to/fullchain.pem;  # <- замени на реальный путь"
+  echo "    ssl_certificate_key /path/to/privkey.pem;    # <- замени на реальный путь"
+  echo ""
+  echo "    ssl_protocols       TLSv1.2 TLSv1.3;"
+  echo "    ssl_ciphers         HIGH:!aNULL:!MD5;"
+  echo ""
+  echo "    add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;"
+  echo ""
+  echo "    location / {"
+  echo "        proxy_pass         http://127.0.0.1:${_PORT};"
+  echo "        proxy_http_version 1.1;"
+  echo "        proxy_set_header   Upgrade \$http_upgrade;"
+  echo "        proxy_set_header   Connection keep-alive;"
+  echo "        proxy_set_header   Host \$host;"
+  echo "        proxy_set_header   X-Real-IP \$remote_addr;"
+  echo "        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;"
+  echo "        proxy_set_header   X-Forwarded-Proto \$scheme;"
+  echo "        proxy_cache_bypass \$http_upgrade;"
+  echo "    }"
+  echo "}"
+}
+
+_apache_conf() {
+  echo "<VirtualHost *:80>"
+  echo "    ServerName ${_DOMAIN}"
+  echo "    Redirect permanent / https://${_DOMAIN}/"
+  echo "</VirtualHost>"
+  echo ""
+  echo "<VirtualHost *:443>"
+  echo "    ServerName ${_DOMAIN}"
+  echo ""
+  echo "    SSLEngine on"
+  echo "    SSLCertificateFile    /path/to/fullchain.pem  # <- замени на реальный путь"
+  echo "    SSLCertificateKeyFile /path/to/privkey.pem    # <- замени на реальный путь"
+  echo ""
+  echo "    ProxyPreserveHost On"
+  echo "    ProxyPass        / http://127.0.0.1:${_PORT}/"
+  echo "    ProxyPassReverse / http://127.0.0.1:${_PORT}/"
+  echo ""
+  echo "    Header always set Strict-Transport-Security \"max-age=31536000; includeSubDomains\""
+  echo "</VirtualHost>"
+}
+
+if systemctl is-active --quiet nginx 2>/dev/null; then
+  ok  "Host nginx: running" "integration mode — add new vhost, do NOT stop nginx"
+  if [[ $HOST_WEB_PROXYING -eq 1 ]]; then
+    ok  "  nginx already proxies to :${_PORT}" "vhost config found — looks good"
   else
-    ok "Host $svc: not installed" "no conflict (Caddy runs in Docker)"
+    warn "  nginx vhost for ${_DOMAIN} not found" "create /etc/nginx/sites-available/fooddiary.conf"
+    _raw ""
+    _raw "  ${Y}┌── Готовый nginx-конфиг ──────────────────────────────────────────────${RST}"
+    while IFS= read -r line; do
+      _raw "  ${DIM}│ ${line}${RST}"
+    done < <(_nginx_conf)
+    _raw "  ${Y}└── Команды для активации ──────────────────────────────────────────────${RST}"
+    info "sudo nano /etc/nginx/sites-available/fooddiary.conf  # вставь конфиг выше"
+    info "sudo ln -s /etc/nginx/sites-available/fooddiary.conf /etc/nginx/sites-enabled/"
+    info "sudo nginx -t && sudo systemctl reload nginx"
+    _raw ""
+    info "В docker-compose.yml: убери сервис caddy (nginx берёт TLS на себя)"
+    info "Добавь в docker-compose.yml публикацию: ports: ['127.0.0.1:${_PORT}:${_PORT}']"
   fi
-done
+elif command -v nginx &>/dev/null; then
+  ok "Host nginx: installed but stopped" "no conflict — Caddy (Docker) will handle TLS"
+else
+  ok "Host nginx: not installed" "Caddy (Docker) will handle port 80/443"
+fi
+
+if systemctl is-active --quiet apache2 2>/dev/null; then
+  ok  "Host apache2: running" "integration mode — add new vhost, do NOT stop apache2"
+  if [[ $HOST_WEB_PROXYING -eq 1 ]]; then
+    ok  "  apache2 already proxies to :${_PORT}" "vhost config found — looks good"
+  else
+    warn "  apache2 vhost for ${_DOMAIN} not found" "create /etc/apache2/sites-available/fooddiary.conf"
+    _raw ""
+    _raw "  ${Y}┌── Готовый apache2-конфиг ────────────────────────────────────────────${RST}"
+    while IFS= read -r line; do
+      _raw "  ${DIM}│ ${line}${RST}"
+    done < <(_apache_conf)
+    _raw "  ${Y}└── Команды для активации ──────────────────────────────────────────────${RST}"
+    info "sudo a2enmod proxy proxy_http ssl headers"
+    info "sudo nano /etc/apache2/sites-available/fooddiary.conf  # вставь конфиг выше"
+    info "sudo a2ensite fooddiary && sudo systemctl reload apache2"
+    _raw ""
+    info "В docker-compose.yml: убери сервис caddy, добавь ports: ['127.0.0.1:${_PORT}:${_PORT}']"
+  fi
+elif command -v apache2 &>/dev/null; then
+  ok "Host apache2: installed but stopped" "no conflict — Caddy (Docker) will handle TLS"
+else
+  ok "Host apache2: not installed" "no conflict"
+fi
+
+
 
 # =============================================================================
 section "6" "Required System Packages"
@@ -417,10 +554,18 @@ else
   fail "TLS certs missing" "add fullchain.pem and privkey.pem to ${CERT_DIR}/ (see certs/README.md)"
 fi
 
-if [[ -f "${DEPLOY_DIR}/docker-compose.yml" ]] && grep -qE '^\s+caddy:' "${DEPLOY_DIR}/docker-compose.yml"; then
+# Caddy is only required when NOT using a host nginx/apache as front-end
+if [[ -n "$HOST_WEB_SERVER" && "$(systemctl is-active "$HOST_WEB_SERVER" 2>/dev/null)" == "active" ]]; then
+  # Host web server is running — Caddy in Docker is not needed
+  if [[ -f "${DEPLOY_DIR}/docker-compose.yml" ]] && grep -qE '^\s+caddy:' "${DEPLOY_DIR}/docker-compose.yml"; then
+    warn "docker-compose: caddy service defined" "but $HOST_WEB_SERVER is handling TLS — consider removing caddy service to avoid port conflict"
+  else
+    ok "docker-compose: no caddy service" "$HOST_WEB_SERVER handles TLS — correct for integration mode"
+  fi
+elif [[ -f "${DEPLOY_DIR}/docker-compose.yml" ]] && grep -qE '^\s+caddy:' "${DEPLOY_DIR}/docker-compose.yml"; then
   ok "docker-compose: caddy service defined"
 else
-  fail "docker-compose: caddy service missing"
+  fail "docker-compose: caddy service missing" "add caddy service OR configure host nginx/apache as reverse proxy"
 fi
 
 DOMAIN_VAL="fooddiary.razbudimir.com"
