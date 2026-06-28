@@ -13,6 +13,16 @@ import type {
   ApiUsage,
   PasswordResetToken,
   UserProfile,
+  Doctor,
+  DoctorPatient,
+  DoctorMealNote,
+  DoctorPlan,
+  InsertDoctorPlan,
+  FoodCatalogItem,
+  FoodCatalogEntry,
+  CreateCatalogItem,
+  Photo,
+  PushSubscription,
 } from "@shared/schema";
 import {
   users,
@@ -23,6 +33,14 @@ import {
   apiUsage,
   passwordResetTokens,
   userProfiles,
+  doctors,
+  doctorPatients,
+  doctorMealNotes,
+  doctorPlans,
+  pushSubscriptions,
+  foodCatalogItems,
+  foodCatalogEntries,
+  photos,
 } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
 import {
@@ -50,7 +68,7 @@ sqlite.exec(`
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     display_name TEXT,
-    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')),
+    role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'doctor', 'admin')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE TABLE IF NOT EXISTS secrets (
@@ -147,6 +165,93 @@ sqlite.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
+  CREATE TABLE IF NOT EXISTS doctors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    full_name TEXT NOT NULL,
+    phone TEXT,
+    telegram_url TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS doctor_patients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doctor_id INTEGER NOT NULL,
+    patient_id INTEGER NOT NULL,
+    assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(doctor_id, patient_id),
+    FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS doctor_meal_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doctor_id INTEGER NOT NULL,
+    meal_id INTEGER NOT NULL,
+    note TEXT,
+    suggested_kcal REAL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS doctor_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doctor_id INTEGER NOT NULL,
+    patient_id INTEGER NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    kcal REAL,
+    protein REAL,
+    fat REAL,
+    carbs REAL,
+    water_ml REAL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_doctor_plans_patient ON doctor_plans(patient_id, start_date);
+  CREATE TABLE IF NOT EXISTS food_catalog_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    is_set INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_food_catalog_items_user ON food_catalog_items(user_id);
+  CREATE TABLE IF NOT EXISTS food_catalog_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    catalog_item_id INTEGER NOT NULL,
+    meal_name TEXT NOT NULL,
+    grams REAL,
+    kcal REAL,
+    protein REAL,
+    fat REAL,
+    carbs REAL,
+    FOREIGN KEY (catalog_item_id) REFERENCES food_catalog_items(id) ON DELETE CASCADE
+  );
+  CREATE TABLE IF NOT EXISTS photos (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    meal_id INTEGER,
+    s3_key TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_photos_user ON photos(user_id);
+  CREATE INDEX IF NOT EXISTS idx_photos_meal ON photos(meal_id);
 `);
 
 // Миграция: добавляем pd_consent_at в users (152-ФЗ)
@@ -157,7 +262,9 @@ try {
 }
 
 try {
-  sqlite.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin'))");
+  sqlite.exec(
+    "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'doctor', 'admin'))",
+  );
 } catch {
   // Колонка уже существует — игнорируем
 }
@@ -178,6 +285,25 @@ for (const col of ["wake_date", "sleep_date"]) {
     // Колонка уже существует — игнорируем
   }
 }
+
+// Миграция: расширяем role enum для doctor
+try {
+  sqlite.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+} catch {
+  // already exists
+}
+// Обновляем CHECK constraint через пересоздание таблицы не нужно — SQLite не enforces
+// runtime check update; достаточно нового DEFAULT в CREATE TABLE
+
+// Миграция: dietary_restrictions в user_profiles (Phase 20)
+try {
+  sqlite.exec("ALTER TABLE user_profiles ADD COLUMN dietary_restrictions TEXT");
+} catch {
+  // уже есть
+}
+
+// Миграция: role 'doctor' support — update users CHECK via no-op (SQLite не перепроверяет)
+// existing rows with role='user'/'admin' не затронуты
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -298,6 +424,43 @@ export interface IStorage {
   updateMeal(id: number, data: Partial<InsertMeal>): Meal | undefined;
   deleteMeal(id: number): void;
   getMeal(id: number): Meal | undefined;
+
+  // Phase 20 — Dietary Restrictions
+  upsertDietaryRestrictions(userId: number, restrictions: string): UserProfile;
+
+  // Phase 15 — Doctor Cabinet
+  getDoctorByUserId(userId: number): Doctor | undefined;
+  upsertDoctor(userId: number, data: { fullName: string; phone?: string; telegramUrl?: string }): Doctor;
+  getDoctorPatients(doctorId: number): Array<{ user: User; assignedAt: string }>;
+  assignPatient(doctorId: number, patientId: number): DoctorPatient;
+  removePatient(doctorId: number, patientId: number): void;
+  getPatientDoctor(patientId: number): Doctor | undefined;
+  addDoctorMealNote(data: { doctorId: number; mealId: number; note?: string; suggestedKcal?: number }): DoctorMealNote;
+  getDoctorMealNotes(mealId: number): DoctorMealNote[];
+  setUserRole(userId: number, role: "user" | "doctor" | "admin"): User | undefined;
+  savePushSubscription(data: { userId: number; endpoint: string; p256dh: string; auth: string }): PushSubscription;
+  getUserPushSubscriptions(userId: number): PushSubscription[];
+  deletePushSubscription(endpoint: string): void;
+
+  // Phase 18 — Doctor Plans
+  createDoctorPlan(doctorId: number, data: InsertDoctorPlan): DoctorPlan;
+  getDoctorPlansForPatient(patientId: number): DoctorPlan[];
+  deleteDoctorPlan(planId: number): void;
+  getActivePlan(patientId: number, date: string): DoctorPlan | undefined;
+
+  // UX-7 — Food Catalog
+  getCatalogItems(userId: number): Array<FoodCatalogItem & { entries: FoodCatalogEntry[] }>;
+  createCatalogItem(userId: number, data: CreateCatalogItem): FoodCatalogItem & { entries: FoodCatalogEntry[] };
+  deleteCatalogItem(userId: number, itemId: number): void;
+  saveMealToCatalog(userId: number, mealId: number, name: string): FoodCatalogItem & { entries: FoodCatalogEntry[] };
+
+  // Phase 23 — Photos
+  savePhoto(data: { id: string; userId: number; mealId?: number | null; s3Key: string; sizeBytes: number }): Photo;
+  getPhoto(photoId: string): Photo | undefined;
+  getPhotosByMeal(mealId: number): Photo[];
+  getPhotosByUser(userId: number): Photo[];
+  deletePhoto(photoId: string): void;
+  countUserPhotos(userId: number): number;
 }
 
 export interface AdminSession {
@@ -944,6 +1107,349 @@ class SqliteStorage implements IStorage {
 
   getMeal(id: number) {
     return db.select().from(meals).where(eq(meals.id, id)).get();
+  }
+
+  // ── Phase 20 — Dietary Restrictions ─────────────────────────────────────────
+
+  upsertDietaryRestrictions(userId: number, restrictions: string): UserProfile {
+    const now = new Date().toISOString();
+    const existing = sqlite.prepare("SELECT id FROM user_profiles WHERE user_id = ?").get(userId);
+    if (existing) {
+      sqlite
+        .prepare("UPDATE user_profiles SET dietary_restrictions = ?, updated_at = ? WHERE user_id = ?")
+        .run(restrictions, now, userId);
+    } else {
+      sqlite
+        .prepare("INSERT INTO user_profiles (user_id, dietary_restrictions, updated_at) VALUES (?, ?, ?)")
+        .run(userId, restrictions, now);
+    }
+    return db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).get()!;
+  }
+
+  // ── Phase 15 — Doctor Cabinet ────────────────────────────────────────────────
+
+  getDoctorByUserId(userId: number): Doctor | undefined {
+    return db.select().from(doctors).where(eq(doctors.userId, userId)).get();
+  }
+
+  upsertDoctor(userId: number, data: { fullName: string; phone?: string; telegramUrl?: string }): Doctor {
+    const existing = this.getDoctorByUserId(userId);
+    if (existing) {
+      return db
+        .update(doctors)
+        .set({
+          fullName: data.fullName,
+          phone: data.phone ?? null,
+          telegramUrl: data.telegramUrl ?? null,
+        })
+        .where(eq(doctors.userId, userId))
+        .returning()
+        .get();
+    }
+    return db
+      .insert(doctors)
+      .values({
+        userId,
+        fullName: data.fullName,
+        phone: data.phone ?? null,
+        telegramUrl: data.telegramUrl ?? null,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  getDoctorPatients(doctorId: number): Array<{ user: User; assignedAt: string }> {
+    const rows = sqlite
+      .prepare(
+        `
+      SELECT u.*, dp.assigned_at
+      FROM doctor_patients dp
+      JOIN users u ON u.id = dp.patient_id
+      WHERE dp.doctor_id = ?
+      ORDER BY dp.assigned_at DESC
+    `,
+      )
+      .all(doctorId) as any[];
+    return rows.map((r) => ({
+      user: {
+        id: r.id,
+        username: r.username,
+        email: r.email,
+        passwordHash: r.password_hash,
+        displayName: r.display_name,
+        role: r.role,
+        pdConsentAt: r.pd_consent_at,
+        createdAt: r.created_at,
+      } as User,
+      assignedAt: r.assigned_at,
+    }));
+  }
+
+  assignPatient(doctorId: number, patientId: number): DoctorPatient {
+    return db
+      .insert(doctorPatients)
+      .values({
+        doctorId,
+        patientId,
+        assignedAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  removePatient(doctorId: number, patientId: number): void {
+    db.delete(doctorPatients)
+      .where(and(eq(doctorPatients.doctorId, doctorId), eq(doctorPatients.patientId, patientId)))
+      .run();
+  }
+
+  getPatientDoctor(patientId: number): Doctor | undefined {
+    const row = sqlite
+      .prepare(
+        `
+      SELECT d.* FROM doctor_patients dp
+      JOIN doctors d ON d.id = dp.doctor_id
+      WHERE dp.patient_id = ?
+      LIMIT 1
+    `,
+      )
+      .get(patientId) as any;
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      userId: row.user_id,
+      fullName: row.full_name,
+      phone: row.phone,
+      telegramUrl: row.telegram_url,
+      createdAt: row.created_at,
+    } as Doctor;
+  }
+
+  addDoctorMealNote(data: { doctorId: number; mealId: number; note?: string; suggestedKcal?: number }): DoctorMealNote {
+    return db
+      .insert(doctorMealNotes)
+      .values({
+        doctorId: data.doctorId,
+        mealId: data.mealId,
+        note: data.note ?? null,
+        suggestedKcal: data.suggestedKcal ?? null,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  getDoctorMealNotes(mealId: number): DoctorMealNote[] {
+    return db.select().from(doctorMealNotes).where(eq(doctorMealNotes.mealId, mealId)).all();
+  }
+
+  setUserRole(userId: number, role: "user" | "doctor" | "admin"): User | undefined {
+    return db.update(users).set({ role }).where(eq(users.id, userId)).returning().get();
+  }
+
+  savePushSubscription(data: { userId: number; endpoint: string; p256dh: string; auth: string }): PushSubscription {
+    // upsert by endpoint
+    const existing = db.select().from(pushSubscriptions).where(eq(pushSubscriptions.endpoint, data.endpoint)).get();
+    if (existing) {
+      return db
+        .update(pushSubscriptions)
+        .set({ userId: data.userId, p256dh: data.p256dh, auth: data.auth })
+        .where(eq(pushSubscriptions.endpoint, data.endpoint))
+        .returning()
+        .get();
+    }
+    return db
+      .insert(pushSubscriptions)
+      .values({
+        ...data,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  getUserPushSubscriptions(userId: number): PushSubscription[] {
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).all();
+  }
+
+  deletePushSubscription(endpoint: string): void {
+    db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint)).run();
+  }
+
+  // ── Phase 18 — Doctor Plans ──────────────────────────────────────────────────
+
+  createDoctorPlan(doctorId: number, data: InsertDoctorPlan): DoctorPlan {
+    return db
+      .insert(doctorPlans)
+      .values({
+        doctorId,
+        patientId: data.patientId,
+        startDate: data.startDate,
+        endDate: data.endDate ?? null,
+        kcal: data.kcal ?? null,
+        protein: data.protein ?? null,
+        fat: data.fat ?? null,
+        carbs: data.carbs ?? null,
+        waterMl: data.waterMl ?? null,
+        notes: data.notes ?? null,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  getDoctorPlansForPatient(patientId: number): DoctorPlan[] {
+    return db
+      .select()
+      .from(doctorPlans)
+      .where(eq(doctorPlans.patientId, patientId))
+      .all()
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }
+
+  deleteDoctorPlan(planId: number): void {
+    db.delete(doctorPlans).where(eq(doctorPlans.id, planId)).run();
+  }
+
+  getActivePlan(patientId: number, date: string): DoctorPlan | undefined {
+    return sqlite
+      .prepare(
+        `
+      SELECT * FROM doctor_plans
+      WHERE patient_id = ?
+        AND start_date <= ?
+        AND (end_date IS NULL OR end_date >= ?)
+      ORDER BY start_date DESC
+      LIMIT 1
+    `,
+      )
+      .get(patientId, date, date) as DoctorPlan | undefined;
+  }
+
+  // ── UX-7 — Food Catalog ───────────────────────────────────────────────────────
+
+  getCatalogItems(userId: number): Array<FoodCatalogItem & { entries: FoodCatalogEntry[] }> {
+    const items = db.select().from(foodCatalogItems).where(eq(foodCatalogItems.userId, userId)).all();
+    return items.map((item) => ({
+      ...item,
+      entries: db.select().from(foodCatalogEntries).where(eq(foodCatalogEntries.catalogItemId, item.id)).all(),
+    }));
+  }
+
+  createCatalogItem(userId: number, data: CreateCatalogItem): FoodCatalogItem & { entries: FoodCatalogEntry[] } {
+    const item = db
+      .insert(foodCatalogItems)
+      .values({
+        userId,
+        name: data.name,
+        description: data.description ?? null,
+        isSet: data.isSet ?? false,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+
+    const entries: FoodCatalogEntry[] = [];
+    for (const e of data.entries ?? []) {
+      const entry = db
+        .insert(foodCatalogEntries)
+        .values({
+          catalogItemId: item.id,
+          mealName: e.mealName,
+          grams: e.grams ?? null,
+          kcal: e.kcal ?? null,
+          protein: e.protein ?? null,
+          fat: e.fat ?? null,
+          carbs: e.carbs ?? null,
+        })
+        .returning()
+        .get();
+      entries.push(entry);
+    }
+    return { ...item, entries };
+  }
+
+  deleteCatalogItem(userId: number, itemId: number): void {
+    // entries cascade via FK
+    db.delete(foodCatalogItems)
+      .where(and(eq(foodCatalogItems.id, itemId), eq(foodCatalogItems.userId, userId)))
+      .run();
+  }
+
+  saveMealToCatalog(userId: number, mealId: number, name: string): FoodCatalogItem & { entries: FoodCatalogEntry[] } {
+    const meal = this.getMeal(mealId);
+    if (!meal) throw new Error("Meal not found");
+
+    const itemName = name || meal.mealType;
+    const item = db
+      .insert(foodCatalogItems)
+      .values({
+        userId,
+        name: itemName,
+        description: meal.foodText ?? null,
+        isSet: false,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+
+    const entries: FoodCatalogEntry[] = [];
+    if (meal.foodText) {
+      const entry = db
+        .insert(foodCatalogEntries)
+        .values({
+          catalogItemId: item.id,
+          mealName: meal.foodText.slice(0, 200),
+          grams: null,
+          kcal: meal.calories ?? null,
+          protein: meal.protein ?? null,
+          fat: meal.fat ?? null,
+          carbs: meal.carbs ?? null,
+        })
+        .returning()
+        .get();
+      entries.push(entry);
+    }
+    return { ...item, entries };
+  }
+
+  // ── Phase 23 — Photos ────────────────────────────────────────────────────────
+
+  savePhoto(data: { id: string; userId: number; mealId?: number | null; s3Key: string; sizeBytes: number }): Photo {
+    return db
+      .insert(photos)
+      .values({
+        id: data.id,
+        userId: data.userId,
+        mealId: data.mealId ?? null,
+        s3Key: data.s3Key,
+        sizeBytes: data.sizeBytes,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
+  }
+
+  getPhoto(photoId: string): Photo | undefined {
+    return db.select().from(photos).where(eq(photos.id, photoId)).get();
+  }
+
+  getPhotosByMeal(mealId: number): Photo[] {
+    return db.select().from(photos).where(eq(photos.mealId, mealId)).all();
+  }
+
+  getPhotosByUser(userId: number): Photo[] {
+    return db.select().from(photos).where(eq(photos.userId, userId)).all();
+  }
+
+  deletePhoto(photoId: string): void {
+    db.delete(photos).where(eq(photos.id, photoId)).run();
+  }
+
+  countUserPhotos(userId: number): number {
+    const row = sqlite.prepare("SELECT COUNT(*) as cnt FROM photos WHERE user_id = ?").get(userId) as { cnt: number };
+    return row.cnt;
   }
 }
 

@@ -30,6 +30,7 @@ export const useAppTheme = () => useContext(ThemeContext);
 
 // ── Lazy pages ────────────────────────────────────────────────────────────────
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
+const DoctorPage = lazy(() => import("@/pages/DoctorPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const AboutPage = lazy(() => import("@/pages/AboutPage"));
 
@@ -73,6 +74,22 @@ function AdminRoute() {
   return <AdminPage />;
 }
 
+function DoctorRoute() {
+  const { user } = useAuth();
+  if (user?.role !== "doctor" && user?.role !== "admin") {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <p className="text-muted-foreground text-sm">Кабинет врача доступен только пользователям с ролью doctor.</p>
+      </div>
+    );
+  }
+  return (
+    <Suspense fallback={null}>
+      <DoctorPage />
+    </Suspense>
+  );
+}
+
 function AnimatedRoutes() {
   const [location] = useLocation();
 
@@ -83,6 +100,7 @@ function AnimatedRoutes() {
           <Route path="/" component={DiaryPage} />
           <Route path="/analytics" component={AnalyticsPage} />
           <Route path="/admin" component={AdminRoute} />
+          <Route path="/doctor" component={DoctorRoute} />
           <Route path="/about" component={AboutPage} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route component={NotFound} />

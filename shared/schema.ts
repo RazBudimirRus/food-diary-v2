@@ -254,3 +254,132 @@ export const upsertUserProfileSchema = z.object({
   onboardingSkipped: z.boolean().optional(),
 });
 export type UpsertUserProfile = z.infer<typeof upsertUserProfileSchema>;
+
+// ─── Phase 20 — Dietary Restrictions (добавляется через migration в storage.ts) ──
+// dietary_restrictions TEXT (JSON) добавляется к user_profiles через ALTER TABLE
+
+// ─── Phase 15 — Doctor Cabinet ────────────────────────────────────────────────
+export const doctors = sqliteTable("doctors", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull().unique(),
+  fullName: text("full_name").notNull(),
+  phone: text("phone"),
+  telegramUrl: text("telegram_url"),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type Doctor = typeof doctors.$inferSelect;
+
+export const doctorPatients = sqliteTable("doctor_patients", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  doctorId: integer("doctor_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  assignedAt: text("assigned_at").notNull().default(""),
+});
+export type DoctorPatient = typeof doctorPatients.$inferSelect;
+
+export const doctorMealNotes = sqliteTable("doctor_meal_notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  doctorId: integer("doctor_id").notNull(),
+  mealId: integer("meal_id").notNull(),
+  note: text("note"),
+  suggestedKcal: real("suggested_kcal"),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type DoctorMealNote = typeof doctorMealNotes.$inferSelect;
+
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+// ─── Phase 18 — Doctor КБЖУ Plans ─────────────────────────────────────────────
+export const doctorPlans = sqliteTable("doctor_plans", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  doctorId: integer("doctor_id").notNull(),
+  patientId: integer("patient_id").notNull(),
+  startDate: text("start_date").notNull(), // YYYY-MM-DD
+  endDate: text("end_date"), // YYYY-MM-DD or null = open-ended
+  kcal: real("kcal"),
+  protein: real("protein"),
+  fat: real("fat"),
+  carbs: real("carbs"),
+  waterMl: real("water_ml"),
+  notes: text("notes"),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type DoctorPlan = typeof doctorPlans.$inferSelect;
+
+export const insertDoctorPlanSchema = z.object({
+  patientId: z.number().int(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
+  kcal: z.coerce.number().min(0).optional().nullable(),
+  protein: z.coerce.number().min(0).optional().nullable(),
+  fat: z.coerce.number().min(0).optional().nullable(),
+  carbs: z.coerce.number().min(0).optional().nullable(),
+  waterMl: z.coerce.number().min(0).optional().nullable(),
+  notes: z.string().optional(),
+});
+export type InsertDoctorPlan = z.infer<typeof insertDoctorPlanSchema>;
+
+// ─── UX-7 — Food Catalog ──────────────────────────────────────────────────────
+export const foodCatalogItems = sqliteTable("food_catalog_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isSet: integer("is_set", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type FoodCatalogItem = typeof foodCatalogItems.$inferSelect;
+
+export const foodCatalogEntries = sqliteTable("food_catalog_entries", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  catalogItemId: integer("catalog_item_id").notNull(),
+  mealName: text("meal_name").notNull(),
+  grams: real("grams"),
+  kcal: real("kcal"),
+  protein: real("protein"),
+  fat: real("fat"),
+  carbs: real("carbs"),
+});
+export type FoodCatalogEntry = typeof foodCatalogEntries.$inferSelect;
+
+export const createCatalogItemSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().optional(),
+  isSet: z.boolean().optional(),
+  entries: z
+    .array(
+      z.object({
+        mealName: z.string().min(1),
+        grams: z.coerce.number().optional().nullable(),
+        kcal: z.coerce.number().optional().nullable(),
+        protein: z.coerce.number().optional().nullable(),
+        fat: z.coerce.number().optional().nullable(),
+        carbs: z.coerce.number().optional().nullable(),
+      }),
+    )
+    .optional(),
+});
+export type CreateCatalogItem = z.infer<typeof createCatalogItemSchema>;
+
+// ─── Phase 23 — Photos ────────────────────────────────────────────────────────
+export const photos = sqliteTable("photos", {
+  id: text("id").primaryKey(), // UUID
+  userId: integer("user_id").notNull(),
+  mealId: integer("meal_id"), // nullable — фото без привязки к конкретному приёму
+  s3Key: text("s3_key").notNull(),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type Photo = typeof photos.$inferSelect;

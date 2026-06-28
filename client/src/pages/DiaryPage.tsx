@@ -7,6 +7,8 @@ import { usePwaInstall } from "@/hooks/usePwaInstall";
 import { OnboardingTour } from "@/components/OnboardingTour";
 import { TodayWidget } from "@/components/TodayWidget";
 import { BottomNav } from "@/components/BottomNav";
+import { GoalCard } from "@/components/GoalCard";
+import { FoodCatalogModal } from "@/components/FoodCatalogModal";
 import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -48,6 +50,10 @@ import {
   Shield,
   HelpCircle,
   ClipboardList,
+  BookOpen,
+  Camera,
+  Star,
+  Stethoscope,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
@@ -210,6 +216,8 @@ export default function DiaryPage() {
   });
   const [pendingDownloadDate, setPendingDownloadDate] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [uploadingPhotoMealId, setUploadingPhotoMealId] = useState<number | null>(null);
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
   const [editingOriginalDate, setEditingOriginalDate] = useState<string | null>(null);
 
@@ -420,6 +428,35 @@ export default function DiaryPage() {
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
 
+  const saveToCatalogMutation = useMutation({
+    mutationFn: (mealId: number) =>
+      apiRequest("POST", `/api/catalog/from-meal/${mealId}`, {
+        name: "",
+      }).then((r) => r.json()),
+    onSuccess: () => {
+      toast({ title: "Сохранено в каталог" });
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog"] });
+    },
+    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
+  });
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: async ({ mealId, file }: { mealId: number; file: File }) => {
+      const fd = new FormData();
+      fd.append("photo", file);
+      fd.append("mealId", String(mealId));
+      const r = await fetch("/api/photos/upload", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Ошибка загрузки");
+      return j;
+    },
+    onSuccess: () => {
+      toast({ title: "Фото загружено" });
+      setUploadingPhotoMealId(null);
+    },
+    onError: (e: Error) => toast({ title: "Ошибка фото", description: e.message, variant: "destructive" }),
+  });
+
   const deleteMealMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `/api/meals/${id}`);
@@ -609,6 +646,15 @@ export default function DiaryPage() {
                   <span className="hidden sm:inline">Аналитика</span>
                 </a>
               </Button>
+              {(user?.role === "doctor" || user?.role === "admin") && (
+                <a
+                  href="#/doctor"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Stethoscope className="h-4 w-4" />
+                  Кабинет врача
+                </a>
+              )}
               {user?.role === "admin" && (
                 <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-admin">
                   <a href="#/admin">
@@ -879,6 +925,13 @@ export default function DiaryPage() {
           </div>
         )}
 
+        <GoalCard
+          todayKcal={meals.reduce((s, m) => s + (m.calories ?? 0), 0)}
+          todayProtein={meals.reduce((s, m) => s + (m.protein ?? 0), 0)}
+          todayFat={meals.reduce((s, m) => s + (m.fat ?? 0), 0)}
+          todayCarbs={meals.reduce((s, m) => s + (m.carbs ?? 0), 0)}
+          todayWaterL={meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0)}
+        />
         <div className="space-y-2">
           {meals.map((meal) => (
             <Card
@@ -920,6 +973,31 @@ export default function DiaryPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-amber-500"
+                      onClick={() => saveToCatalogMutation.mutate(meal.id)}
+                      title="Сохранить в каталог"
+                      disabled={saveToCatalogMutation.isPending}
+                    >
+                      <Star className="h-4 w-4" />
+                    </Button>
+                    <label
+                      className="h-9 w-9 shrink-0 flex items-center justify-center text-muted-foreground hover:text-blue-500 cursor-pointer rounded-md hover:bg-accent transition-colors"
+                      title="Прикрепить фото"
+                    >
+                      <Camera className="h-4 w-4" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) uploadPhotoMutation.mutate({ mealId: meal.id, file });
+                        }}
+                      />
+                    </label>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1038,6 +1116,18 @@ export default function DiaryPage() {
                 </div>
               </div>
 
+              {!isEditingMeal && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-8 text-xs gap-1.5"
+                  onClick={() => setCatalogModalOpen(true)}
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Из каталога
+                </Button>
+              )}
               <div className="space-y-1">
                 <Label className="text-xs">Тип приёма</Label>
                 <div className="flex gap-2 flex-wrap">
@@ -1377,7 +1467,27 @@ export default function DiaryPage() {
       <OnboardingTour step={tourStep} active={tourActive} onNext={tourNext} onSkip={tourSkip} />
 
       {/* Bottom navigation (mobile only) */}
-      <BottomNav isAdmin={user?.role === "admin"} currentPath={location} />
+      <FoodCatalogModal
+        open={catalogModalOpen}
+        onClose={() => setCatalogModalOpen(false)}
+        onSelect={(item) => {
+          // Fill form with catalog item data
+          const totalKcal = item.entries.reduce((s: number, e: any) => s + (e.kcal ?? 0), 0);
+          const totalProtein = item.entries.reduce((s: number, e: any) => s + (e.protein ?? 0), 0);
+          const totalFat = item.entries.reduce((s: number, e: any) => s + (e.fat ?? 0), 0);
+          const totalCarbs = item.entries.reduce((s: number, e: any) => s + (e.carbs ?? 0), 0);
+          const foodText = item.entries.map((e: any) => e.mealName).join(", ") || item.name;
+          setForm((f) => ({
+            ...f,
+            foodText,
+            calories: totalKcal || undefined,
+            protein: totalProtein || undefined,
+            fat: totalFat || undefined,
+            carbs: totalCarbs || undefined,
+          }));
+        }}
+      />
+      <BottomNav isAdmin={user?.role === "admin"} isDoctor={user?.role === "doctor"} currentPath={location} />
 
       {/* ── Report range dialog (Phase 21) ──────────────────────────────────── */}
       <Dialog open={showRangeDialog} onOpenChange={setShowRangeDialog}>

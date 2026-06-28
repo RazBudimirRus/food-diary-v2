@@ -15,6 +15,8 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   upsertUserProfileSchema,
+  insertDoctorPlanSchema,
+  createCatalogItemSchema,
   type InsertMeal,
 } from "@shared/schema";
 import {
@@ -36,6 +38,48 @@ import {
 } from "./auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "./deepseek";
 import { isSmtpConfigured, sendPasswordResetEmail } from "./mail";
+import multer from "multer";
+import { randomUUID } from "crypto";
+import {
+  uploadPhoto,
+  downloadPhoto,
+  deleteFromS3,
+  buildPhotoKey,
+  isS3Configured,
+  PHOTO_MAX_SIZE_BYTES,
+  PHOTO_MAX_PER_USER,
+} from "./s3";
+import webpush from "web-push";
+
+// ── Doctor role middleware ──────────────────────────────────────────────────
+function requireDoctor(req: AuthRequest, res: any, next: any) {
+  if (!req.user) return res.status(401).json({ error: "Не авторизован" });
+  if (req.user.role !== "doctor" && req.user.role !== "admin") {
+    return res.status(403).json({ error: "Доступ только для врачей" });
+  }
+  next();
+}
+
+// ── Multer (memory storage — файл передаётся в S3, на диск не сохраняем) ────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: PHOTO_MAX_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Только изображения") as any, false);
+    }
+    cb(null, true);
+  },
+});
+
+// ── VAPID init (Web Push) ────────────────────────────────────────────────────
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || "mailto:admin@fooddiary.app",
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY,
+  );
+}
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
@@ -466,7 +510,10 @@ export function registerRoutes(httpServer: Server, app: Express) {
         });
       }
 
-      const result = await analyzeNutrition(parsed.data.foodText, parsed.data.drinkText);
+      // Phase 20: get user dietary restrictions
+      const userProfile = storage.getUserProfile(req.user!.id);
+      const dietaryRestrictions = (userProfile as any)?.dietaryRestrictions ?? null;
+      const result = await analyzeNutrition(parsed.data.foodText, parsed.data.drinkText, dietaryRestrictions);
       if (result.usage) {
         storage.recordApiUsage({
           userId: req.user!.id,
@@ -637,6 +684,342 @@ export function registerRoutes(httpServer: Server, app: Express) {
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // Phase 20 — Dietary Restrictions
+  // ════════════════════════════════════════════════════════════════════
+
+  /** GET /api/user/dietary-restrictions */
+  app.get("/api/user/dietary-restrictions", requireAuth, (req: AuthRequest, res) => {
+    const profile = storage.getUserProfile(req.user!.id);
+    const raw = (profile as any)?.dietaryRestrictions;
+    let parsed: string[] = [];
+    try {
+      parsed = raw ? JSON.parse(raw) : [];
+    } catch {
+      parsed = [];
+    }
+    res.json({ restrictions: parsed });
+  });
+
+  /** PUT /api/user/dietary-restrictions */
+  app.put("/api/user/dietary-restrictions", requireAuth, (req: AuthRequest, res) => {
+    const { restrictions } = req.body;
+    if (!Array.isArray(restrictions)) return res.status(400).json({ error: "restrictions must be array" });
+    const json = JSON.stringify(restrictions.map(String).slice(0, 50));
+    const profile = storage.upsertDietaryRestrictions(req.user!.id, json);
+    res.json({ profile });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // Phase 15 — Doctor Cabinet
+  // ════════════════════════════════════════════════════════════════════
+
+  /** POST /api/admin/users/:id/set-role (admin only) */
+  app.post("/api/admin/users/:id/set-role", requireAuth, requireAdmin, (req: AuthRequest, res) => {
+    const userId = parseInt(req.params.id, 10);
+    const { role } = req.body;
+    if (!["user", "doctor", "admin"].includes(role)) {
+      return res.status(400).json({ error: "Допустимые роли: user, doctor, admin" });
+    }
+    const updated = storage.setUserRole(userId, role);
+    if (!updated) return res.status(404).json({ error: "Пользователь не найден" });
+    res.json({ user: updated });
+  });
+
+  /** GET /api/doctor/profile */
+  app.get("/api/doctor/profile", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    res.json({ doctor: doctor ?? null });
+  });
+
+  /** PUT /api/doctor/profile */
+  app.put("/api/doctor/profile", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const { fullName, phone, telegramUrl } = req.body;
+    if (!fullName) return res.status(400).json({ error: "fullName обязателен" });
+    const doctor = storage.upsertDoctor(req.user!.id, { fullName, phone, telegramUrl });
+    res.json({ doctor });
+  });
+
+  /** GET /api/doctor/patients */
+  app.get("/api/doctor/patients", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    if (!doctor) return res.json({ patients: [] });
+    const patients = storage.getDoctorPatients(doctor.id);
+    res.json({ patients });
+  });
+
+  /** POST /api/doctor/patients/:id/assign */
+  app.post("/api/doctor/patients/:id/assign", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const patientId = parseInt(req.params.id, 10);
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    if (!doctor) return res.status(400).json({ error: "Сначала заполните профиль врача" });
+    const patient = storage.getUserById(patientId);
+    if (!patient) return res.status(404).json({ error: "Пользователь не найден" });
+    try {
+      const dp = storage.assignPatient(doctor.id, patientId);
+      res.json({ doctorPatient: dp });
+    } catch (e: any) {
+      res.status(409).json({ error: "Пациент уже привязан" });
+    }
+  });
+
+  /** DELETE /api/doctor/patients/:id */
+  app.delete("/api/doctor/patients/:id", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const patientId = parseInt(req.params.id, 10);
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    if (!doctor) return res.status(404).json({ error: "Врач не найден" });
+    storage.removePatient(doctor.id, patientId);
+    res.json({ ok: true });
+  });
+
+  /** GET /api/doctor/patients/:id/diary?date=YYYY-MM-DD */
+  app.get("/api/doctor/patients/:id/diary", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const patientId = parseInt(req.params.id, 10);
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    if (!doctor) return res.status(403).json({ error: "Врач не найден" });
+
+    // Verify patient is assigned
+    const patients = storage.getDoctorPatients(doctor.id);
+    const assigned = patients.some((p) => p.user.id === patientId);
+    if (!assigned) return res.status(403).json({ error: "Пациент не привязан к вам" });
+
+    const date = (req.query.date as string) || getMskDate();
+    const day = storage.getDayByDate(patientId, date);
+    if (!day) return res.json({ day: null, meals: [] });
+    const meals = storage.getMealsByDay(day.id);
+    res.json({ day, meals });
+  });
+
+  /** POST /api/doctor/patients/:id/notify (Web Push) */
+  app.post("/api/doctor/patients/:id/notify", requireAuth, requireDoctor, async (req: AuthRequest, res) => {
+    if (!process.env.VAPID_PUBLIC_KEY) {
+      return res.status(503).json({ error: "Web Push не настроен" });
+    }
+    const patientId = parseInt(req.params.id, 10);
+    const { title, body } = req.body;
+    if (!title) return res.status(400).json({ error: "title обязателен" });
+
+    const subs = storage.getUserPushSubscriptions(patientId);
+    if (!subs.length) return res.json({ sent: 0 });
+
+    let sent = 0;
+    for (const sub of subs) {
+      try {
+        await webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          JSON.stringify({ title, body: body || "" }),
+        );
+        sent++;
+      } catch {
+        storage.deletePushSubscription(sub.endpoint);
+      }
+    }
+    res.json({ sent });
+  });
+
+  /** POST /api/push/subscribe */
+  app.post("/api/push/subscribe", requireAuth, (req: AuthRequest, res) => {
+    const { endpoint, p256dh, auth } = req.body;
+    if (!endpoint || !p256dh || !auth) return res.status(400).json({ error: "endpoint, p256dh, auth обязательны" });
+    const sub = storage.savePushSubscription({ userId: req.user!.id, endpoint, p256dh, auth });
+    res.json({ sub });
+  });
+
+  /** GET /api/push/vapid-public-key */
+  app.get("/api/push/vapid-public-key", (_req, res) => {
+    res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
+  });
+
+  /** GET /api/user/my-doctor */
+  app.get("/api/user/my-doctor", requireAuth, (req: AuthRequest, res) => {
+    const doctor = storage.getPatientDoctor(req.user!.id);
+    res.json({ doctor: doctor ?? null });
+  });
+
+  /** POST /api/doctor/meals/:mealId/notes */
+  app.post("/api/doctor/meals/:mealId/notes", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const mealId = parseInt(req.params.mealId, 10);
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    if (!doctor) return res.status(400).json({ error: "Профиль врача не найден" });
+    const { note, suggestedKcal } = req.body;
+    const result = storage.addDoctorMealNote({ doctorId: doctor.id, mealId, note, suggestedKcal });
+    res.json({ note: result });
+  });
+
+  /** GET /api/meals/:id/notes */
+  app.get("/api/meals/:id/notes", requireAuth, (req: AuthRequest, res) => {
+    const mealId = parseInt(req.params.id, 10);
+    const notes = storage.getDoctorMealNotes(mealId);
+    res.json({ notes });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // Phase 18 — Doctor КБЖУ Plans
+  // ════════════════════════════════════════════════════════════════════
+
+  /** POST /api/doctor/patients/:id/plans */
+  app.post("/api/doctor/patients/:id/plans", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const patientId = parseInt(req.params.id, 10);
+    const doctor = storage.getDoctorByUserId(req.user!.id);
+    if (!doctor) return res.status(400).json({ error: "Профиль врача не найден" });
+    const parsed = insertDoctorPlanSchema.safeParse({ ...req.body, patientId });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const plan = storage.createDoctorPlan(doctor.id, parsed.data);
+    res.json({ plan });
+  });
+
+  /** GET /api/doctor/patients/:id/plans */
+  app.get("/api/doctor/patients/:id/plans", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const patientId = parseInt(req.params.id, 10);
+    const plans = storage.getDoctorPlansForPatient(patientId);
+    res.json({ plans });
+  });
+
+  /** DELETE /api/doctor/plans/:id */
+  app.delete("/api/doctor/plans/:id", requireAuth, requireDoctor, (req: AuthRequest, res) => {
+    const planId = parseInt(req.params.id, 10);
+    storage.deleteDoctorPlan(planId);
+    res.json({ ok: true });
+  });
+
+  /** GET /api/user/active-plan */
+  app.get("/api/user/active-plan", requireAuth, (req: AuthRequest, res) => {
+    const date = (req.query.date as string) || getMskDate();
+    const plan = storage.getActivePlan(req.user!.id, date);
+    if (!plan) {
+      // Fallback to user profile targets
+      const profile = storage.getUserProfile(req.user!.id);
+      if (!profile || (!profile.targetKcal && !profile.targetProtein)) {
+        return res.json({ plan: null, source: "none" });
+      }
+      return res.json({
+        plan: {
+          kcal: profile.targetKcal,
+          protein: profile.targetProtein,
+          fat: profile.targetFat,
+          carbs: profile.targetCarbs,
+          waterMl: null,
+          notes: null,
+        },
+        source: "profile",
+      });
+    }
+    res.json({ plan, source: "doctor" });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // UX-7 — Food Catalog
+  // ════════════════════════════════════════════════════════════════════
+
+  /** GET /api/catalog */
+  app.get("/api/catalog", requireAuth, (req: AuthRequest, res) => {
+    const items = storage.getCatalogItems(req.user!.id);
+    res.json({ items });
+  });
+
+  /** POST /api/catalog */
+  app.post("/api/catalog", requireAuth, (req: AuthRequest, res) => {
+    const parsed = createCatalogItemSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const item = storage.createCatalogItem(req.user!.id, parsed.data);
+    res.json({ item });
+  });
+
+  /** DELETE /api/catalog/:id */
+  app.delete("/api/catalog/:id", requireAuth, (req: AuthRequest, res) => {
+    const itemId = parseInt(req.params.id, 10);
+    storage.deleteCatalogItem(req.user!.id, itemId);
+    res.json({ ok: true });
+  });
+
+  /** POST /api/catalog/from-meal/:mealId */
+  app.post("/api/catalog/from-meal/:mealId", requireAuth, (req: AuthRequest, res) => {
+    const mealId = parseInt(req.params.mealId, 10);
+    const meal = storage.getMeal(mealId);
+    if (!meal) return res.status(404).json({ error: "Приём пищи не найден" });
+    if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
+    const { name } = req.body;
+    const item = storage.saveMealToCatalog(req.user!.id, mealId, name || meal.mealType);
+    res.json({ item });
+  });
+
+  // ════════════════════════════════════════════════════════════════════
+  // Phase 23 — S3 Photos
+  // ════════════════════════════════════════════════════════════════════
+
+  /** POST /api/photos/upload */
+  app.post("/api/photos/upload", requireAuth, upload.single("photo"), async (req: AuthRequest, res) => {
+    if (!isS3Configured()) return res.status(503).json({ error: "S3 хранилище не настроено" });
+    if (!req.file) return res.status(400).json({ error: "Файл не передан" });
+
+    // Проверяем лимит фотографий пользователя
+    const count = storage.countUserPhotos(req.user!.id);
+    if (count >= PHOTO_MAX_PER_USER) {
+      return res.status(429).json({ error: `Достигнут лимит фотографий (${PHOTO_MAX_PER_USER})` });
+    }
+
+    const mealId = req.body.mealId ? parseInt(req.body.mealId, 10) : null;
+    const photoId = randomUUID();
+    const s3Key = buildPhotoKey(req.user!.id, photoId);
+
+    try {
+      const sizeBytes = await uploadPhoto(s3Key, req.file.buffer, req.file.mimetype);
+      const photo = storage.savePhoto({ id: photoId, userId: req.user!.id, mealId, s3Key, sizeBytes });
+      res.json({ photo });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** GET /api/photos/:photo_id — proxy, no direct S3 URL */
+  app.get("/api/photos/:photo_id", requireAuth, async (req: AuthRequest, res) => {
+    if (!isS3Configured()) return res.status(503).json({ error: "S3 не настроен" });
+    const photo = storage.getPhoto(req.params.photo_id);
+    if (!photo) return res.status(404).json({ error: "Фото не найдено" });
+    if (photo.userId !== req.user!.id) {
+      // Врач тоже может просматривать
+      const doctor = storage.getDoctorByUserId(req.user!.id);
+      if (!doctor) return res.status(403).json({ error: "Нет доступа" });
+    }
+    try {
+      const buf = await downloadPhoto(photo.s3Key);
+      res.setHeader("Content-Type", "image/webp");
+      res.setHeader("Cache-Control", "private, max-age=3600");
+      res.send(buf);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** DELETE /api/photos/:photo_id */
+  app.delete("/api/photos/:photo_id", requireAuth, async (req: AuthRequest, res) => {
+    if (!isS3Configured()) return res.status(503).json({ error: "S3 не настроен" });
+    const photo = storage.getPhoto(req.params.photo_id);
+    if (!photo) return res.status(404).json({ error: "Фото не найдено" });
+    if (photo.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
+    try {
+      await deleteFromS3(photo.s3Key);
+      storage.deletePhoto(photo.id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /** GET /api/meals/:id/photos */
+  app.get("/api/meals/:id/photos", requireAuth, (req: AuthRequest, res) => {
+    const mealId = parseInt(req.params.id, 10);
+    const meal = storage.getMeal(mealId);
+    if (!meal) return res.status(404).json({ error: "Приём пищи не найден" });
+    // Доступ: пользователь или врач пациента
+    if (meal.userId !== req.user!.id) {
+      const doctor = storage.getDoctorByUserId(req.user!.id);
+      if (!doctor) return res.status(403).json({ error: "Нет доступа" });
+    }
+    const photos = storage.getPhotosByMeal(mealId);
+    res.json({ photos });
   });
 
   // ── Misc ─────────────────────────────────────────────────────────────

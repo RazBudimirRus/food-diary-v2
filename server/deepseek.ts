@@ -67,7 +67,8 @@ export function isDeepSeekAvailable(): boolean {
 
 export async function analyzeNutrition(
   foodText?: string,
-  drinkText?: string
+  drinkText?: string,
+  dietaryRestrictions?: string | null,
 ): Promise<DeepSeekAnalysisResult> {
   const apiKey = getDeepSeekKey();
   if (!apiKey) {
@@ -83,7 +84,12 @@ export async function analyzeNutrition(
   if (drinkText) parts.push(`Напитки: ${drinkText}`);
   const userInput = parts.join("\n");
 
-  const prompt = `Ты диетолог-аналитик. Оцени калорийность и нутриенты приёма пищи.
+  // Формируем секцию с ограничениями питания (Phase 20)
+  const restrictionsSection = dietaryRestrictions
+    ? `\nОграничения питания пользователя: ${dietaryRestrictions}\nУчитывай их при анализе и в примечании.\n`
+    : "";
+
+  const prompt = `Ты диетолог-аналитик. Оцени калорийность и нутриенты приёма пищи.${restrictionsSection}
 
 Пользователь написал:
 ${userInput}
@@ -103,7 +109,7 @@ ${userInput}
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model: "deepseek-chat",
@@ -118,7 +124,7 @@ ${userInput}
     throw new Error(`DeepSeek API error ${response.status}: ${err.slice(0, 200)}`);
   }
 
-  const data = await response.json() as {
+  const data = (await response.json()) as {
     choices: Array<{ message: { content: string } }>;
     usage?: {
       prompt_tokens?: number;
@@ -142,8 +148,7 @@ ${userInput}
   const tokensOut = Number(data.usage?.completion_tokens ?? 0);
   const totalTokens = Number(data.usage?.total_tokens ?? tokensIn + tokensOut);
   const costEstimate =
-    (tokensIn / 1_000_000) * INPUT_USD_PER_M_TOKENS +
-    (tokensOut / 1_000_000) * OUTPUT_USD_PER_M_TOKENS;
+    (tokensIn / 1_000_000) * INPUT_USD_PER_M_TOKENS + (tokensOut / 1_000_000) * OUTPUT_USD_PER_M_TOKENS;
 
   return {
     calories: Math.round(Number(parsed.calories) || 0),
@@ -151,11 +156,14 @@ ${userInput}
     fat: Math.round((Number(parsed.fat) || 0) * 10) / 10,
     carbs: Math.round((Number(parsed.carbs) || 0) * 10) / 10,
     note: typeof parsed.note === "string" ? parsed.note.slice(0, 300) : undefined,
-    usage: totalTokens > 0 ? {
-      tokensIn,
-      tokensOut,
-      totalTokens,
-      costEstimate: Math.round(costEstimate * 1_000_000) / 1_000_000,
-    } : undefined,
+    usage:
+      totalTokens > 0
+        ? {
+            tokensIn,
+            tokensOut,
+            totalTokens,
+            costEstimate: Math.round(costEstimate * 1_000_000) / 1_000_000,
+          }
+        : undefined,
   };
 }

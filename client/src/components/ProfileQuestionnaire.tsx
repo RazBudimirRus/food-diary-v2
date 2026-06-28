@@ -70,6 +70,7 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
   const [targetProtein, setTargetProtein] = useState("");
   const [targetFat, setTargetFat] = useState("");
   const [targetCarbs, setTargetCarbs] = useState("");
+  const [dietaryRestrictions, setDietaryRestrictions] = useState<string[]>([]);
 
   // Загружаем существующий профиль при каждом открытии
   useEffect(() => {
@@ -289,6 +290,39 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
             </div>
           </div>
         )}
+
+        {/* Phase 20 — Ограничения питания */}
+        <div className="space-y-2">
+          <Label className="text-xs font-medium block">Ограничения питания</Label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[
+              ["lactose", "Лактоза"],
+              ["gluten", "Глютен"],
+              ["nuts", "Орехи"],
+              ["vegetarian", "Вегетарианство"],
+              ["vegan", "Веганство"],
+              ["diabetes", "Диабет"],
+              ["gout", "Подагра"],
+            ].map(([key, label]) => (
+              <label
+                key={key}
+                className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 cursor-pointer hover:bg-accent transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 rounded"
+                  checked={dietaryRestrictions.includes(key)}
+                  onChange={(e) => {
+                    setDietaryRestrictions((prev) =>
+                      e.target.checked ? [...prev, key] : prev.filter((r) => r !== key),
+                    );
+                  }}
+                />
+                <span className="text-xs">{label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
 
         <div className="flex gap-3 mt-2">
           <Button variant="outline" onClick={handleSkip} disabled={pending || loading} className="flex-1">

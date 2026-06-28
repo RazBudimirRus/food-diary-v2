@@ -4,14 +4,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { LogOut, Shield, ArrowLeft, Ban, KeyRound, BarChart3 } from "lucide-react";
@@ -21,7 +14,7 @@ interface AdminUser {
   username: string;
   email: string;
   displayName: string | null;
-  role: "user" | "admin";
+  role: "user" | "doctor" | "admin";
 }
 
 interface AdminSession {
@@ -30,7 +23,7 @@ interface AdminSession {
   username: string;
   email: string;
   displayName: string | null;
-  role: "user" | "admin";
+  role: "user" | "doctor" | "admin";
   createdAt: string;
   expiresAt: string;
   userAgent: string | null;
@@ -81,11 +74,11 @@ function AdminUserCell({
   const showDisplayName = displayName && displayName !== username;
   return (
     <div>
-      <div className="font-medium" data-testid={`admin-username-${username}`}>{username}</div>
+      <div className="font-medium" data-testid={`admin-username-${username}`}>
+        {username}
+      </div>
       <div className="text-xs text-muted-foreground">{email}</div>
-      {showDisplayName && (
-        <div className="text-xs text-muted-foreground">Имя: {displayName}</div>
-      )}
+      {showDisplayName && <div className="text-xs text-muted-foreground">Имя: {displayName}</div>}
     </div>
   );
 }
@@ -94,10 +87,18 @@ export default function AdminPage() {
   const { user, logout } = useAuth();
   const [location] = useLocation();
   const [resetResult, setResetResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
-  const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery<{ users: AdminUser[] }>({
+  const {
+    data: usersData,
+    isLoading: usersLoading,
+    error: usersError,
+  } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
   });
-  const { data: deepseekUsage, isLoading: deepseekLoading, error: deepseekError } = useQuery<DeepSeekUsageSummary>({
+  const {
+    data: deepseekUsage,
+    isLoading: deepseekLoading,
+    error: deepseekError,
+  } = useQuery<DeepSeekUsageSummary>({
     queryKey: ["/api/admin/deepseek/usage"],
   });
   const { data, isLoading, error } = useQuery<{ sessions: AdminSession[] }>({
@@ -141,6 +142,18 @@ export default function AdminPage() {
     revokeUserSessionsMutation.mutate(userId);
   }
 
+  async function setUserRole(userId: number, username: string, currentRole: string) {
+    const roles = ["user", "doctor", "admin"];
+    const next = roles[(roles.indexOf(currentRole) + 1) % roles.length];
+    if (!window.confirm(`Сменить роль ${username}: ${currentRole} → ${next}?`)) return;
+    await fetch(`/api/admin/users/${userId}/set-role`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: next }),
+    });
+    window.location.reload();
+  }
+
   function resetUserPassword(userId: number, username: string) {
     if (!window.confirm(`Сбросить пароль пользователя ${username}? Его refresh-сессии будут отозваны.`)) return;
     resetPasswordMutation.mutate(userId);
@@ -176,24 +189,27 @@ export default function AdminPage() {
               <BarChart3 className="h-5 w-5 text-primary" />
               DeepSeek usage
             </CardTitle>
-            <CardDescription>
-              Токены и примерная стоимость КБЖУ-анализа за последние 30 дней.
-            </CardDescription>
+            <CardDescription>Токены и примерная стоимость КБЖУ-анализа за последние 30 дней.</CardDescription>
           </CardHeader>
           <CardContent>
             {deepseekLoading && <p className="text-sm text-muted-foreground">Загрузка usage...</p>}
             {deepseekError && <p className="text-sm text-destructive">Не удалось загрузить DeepSeek usage</p>}
             {!deepseekLoading && !deepseekError && deepseekUsage && (
               <div className="space-y-4">
-                <div className={`rounded-lg border px-4 py-3 ${
-                  deepseekUsage.dailyLimitExceeded
-                    ? "border-destructive bg-destructive/10"
-                    : "border-border bg-muted/30"
-                }`}>
+                <div
+                  className={`rounded-lg border px-4 py-3 ${
+                    deepseekUsage.dailyLimitExceeded
+                      ? "border-destructive bg-destructive/10"
+                      : "border-border bg-muted/30"
+                  }`}
+                >
                   <div className="text-sm font-medium">
                     Сегодня: {deepseekUsage.todayTokens.toLocaleString("ru-RU")} токенов
                     {deepseekUsage.dailyTokenLimit > 0 && (
-                      <span className="text-muted-foreground"> / лимит {deepseekUsage.dailyTokenLimit.toLocaleString("ru-RU")}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        / лимит {deepseekUsage.dailyTokenLimit.toLocaleString("ru-RU")}
+                      </span>
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
@@ -215,7 +231,8 @@ export default function AdminPage() {
                   <div className="rounded-lg border px-3 py-2">
                     <div className="text-xs text-muted-foreground">Input / output</div>
                     <div className="text-lg font-semibold">
-                      {deepseekUsage.tokensIn.toLocaleString("ru-RU")} / {deepseekUsage.tokensOut.toLocaleString("ru-RU")}
+                      {deepseekUsage.tokensIn.toLocaleString("ru-RU")} /{" "}
+                      {deepseekUsage.tokensOut.toLocaleString("ru-RU")}
                     </div>
                   </div>
                   <div className="rounded-lg border px-3 py-2">
@@ -306,7 +323,15 @@ export default function AdminPage() {
                           displayName={adminUser.displayName}
                         />
                       </TableCell>
-                      <TableCell>{adminUser.role}</TableCell>
+                      <TableCell>
+                        <button
+                          className="text-xs underline text-muted-foreground hover:text-foreground"
+                          onClick={() => setUserRole(adminUser.id, adminUser.username, adminUser.role)}
+                          title="Клик — сменить роль"
+                        >
+                          {adminUser.role}
+                        </button>
+                      </TableCell>
                       <TableCell className="text-right">
                         <Button
                           size="sm"
