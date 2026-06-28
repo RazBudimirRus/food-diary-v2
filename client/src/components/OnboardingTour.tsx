@@ -32,7 +32,7 @@ const STEPS: TourStep[] = [
 ];
 
 interface Props {
-  step: number;      // 1-based, 0 = hidden
+  step: number; // 1-based, 0 = hidden
   active: boolean;
   onNext: () => void;
   onSkip: () => void;
@@ -66,8 +66,11 @@ export function OnboardingTour({ step, active, onNext, onSkip }: Props) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 8 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed z-50 left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2
-                       w-[min(88vw,360px)] bg-card border rounded-2xl shadow-2xl p-6"
+            className="fixed z-50
+                       bottom-4 left-3 right-3
+                       sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2
+                       sm:w-[360px]
+                       bg-card border rounded-2xl shadow-2xl p-6"
           >
             {/* Close */}
             <button
@@ -98,8 +101,8 @@ export function OnboardingTour({ step, active, onNext, onSkip }: Props) {
                       i + 1 === step
                         ? "w-4 bg-primary"
                         : i + 1 < step
-                        ? "w-1.5 bg-primary/40"
-                        : "w-1.5 bg-muted-foreground/20"
+                          ? "w-1.5 bg-primary/40"
+                          : "w-1.5 bg-muted-foreground/20"
                     }`}
                   />
                 ))}

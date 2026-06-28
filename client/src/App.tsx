@@ -15,27 +15,26 @@ import NotFound from "@/pages/not-found";
 interface ThemeContextValue {
   theme: "light" | "dark";
   toggle: () => void;
+  toggleTheme: () => void;
   isDark: boolean;
 }
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "light",
   toggle: () => {},
+  toggleTheme: () => {},
   isDark: false,
 });
 export const useAppTheme = () => useContext(ThemeContext);
 
 // ── Lazy pages ────────────────────────────────────────────────────────────────
-const AdminPage     = lazy(() => import("@/pages/AdminPage"));
+const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 
 // ── Page transition wrapper ───────────────────────────────────────────────────
 function PageFade({ children }: { children: React.ReactNode }) {
   // Re-mounts with key change to re-trigger animation
   return (
-    <div
-      className="animate-fade-in"
-      style={{ animation: "pageFadeIn 0.18s ease-out both" }}
-    >
+    <div className="animate-fade-in" style={{ animation: "pageFadeIn 0.18s ease-out both" }}>
       {children}
     </div>
   );
@@ -78,10 +77,10 @@ function AnimatedRoutes() {
   return (
     <PageFade key={location}>
       <Switch>
-        <Route path="/"          component={DiaryPage} />
+        <Route path="/" component={DiaryPage} />
         <Route path="/analytics" component={AnalyticsPage} />
-        <Route path="/admin"     component={AdminRoute} />
-        <Route                   component={NotFound} />
+        <Route path="/admin" component={AdminRoute} />
+        <Route component={NotFound} />
       </Switch>
     </PageFade>
   );
@@ -116,7 +115,7 @@ export default function App() {
   const themeValue = useTheme();
 
   return (
-    <ThemeContext.Provider value={themeValue}>
+    <ThemeContext.Provider value={{ ...themeValue, toggleTheme: themeValue.toggle }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Routes />

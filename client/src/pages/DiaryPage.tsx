@@ -20,22 +20,36 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Slider } from "@/components/ui/slider";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Trash2, Download, Plus, ChevronLeft, ChevronRight, Clock, Pencil,
-  Utensils, Droplets, Activity, Sun, Moon, Footprints, LogOut,
-  Calculator, Flame, MoreVertical, BarChart3, Shield,
+  Trash2,
+  Download,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Pencil,
+  Utensils,
+  Droplets,
+  Activity,
+  Sun,
+  Moon,
+  Footprints,
+  LogOut,
+  Calculator,
+  Flame,
+  MoreVertical,
+  BarChart3,
+  Shield,
+  HelpCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
-import {
-  formatDateTimeRu,
-  inferSleepDate,
-  resolveSleepDate,
-  resolveWakeDate,
-  addDays,
-} from "@shared/dates";
+import { formatDateTimeRu, inferSleepDate, resolveSleepDate, resolveWakeDate, addDays } from "@shared/dates";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,7 +82,7 @@ function nextDay(date: string): string {
 }
 
 const MEAL_TYPES = ["завтрак", "обед", "перекус", "ужин"] as const;
-type MealType = typeof MEAL_TYPES[number];
+type MealType = (typeof MEAL_TYPES)[number];
 
 const MEAL_TYPE_COLORS: Record<string, string> = {
   завтрак: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
@@ -80,10 +94,17 @@ const MEAL_TYPE_COLORS: Record<string, string> = {
 // ── Hunger labels ─────────────────────────────────────────────────────────────
 function hungerLabel(v: number): string {
   const labels: Record<number, string> = {
-    0: "0 — Экстремальный голод", 1: "1 — Сильный голод", 2: "2 — Ощутимый голод",
-    3: "3 — Основательно проголодался", 4: "4 — Лёгкий голод", 5: "5 — Нейтрально",
-    6: "6 — Лёгкая сытость", 7: "7 — Комфортная сытость", 8: "8 — Переел",
-    9: "9 — Дискомфорт", 10: "10 — Экстремальное переедание",
+    0: "0 — Экстремальный голод",
+    1: "1 — Сильный голод",
+    2: "2 — Ощутимый голод",
+    3: "3 — Основательно проголодался",
+    4: "4 — Лёгкий голод",
+    5: "5 — Нейтрально",
+    6: "6 — Лёгкая сытость",
+    7: "7 — Комфортная сытость",
+    8: "8 — Переел",
+    9: "9 — Дискомфорт",
+    10: "10 — Экстремальное переедание",
   };
   return labels[v] ?? String(v);
 }
@@ -200,7 +221,9 @@ export default function DiaryPage() {
   useKeyboardShortcuts([
     {
       key: "n",
-      onTrigger: () => { if (!showAddForm) setShowAddForm(true); },
+      onTrigger: () => {
+        if (!showAddForm) setShowAddForm(true);
+      },
       enabled: !showAddForm && !showSummaryDialog,
     },
     {
@@ -211,7 +234,7 @@ export default function DiaryPage() {
   ]);
 
   // Onboarding tour
-  const { step: tourStep, active: tourActive, next: tourNext, skip: tourSkip } = useOnboardingTour();
+  const { step: tourStep, active: tourActive, next: tourNext, skip: tourSkip, triggerTour } = useOnboardingTour();
 
   // Fetch day data
   const { data, isLoading } = useQuery<{ day: Day; meals: Meal[] }>({
@@ -225,8 +248,8 @@ export default function DiaryPage() {
   // Check if DeepSeek is available
   useEffect(() => {
     apiRequest("GET", "/api/analyze/available")
-      .then(r => r.json())
-      .then(d => setDeepseekAvailable(!!d.available))
+      .then((r) => r.json())
+      .then((d) => setDeepseekAvailable(!!d.available))
       .catch(() => setDeepseekAvailable(false));
   }, []);
 
@@ -332,7 +355,7 @@ export default function DiaryPage() {
       }
       const res = await apiRequest("PATCH", `/api/meals/${id}`, payload);
       if (!res.ok) throw new Error(await res.text());
-      return { ...(await res.json() as { meal: Meal }), originalDate };
+      return { ...((await res.json()) as { meal: Meal }), originalDate };
     },
     onSuccess: ({ originalDate }) => {
       const targetDate = form.date;
@@ -350,9 +373,10 @@ export default function DiaryPage() {
       setKbjuResult(null);
       toast({
         title: originalDate !== targetDate ? "Приём перенесён" : "Приём обновлён",
-        description: originalDate !== targetDate
-          ? `Запись перемещена с ${formatDate(originalDate)} на ${formatDate(targetDate)}`
-          : undefined,
+        description:
+          originalDate !== targetDate
+            ? `Запись перемещена с ${formatDate(originalDate)} на ${formatDate(targetDate)}`
+            : undefined,
       });
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
@@ -441,13 +465,15 @@ export default function DiaryPage() {
 
   // ── Summary totals ─────────────────────────────────────────────────────────
   const totalWater = meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0);
-  const avgSatiety = meals.filter(m => m.satietyAfter != null).length
-    ? (meals.reduce((s, m) => s + (m.satietyAfter ?? 0), 0) / meals.filter(m => m.satietyAfter != null).length).toFixed(1)
+  const avgSatiety = meals.filter((m) => m.satietyAfter != null).length
+    ? (
+        meals.reduce((s, m) => s + (m.satietyAfter ?? 0), 0) / meals.filter((m) => m.satietyAfter != null).length
+      ).toFixed(1)
     : "—";
 
   // Total kcal for stats bar (only meals with calories)
   const totalKcal = meals.reduce((s, m) => s + (m.calories ?? 0), 0);
-  const hasKcal = meals.some(m => m.calories != null);
+  const hasKcal = meals.some((m) => m.calories != null);
 
   const isToday = activeDate === mskToday();
 
@@ -455,22 +481,133 @@ export default function DiaryPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Header — two-row layout for mobile (row1: logo+actions, row2: date-nav) */}
       <header className="sticky top-0 z-10 border-b bg-card/90 backdrop-blur">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {/* Logo */}
-            <svg viewBox="0 0 32 32" width="28" height="28" fill="none" aria-label="Food Diary">
-              <circle cx="16" cy="16" r="15" stroke="currentColor" strokeWidth="1.5" className="text-primary"/>
-              <path d="M10 10 Q10 7 13 7 Q16 7 16 10 L16 22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary"/>
-              <path d="M19 7 L19 13 Q19 16 22 16 L22 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary"/>
-              <path d="M20.5 13 Q19 13 19 14.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-primary"/>
-            </svg>
-            <span className="font-semibold text-base">Дневник питания</span>
+        <div className="max-w-2xl mx-auto px-4 py-2 flex flex-col gap-1">
+          {/* Row 1: logo (left) + action buttons (right) */}
+          <div className="flex items-center justify-between min-w-0">
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Logo */}
+              <svg viewBox="0 0 32 32" width="28" height="28" fill="none" aria-label="Food Diary">
+                <circle cx="16" cy="16" r="15" stroke="currentColor" strokeWidth="1.5" className="text-primary" />
+                <path
+                  d="M10 10 Q10 7 13 7 Q16 7 16 10 L16 22"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  className="text-primary"
+                />
+                <path
+                  d="M19 7 L19 13 Q19 16 22 16 L22 7"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  className="text-primary"
+                />
+                <path
+                  d="M20.5 13 Q19 13 19 14.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  className="text-primary"
+                />
+              </svg>
+              <span className="font-semibold text-base truncate">Дневник питания</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Desktop nav links (hidden on mobile — moved to BottomNav) */}
+              <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-analytics">
+                <a href="#/analytics">
+                  <BarChart3 className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">Аналитика</span>
+                </a>
+              </Button>
+              {user?.role === "admin" && (
+                <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-admin">
+                  <a href="#/admin">
+                    <Shield className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Админ</span>
+                  </a>
+                </Button>
+              )}
+              {/* Download report — icon only on mobile */}
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8 sm:w-auto sm:px-3"
+                onClick={() => downloadReport(activeDate)}
+                data-testid="btn-download-report"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline ml-1">Отчёт</span>
+              </Button>
+              <span className="text-xs text-muted-foreground hidden sm:block">
+                {user?.displayName || user?.username}
+              </span>
+              {/* Theme toggle */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={toggleTheme}
+                title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+                data-testid="btn-toggle-theme"
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              {/* More menu on mobile: logout + analytics + admin */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-8 w-8 sm:hidden" aria-label="Меню">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <a href="#/analytics" className="flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4" /> Аналитика
+                    </a>
+                  </DropdownMenuItem>
+                  {user?.role === "admin" && (
+                    <DropdownMenuItem asChild>
+                      <a href="#/admin" className="flex items-center gap-2">
+                        <Shield className="h-4 w-4" /> Админ
+                      </a>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={triggerTour} className="flex items-center gap-2">
+                    <HelpCircle className="h-4 w-4" /> Показать подсказки
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={logout}
+                    className="flex items-center gap-2 text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="h-4 w-4" /> Выйти
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {/* Logout button on desktop */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 hidden sm:flex"
+                onClick={logout}
+                title="Выйти"
+                data-testid="btn-logout"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          {/* Date nav */}
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setActiveDate(prevDay(activeDate))} data-testid="btn-prev-day">
+          {/* Row 2: date navigation (centered) */}
+          <div className="flex items-center justify-center gap-1 pb-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setActiveDate(prevDay(activeDate))}
+              data-testid="btn-prev-day"
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <button
@@ -482,68 +619,14 @@ export default function DiaryPage() {
               {isToday && <span className="text-xs text-muted-foreground ml-1">({formatDate(activeDate)})</span>}
             </button>
             <Button
-              variant="ghost" size="icon" className="h-8 w-8"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => setActiveDate(nextDay(activeDate))}
               disabled={activeDate >= mskToday()}
               data-testid="btn-next-day"
             >
               <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {/* Desktop nav links (hidden on mobile — moved to BottomNav) */}
-            <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-analytics">
-              <a href="#/analytics">
-                <BarChart3 className="h-4 w-4 sm:mr-1" />
-                <span className="hidden sm:inline">Аналитика</span>
-              </a>
-            </Button>
-            {user?.role === "admin" && (
-              <Button size="sm" variant="outline" className="hidden sm:flex" asChild data-testid="link-admin">
-                <a href="#/admin">
-                  <Shield className="h-4 w-4 sm:mr-1" />
-                  <span className="hidden sm:inline">Админ</span>
-                </a>
-              </Button>
-            )}
-            {/* Download report — icon only on mobile */}
-            <Button size="icon" variant="outline" className="h-8 w-8 sm:w-auto sm:px-3" onClick={() => downloadReport(activeDate)} data-testid="btn-download-report">
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Отчёт</span>
-            </Button>
-            <span className="text-xs text-muted-foreground hidden sm:block">{user?.displayName || user?.username}</span>
-            {/* Theme toggle */}
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleTheme} title={theme === "dark" ? "Светлая тема" : "Тёмная тема"} data-testid="btn-toggle-theme">
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-            {/* More menu on mobile: logout + analytics + admin */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="ghost" className="h-8 w-8 sm:hidden" aria-label="Меню">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <a href="#/analytics" className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" /> Аналитика
-                  </a>
-                </DropdownMenuItem>
-                {user?.role === "admin" && (
-                  <DropdownMenuItem asChild>
-                    <a href="#/admin" className="flex items-center gap-2">
-                      <Shield className="h-4 w-4" /> Админ
-                    </a>
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">
-                  <LogOut className="h-4 w-4" /> Выйти
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Logout button on desktop */}
-            <Button size="icon" variant="ghost" className="h-8 w-8 hidden sm:flex" onClick={logout} title="Выйти" data-testid="btn-logout">
-              <LogOut className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -596,24 +679,44 @@ export default function DiaryPage() {
               <div className="flex items-center gap-3 text-xs text-muted-foreground bg-muted rounded-lg px-3 py-2 flex-wrap">
                 {day.wakeTime && (
                   <span className="flex items-center gap-1">
-                    <Sun className="h-3 w-3"/>
+                    <Sun className="h-3 w-3" />
                     Подъём: <b>{formatDateTimeRu(resolveWakeDate(day.date, day.wakeDate) ?? day.date, day.wakeTime)}</b>
                   </span>
                 )}
                 {day.sleepTime && (
                   <span className="flex items-center gap-1">
-                    <Moon className="h-3 w-3"/>
-                    Отбой: <b>{formatDateTimeRu(resolveSleepDate(day.date, day.sleepTime, day.sleepDate) ?? day.date, day.sleepTime)}</b>
+                    <Moon className="h-3 w-3" />
+                    Отбой:{" "}
+                    <b>
+                      {formatDateTimeRu(
+                        resolveSleepDate(day.date, day.sleepTime, day.sleepDate) ?? day.date,
+                        day.sleepTime,
+                      )}
+                    </b>
                   </span>
                 )}
-                {day.steps != null && <span className="flex items-center gap-1"><Footprints className="h-3 w-3"/>Шаги: <b>{day.steps}</b></span>}
-                {day.sportActivity && <span>Спорт: <b>{day.sportActivity}</b></span>}
-                <button className="text-primary underline" onClick={() => setShowSummaryDialog(true)}>изменить</button>
+                {day.steps != null && (
+                  <span className="flex items-center gap-1">
+                    <Footprints className="h-3 w-3" />
+                    Шаги: <b>{day.steps}</b>
+                  </span>
+                )}
+                {day.sportActivity && (
+                  <span>
+                    Спорт: <b>{day.sportActivity}</b>
+                  </span>
+                )}
+                <button className="text-primary underline" onClick={() => setShowSummaryDialog(true)}>
+                  изменить
+                </button>
               </div>
             ) : (
               <button
                 className="text-xs text-muted-foreground hover:text-foreground underline"
-                onClick={() => { setPendingDownloadDate(null); setShowSummaryDialog(true); }}
+                onClick={() => {
+                  setPendingDownloadDate(null);
+                  setShowSummaryDialog(true);
+                }}
                 data-testid="btn-add-summary"
               >
                 + Добавить итоги дня (подъём, спорт, шаги)
@@ -625,7 +728,9 @@ export default function DiaryPage() {
         {/* Meal list */}
         {isLoading && (
           <div className="space-y-2">
-            {[1, 2, 3].map(i => <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />)}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
+            ))}
           </div>
         )}
 
@@ -655,7 +760,11 @@ export default function DiaryPage() {
 
         <div className="space-y-2">
           {meals.map((meal) => (
-            <Card key={meal.id} className="border hover:shadow-sm transition-shadow" data-testid={`card-meal-${meal.id}`}>
+            <Card
+              key={meal.id}
+              className="border hover:shadow-sm transition-shadow"
+              data-testid={`card-meal-${meal.id}`}
+            >
               <CardContent className="px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -663,7 +772,9 @@ export default function DiaryPage() {
                       <Clock className="h-3.5 w-3.5" />
                       {meal.tsEnd && meal.tsEnd !== meal.tsStart ? `${meal.tsStart}–${meal.tsEnd}` : meal.tsStart}
                     </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${MEAL_TYPE_COLORS[meal.mealType] ?? ""}`}>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${MEAL_TYPE_COLORS[meal.mealType] ?? ""}`}
+                    >
                       {meal.mealType}
                     </span>
                     {meal.hungerBefore != null && (
@@ -679,7 +790,8 @@ export default function DiaryPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
-                      variant="ghost" size="icon"
+                      variant="ghost"
+                      size="icon"
                       className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
                       onClick={() => openEditMealForm(meal)}
                       title="Редактировать"
@@ -688,7 +800,8 @@ export default function DiaryPage() {
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
-                      variant="ghost" size="icon"
+                      variant="ghost"
+                      size="icon"
                       className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
                       onClick={() => setDeleteConfirmId(meal.id)}
                       title="удалить"
@@ -699,17 +812,18 @@ export default function DiaryPage() {
                   </div>
                 </div>
 
-                {meal.foodText && (
-                  <p className="text-sm mt-1.5 text-foreground">🍽 {meal.foodText}</p>
-                )}
+                {meal.foodText && <p className="text-sm mt-1.5 text-foreground">🍽 {meal.foodText}</p>}
                 {meal.drinkText && (
-                  <p className="text-sm mt-0.5 text-foreground">💧 {meal.drinkText}
-                    {meal.waterUnits ? <span className="text-muted-foreground text-xs ml-1">({(meal.waterUnits * 0.5).toFixed(1)} л)</span> : null}
+                  <p className="text-sm mt-0.5 text-foreground">
+                    💧 {meal.drinkText}
+                    {meal.waterUnits ? (
+                      <span className="text-muted-foreground text-xs ml-1">
+                        ({(meal.waterUnits * 0.5).toFixed(1)} л)
+                      </span>
+                    ) : null}
                   </p>
                 )}
-                {meal.contextNote && (
-                  <p className="text-xs mt-1 text-muted-foreground italic">"{meal.contextNote}"</p>
-                )}
+                {meal.contextNote && <p className="text-xs mt-1 text-muted-foreground italic">"{meal.contextNote}"</p>}
                 {/* КБЖУ badge */}
                 {meal.calories != null && (
                   <div className="mt-1.5 flex items-center gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 rounded-md px-2 py-1 w-fit">
@@ -727,11 +841,7 @@ export default function DiaryPage() {
 
         {/* Add meal button */}
         {!showAddForm && (
-          <Button
-            className="w-full" variant="outline"
-            onClick={openAddMealForm}
-            data-testid="btn-add-meal"
-          >
+          <Button className="w-full" variant="outline" onClick={openAddMealForm} data-testid="btn-add-meal">
             <Plus className="h-4 w-4 mr-2" />
             Добавить приём пищи
           </Button>
@@ -746,7 +856,6 @@ export default function DiaryPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-4 space-y-3">
-
               {/* Date field */}
               <div className="space-y-1">
                 <Label className="text-xs" htmlFor="mealDate">
@@ -764,7 +873,7 @@ export default function DiaryPage() {
                     type="date"
                     value={form.date}
                     max={mskToday()}
-                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                     className="w-auto"
                     data-testid="input-meal-date"
                   />
@@ -772,7 +881,7 @@ export default function DiaryPage() {
                     <button
                       type="button"
                       className="text-xs text-primary underline"
-                      onClick={() => setForm(f => ({ ...f, date: mskToday() }))}
+                      onClick={() => setForm((f) => ({ ...f, date: mskToday() }))}
                     >
                       сегодня
                     </button>
@@ -783,18 +892,26 @@ export default function DiaryPage() {
               {/* Time + type row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs" htmlFor="tsStart">Время начала</Label>
+                  <Label className="text-xs" htmlFor="tsStart">
+                    Время начала
+                  </Label>
                   <Input
-                    id="tsStart" type="time" value={form.tsStart}
-                    onChange={e => setForm(f => ({ ...f, tsStart: e.target.value }))}
+                    id="tsStart"
+                    type="time"
+                    value={form.tsStart}
+                    onChange={(e) => setForm((f) => ({ ...f, tsStart: e.target.value }))}
                     data-testid="input-ts-start"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs" htmlFor="tsEnd">Время окончания</Label>
+                  <Label className="text-xs" htmlFor="tsEnd">
+                    Время окончания
+                  </Label>
                   <Input
-                    id="tsEnd" type="time" value={form.tsEnd}
-                    onChange={e => setForm(f => ({ ...f, tsEnd: e.target.value }))}
+                    id="tsEnd"
+                    type="time"
+                    value={form.tsEnd}
+                    onChange={(e) => setForm((f) => ({ ...f, tsEnd: e.target.value }))}
                     data-testid="input-ts-end"
                   />
                 </div>
@@ -803,11 +920,11 @@ export default function DiaryPage() {
               <div className="space-y-1">
                 <Label className="text-xs">Тип приёма</Label>
                 <div className="flex gap-2 flex-wrap">
-                  {MEAL_TYPES.map(t => (
+                  {MEAL_TYPES.map((t) => (
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setForm(f => ({ ...f, mealType: t }))}
+                      onClick={() => setForm((f) => ({ ...f, mealType: t }))}
                       className={`text-sm px-3 py-1 rounded-full border transition-colors ${
                         form.mealType === t
                           ? "bg-primary text-primary-foreground border-primary"
@@ -822,31 +939,44 @@ export default function DiaryPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs" htmlFor="foodText">Что ел</Label>
+                <Label className="text-xs" htmlFor="foodText">
+                  Что ел
+                </Label>
                 <Textarea
-                  id="foodText" rows={2} placeholder="Опишите еду..."
+                  id="foodText"
+                  rows={2}
+                  placeholder="Опишите еду..."
                   value={form.foodText}
-                  onChange={e => setForm(f => ({ ...f, foodText: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, foodText: e.target.value }))}
                   data-testid="input-food-text"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs" htmlFor="drinkText">Что пил</Label>
+                  <Label className="text-xs" htmlFor="drinkText">
+                    Что пил
+                  </Label>
                   <Input
-                    id="drinkText" placeholder="Кофе, вода..."
+                    id="drinkText"
+                    placeholder="Кофе, вода..."
                     value={form.drinkText}
-                    onChange={e => setForm(f => ({ ...f, drinkText: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, drinkText: e.target.value }))}
                     data-testid="input-drink-text"
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs" htmlFor="waterUnits">Кол-во вод (1 = 0.5 л)</Label>
+                  <Label className="text-xs" htmlFor="waterUnits">
+                    Кол-во вод (1 = 0.5 л)
+                  </Label>
                   <Input
-                    id="waterUnits" type="number" min="0" step="0.5" placeholder="0"
+                    id="waterUnits"
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    placeholder="0"
                     value={form.waterUnits}
-                    onChange={e => setForm(f => ({ ...f, waterUnits: e.target.value }))}
+                    onChange={(e) => setForm((f) => ({ ...f, waterUnits: e.target.value }))}
                     data-testid="input-water-units"
                   />
                 </div>
@@ -875,13 +1005,17 @@ export default function DiaryPage() {
                         {Math.round(kbjuResult.calories)} ккал
                       </div>
                       <div className="flex gap-3 text-xs text-orange-700 dark:text-orange-400">
-                        <span>Белки: <b>{kbjuResult.protein.toFixed(1)} г</b></span>
-                        <span>Жиры: <b>{kbjuResult.fat.toFixed(1)} г</b></span>
-                        <span>Углеводы: <b>{kbjuResult.carbs.toFixed(1)} г</b></span>
+                        <span>
+                          Белки: <b>{kbjuResult.protein.toFixed(1)} г</b>
+                        </span>
+                        <span>
+                          Жиры: <b>{kbjuResult.fat.toFixed(1)} г</b>
+                        </span>
+                        <span>
+                          Углеводы: <b>{kbjuResult.carbs.toFixed(1)} г</b>
+                        </span>
                       </div>
-                      {kbjuResult.note && (
-                        <p className="text-xs text-muted-foreground italic">{kbjuResult.note}</p>
-                      )}
+                      {kbjuResult.note && <p className="text-xs text-muted-foreground italic">{kbjuResult.note}</p>}
                       <p className="text-xs text-muted-foreground">Будет сохранено вместе с записью</p>
                     </div>
                   )}
@@ -891,43 +1025,60 @@ export default function DiaryPage() {
               {/* Hunger slider */}
               <div className="space-y-1.5">
                 <Label className="text-xs">
-                  Голод ДО приёма: <span className={`font-semibold ${hungerColor(form.hungerBefore)}`}>{form.hungerBefore}</span>
-                  <span className="ml-1 text-muted-foreground font-normal text-xs">({hungerLabel(form.hungerBefore).replace(/^\d+ — /, "")})</span>
+                  Голод ДО приёма:{" "}
+                  <span className={`font-semibold ${hungerColor(form.hungerBefore)}`}>{form.hungerBefore}</span>
+                  <span className="ml-1 text-muted-foreground font-normal text-xs">
+                    ({hungerLabel(form.hungerBefore).replace(/^\d+ — /, "")})
+                  </span>
                 </Label>
                 <Slider
-                  min={0} max={10} step={1}
+                  min={0}
+                  max={10}
+                  step={1}
                   value={[form.hungerBefore]}
-                  onValueChange={([v]) => setForm(f => ({ ...f, hungerBefore: v }))}
+                  onValueChange={([v]) => setForm((f) => ({ ...f, hungerBefore: v }))}
                   data-testid="slider-hunger"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>0 голод</span><span>5 нейтрально</span><span>10 объелся</span>
+                  <span>0 голод</span>
+                  <span>5 нейтрально</span>
+                  <span>10 объелся</span>
                 </div>
               </div>
 
               {/* Satiety slider */}
               <div className="space-y-1.5">
                 <Label className="text-xs">
-                  Насыщение ПОСЛЕ: <span className={`font-semibold ${hungerColor(form.satietyAfter)}`}>{form.satietyAfter}</span>
-                  <span className="ml-1 text-muted-foreground font-normal text-xs">({hungerLabel(form.satietyAfter).replace(/^\d+ — /, "")})</span>
+                  Насыщение ПОСЛЕ:{" "}
+                  <span className={`font-semibold ${hungerColor(form.satietyAfter)}`}>{form.satietyAfter}</span>
+                  <span className="ml-1 text-muted-foreground font-normal text-xs">
+                    ({hungerLabel(form.satietyAfter).replace(/^\d+ — /, "")})
+                  </span>
                 </Label>
                 <Slider
-                  min={0} max={10} step={1}
+                  min={0}
+                  max={10}
+                  step={1}
                   value={[form.satietyAfter]}
-                  onValueChange={([v]) => setForm(f => ({ ...f, satietyAfter: v }))}
+                  onValueChange={([v]) => setForm((f) => ({ ...f, satietyAfter: v }))}
                   data-testid="slider-satiety"
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>0 голод</span><span>5 нейтрально</span><span>10 объелся</span>
+                  <span>0 голод</span>
+                  <span>5 нейтрально</span>
+                  <span>10 объелся</span>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs" htmlFor="contextNote">Контекст приёма <span className="text-muted-foreground">(необязательно)</span></Label>
+                <Label className="text-xs" htmlFor="contextNote">
+                  Контекст приёма <span className="text-muted-foreground">(необязательно)</span>
+                </Label>
                 <Input
-                  id="contextNote" placeholder="Например: ел за компьютером, в спешке..."
+                  id="contextNote"
+                  placeholder="Например: ел за компьютером, в спешке..."
                   value={form.contextNote}
-                  onChange={e => setForm(f => ({ ...f, contextNote: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, contextNote: e.target.value }))}
                   data-testid="input-context-note"
                 />
               </div>
@@ -935,18 +1086,26 @@ export default function DiaryPage() {
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <Button
                   className="w-full sm:flex-1 h-11"
-                  onClick={() => isEditingMeal && editingMealId && editingOriginalDate
-                    ? updateMealMutation.mutate({ id: editingMealId, data: form, originalDate: editingOriginalDate })
-                    : addMealMutation.mutate(form)
+                  onClick={() =>
+                    isEditingMeal && editingMealId && editingOriginalDate
+                      ? updateMealMutation.mutate({ id: editingMealId, data: form, originalDate: editingOriginalDate })
+                      : addMealMutation.mutate(form)
                   }
                   disabled={addMealMutation.isPending || updateMealMutation.isPending || !form.tsStart || !form.date}
                   data-testid="btn-save-meal"
                 >
                   {addMealMutation.isPending || updateMealMutation.isPending
                     ? "Сохраняю..."
-                    : isEditingMeal ? "Сохранить изменения" : "Сохранить"}
+                    : isEditingMeal
+                      ? "Сохранить изменения"
+                      : "Сохранить"}
                 </Button>
-                <Button variant="outline" className="w-full sm:w-auto h-11" onClick={closeMealForm} data-testid="btn-cancel-meal">
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto h-11"
+                  onClick={closeMealForm}
+                  data-testid="btn-cancel-meal"
+                >
                   Отмена
                 </Button>
               </div>
@@ -964,33 +1123,42 @@ export default function DiaryPage() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1"><Sun className="h-3 w-3" /> Подъём</Label>
+                <Label className="text-xs flex items-center gap-1">
+                  <Sun className="h-3 w-3" /> Подъём
+                </Label>
                 <Input
                   type="date"
                   value={summaryForm.wakeDate}
                   max={mskToday()}
-                  onChange={e => setSummaryForm(f => ({ ...f, wakeDate: e.target.value }))}
+                  onChange={(e) => setSummaryForm((f) => ({ ...f, wakeDate: e.target.value }))}
                   data-testid="input-wake-date"
                   className="mb-1"
                 />
-                <Input type="time" value={summaryForm.wakeTime} onChange={e => setSummaryForm(f => ({ ...f, wakeTime: e.target.value }))} data-testid="input-wake-time" />
+                <Input
+                  type="time"
+                  value={summaryForm.wakeTime}
+                  onChange={(e) => setSummaryForm((f) => ({ ...f, wakeTime: e.target.value }))}
+                  data-testid="input-wake-time"
+                />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs flex items-center gap-1"><Moon className="h-3 w-3" /> Отбой</Label>
+                <Label className="text-xs flex items-center gap-1">
+                  <Moon className="h-3 w-3" /> Отбой
+                </Label>
                 <Input
                   type="date"
                   value={summaryForm.sleepDate}
                   max={addDays(activeDate, 1)}
-                  onChange={e => setSummaryForm(f => ({ ...f, sleepDate: e.target.value }))}
+                  onChange={(e) => setSummaryForm((f) => ({ ...f, sleepDate: e.target.value }))}
                   data-testid="input-sleep-date"
                   className="mb-1"
                 />
                 <Input
                   type="time"
                   value={summaryForm.sleepTime}
-                  onChange={e => {
+                  onChange={(e) => {
                     const sleepTime = e.target.value;
-                    setSummaryForm(f => ({
+                    setSummaryForm((f) => ({
                       ...f,
                       sleepTime,
                       sleepDate: inferSleepDate(activeDate, sleepTime) ?? f.sleepDate,
@@ -1001,34 +1169,62 @@ export default function DiaryPage() {
               </div>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs flex items-center gap-1"><Activity className="h-3 w-3" /> Спорт / активность</Label>
-              <Input placeholder='Например: йога 30 мин, или "нет"'
+              <Label className="text-xs flex items-center gap-1">
+                <Activity className="h-3 w-3" /> Спорт / активность
+              </Label>
+              <Input
+                placeholder='Например: йога 30 мин, или "нет"'
                 value={summaryForm.sportActivity}
-                onChange={e => setSummaryForm(f => ({ ...f, sportActivity: e.target.value }))}
+                onChange={(e) => setSummaryForm((f) => ({ ...f, sportActivity: e.target.value }))}
                 data-testid="input-sport"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs flex items-center gap-1"><Footprints className="h-3 w-3" /> Шаги за день</Label>
-              <Input type="number" min="0" placeholder="0"
+              <Label className="text-xs flex items-center gap-1">
+                <Footprints className="h-3 w-3" /> Шаги за день
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="0"
                 value={summaryForm.steps}
-                onChange={e => setSummaryForm(f => ({ ...f, steps: e.target.value }))}
+                onChange={(e) => setSummaryForm((f) => ({ ...f, steps: e.target.value }))}
                 data-testid="input-steps"
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Комментарий дня <span className="text-muted-foreground">(самочувствие, контекст)</span></Label>
-              <Textarea rows={3} placeholder="Как прошёл день, настроение, самочувствие..."
+              <Label className="text-xs">
+                Комментарий дня <span className="text-muted-foreground">(самочувствие, контекст)</span>
+              </Label>
+              <Textarea
+                rows={3}
+                placeholder="Как прошёл день, настроение, самочувствие..."
                 value={summaryForm.dayComment}
-                onChange={e => setSummaryForm(f => ({ ...f, dayComment: e.target.value }))}
+                onChange={(e) => setSummaryForm((f) => ({ ...f, dayComment: e.target.value }))}
                 data-testid="input-day-comment"
               />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setShowSummaryDialog(false); setPendingDownloadDate(null); }}>Отмена</Button>
-            <Button onClick={() => saveSummaryMutation.mutate()} disabled={saveSummaryMutation.isPending} data-testid="btn-save-summary">
-              {saveSummaryMutation.isPending ? "Сохраняю..." : pendingDownloadDate ? "Сохранить и скачать" : "Сохранить"}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSummaryDialog(false);
+                setPendingDownloadDate(null);
+              }}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={() => saveSummaryMutation.mutate()}
+              disabled={saveSummaryMutation.isPending}
+              data-testid="btn-save-summary"
+            >
+              {saveSummaryMutation.isPending
+                ? "Сохраняю..."
+                : pendingDownloadDate
+                  ? "Сохранить и скачать"
+                  : "Сохранить"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1037,11 +1233,16 @@ export default function DiaryPage() {
       {/* ── Delete confirm ──────────────────────────────────────────────────── */}
       <Dialog open={deleteConfirmId !== null} onOpenChange={() => setDeleteConfirmId(null)}>
         <DialogContent className="max-w-xs">
-          <DialogHeader><DialogTitle>Удалить запись?</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Удалить запись?</DialogTitle>
+          </DialogHeader>
           <p className="text-sm text-muted-foreground">Это действие нельзя отменить.</p>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Отмена</Button>
-            <Button variant="destructive"
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+              Отмена
+            </Button>
+            <Button
+              variant="destructive"
               onClick={() => deleteConfirmId && deleteMealMutation.mutate(deleteConfirmId)}
               disabled={deleteMealMutation.isPending}
               data-testid="btn-confirm-delete"
@@ -1052,12 +1253,7 @@ export default function DiaryPage() {
         </DialogContent>
       </Dialog>
       {/* Onboarding tour */}
-      <OnboardingTour
-        step={tourStep}
-        active={tourActive}
-        onNext={tourNext}
-        onSkip={tourSkip}
-      />
+      <OnboardingTour step={tourStep} active={tourActive} onNext={tourNext} onSkip={tourSkip} />
 
       {/* Bottom navigation (mobile only) */}
       <BottomNav isAdmin={user?.role === "admin"} currentPath={location} />

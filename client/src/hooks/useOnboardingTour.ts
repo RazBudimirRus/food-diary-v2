@@ -11,13 +11,16 @@ export function useOnboardingTour() {
     const done = localStorage.getItem(STORAGE_KEY);
     if (!done) {
       // Small delay so page renders first
-      const t = setTimeout(() => { setStep(1); setActive(true); }, 800);
+      const t = setTimeout(() => {
+        setStep(1);
+        setActive(true);
+      }, 800);
       return () => clearTimeout(t);
     }
   }, []);
 
   const next = useCallback(() => {
-    setStep(s => {
+    setStep((s) => {
       if (s >= 3) {
         setActive(false);
         localStorage.setItem(STORAGE_KEY, "1");
@@ -33,5 +36,12 @@ export function useOnboardingTour() {
     localStorage.setItem(STORAGE_KEY, "1");
   }, []);
 
-  return { step, active, next, skip };
+  // Manual re-trigger from "?" menu — resets flag so tour shows again
+  const triggerTour = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setStep(1);
+    setActive(true);
+  }, []);
+
+  return { step, active, next, skip, triggerTour };
 }

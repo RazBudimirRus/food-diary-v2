@@ -6,7 +6,23 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
-import { ArrowLeft, BarChart3, ChevronLeft, ChevronRight, Download, LogOut, Moon, Sun } from "lucide-react";
+import {
+  ArrowLeft,
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  LogOut,
+  Moon,
+  MoreVertical,
+  Sun,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   type AnalyticsPeriodType,
   formatAnalyticsPeriodLabel,
@@ -149,10 +165,7 @@ export default function AnalyticsPage() {
   const [location] = useLocation();
   const [periodType, setPeriodType] = useState<AnalyticsPeriodType>("month");
   const [anchorDate, setAnchorDate] = useState(mskToday());
-  const range = useMemo(
-    () => getAnalyticsPeriodRange(periodType, anchorDate),
-    [periodType, anchorDate],
-  );
+  const range = useMemo(() => getAnalyticsPeriodRange(periodType, anchorDate), [periodType, anchorDate]);
   const { data, isLoading, error } = useQuery<AnalyticsResponse>({
     queryKey: [`/api/analytics/summary?from=${range.from}&to=${range.to}`],
   });
@@ -201,7 +214,19 @@ export default function AnalyticsPage() {
   function downloadCsv() {
     if (!data) return;
     exportCsv(`analytics-${range.from}-${range.to}.csv`, [
-      ["date", "meals", "calories", "protein", "fat", "carbs", "water_l", "sleep_h", "steps", "eating_window_h", "max_gap_h"],
+      [
+        "date",
+        "meals",
+        "calories",
+        "protein",
+        "fat",
+        "carbs",
+        "water_l",
+        "sleep_h",
+        "steps",
+        "eating_window_h",
+        "max_gap_h",
+      ],
       ...data.days.map((d) => [
         d.date,
         String(d.mealsCount),
@@ -240,10 +265,39 @@ export default function AnalyticsPage() {
               </Button>
             )}
             <span className="text-xs text-muted-foreground hidden sm:block">{user?.username}</span>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={toggleTheme} title={theme === "dark" ? "Светлая тема" : "Тёмная тема"} data-testid="btn-toggle-theme-analytics">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={toggleTheme}
+              title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+              data-testid="btn-toggle-theme-analytics"
+            >
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти">
+            {/* Mobile dropdown: Дневник + Выйти */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-8 w-8 sm:hidden" aria-label="Меню">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <a href="#/" className="flex items-center gap-2">
+                    <ArrowLeft className="h-4 w-4" /> Дневник
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={logout}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" /> Выйти
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Desktop logout */}
+            <Button size="icon" variant="ghost" className="h-8 w-8 hidden sm:flex" onClick={logout} title="Выйти">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -292,7 +346,9 @@ export default function AnalyticsPage() {
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs text-muted-foreground">Заполнено дней</div>
-                  <div className="text-2xl font-semibold">{data.summary.filledDays}/{data.summary.periodDays}</div>
+                  <div className="text-2xl font-semibold">
+                    {data.summary.filledDays}/{data.summary.periodDays}
+                  </div>
                   <div className="text-xs text-muted-foreground">{Math.round(data.summary.filledDaysRatio * 100)}%</div>
                 </CardContent>
               </Card>
@@ -311,14 +367,20 @@ export default function AnalyticsPage() {
                   <div className="text-2xl font-semibold">
                     {data.summary.avgSleep != null ? `${data.summary.avgSleep} ч` : "—"}
                   </div>
-                  <div className="text-xs text-muted-foreground">{data.summary.totalWaterLitres.toFixed(1)} л всего</div>
+                  <div className="text-xs text-muted-foreground">
+                    {data.summary.totalWaterLitres.toFixed(1)} л всего
+                  </div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
                   <div className="text-xs text-muted-foreground">Стрик / приёмы</div>
-                  <div className="text-2xl font-semibold">{data.summary.currentStreak} / {data.summary.totalMeals}</div>
-                  <div className="text-xs text-muted-foreground">«Зелёная зона» {Math.round(insights.greenZoneRatio * 100)}%</div>
+                  <div className="text-2xl font-semibold">
+                    {data.summary.currentStreak} / {data.summary.totalMeals}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    «Зелёная зона» {Math.round(insights.greenZoneRatio * 100)}%
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -336,10 +398,28 @@ export default function AnalyticsPage() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="label" interval="preserveStartEnd" />
                       <YAxis domain={[0, 24]} tickFormatter={(v) => `${v}:00`} />
-                      <Tooltip formatter={(v: number) => `${Math.floor(v)}:${String(Math.round((v % 1) * 60)).padStart(2, "0")}`} />
+                      <Tooltip
+                        formatter={(v: number) =>
+                          `${Math.floor(v)}:${String(Math.round((v % 1) * 60)).padStart(2, "0")}`
+                        }
+                      />
                       <Legend />
-                      <Line type="monotone" dataKey="wakeDecimal" name="Подъём" stroke="#16a34a" connectNulls dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="sleepDecimal" name="Отбой" stroke="#8b5cf6" connectNulls dot={{ r: 2 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="wakeDecimal"
+                        name="Подъём"
+                        stroke="#16a34a"
+                        connectNulls
+                        dot={{ r: 2 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="sleepDecimal"
+                        name="Отбой"
+                        stroke="#8b5cf6"
+                        connectNulls
+                        dot={{ r: 2 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -370,11 +450,17 @@ export default function AnalyticsPage() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <InsightRow
                     label="Ккал при недосыпе (<6 ч)"
-                    value={insights.avgCaloriesSleepDeprived != null ? `${Math.round(insights.avgCaloriesSleepDeprived)}` : "—"}
+                    value={
+                      insights.avgCaloriesSleepDeprived != null
+                        ? `${Math.round(insights.avgCaloriesSleepDeprived)}`
+                        : "—"
+                    }
                   />
                   <InsightRow
                     label="Ккал при нормальном сне"
-                    value={insights.avgCaloriesNormalSleep != null ? `${Math.round(insights.avgCaloriesNormalSleep)}` : "—"}
+                    value={
+                      insights.avgCaloriesNormalSleep != null ? `${Math.round(insights.avgCaloriesNormalSleep)}` : "—"
+                    }
                   />
                   <InsightRow
                     label="Голод при недосыпе"
@@ -392,7 +478,9 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Блок 2 — Калорийность и КБЖУ</CardTitle>
-                <CardDescription>Дневная калорийность, скользящее среднее 7 дней, распределение по приёмам.</CardDescription>
+                <CardDescription>
+                  Дневная калорийность, скользящее среднее 7 дней, распределение по приёмам.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="h-72">
@@ -404,8 +492,23 @@ export default function AnalyticsPage() {
                       <Tooltip />
                       <Legend />
                       <Bar dataKey="totalCalories" name="Ккал/день" fill="#94a3b8" opacity={0.35} />
-                      <Line type="monotone" dataKey="totalCalories" name="Ккал" stroke="currentColor" strokeWidth={2} dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="rollingAvgCalories7" name="Ср. 7 дней" stroke="#f59e0b" strokeWidth={2} connectNulls dot={false} />
+                      <Line
+                        type="monotone"
+                        dataKey="totalCalories"
+                        name="Ккал"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="rollingAvgCalories7"
+                        name="Ср. 7 дней"
+                        stroke="#f59e0b"
+                        strokeWidth={2}
+                        connectNulls
+                        dot={false}
+                      />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -428,7 +531,15 @@ export default function AnalyticsPage() {
                     {mealTypePie.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie data={mealTypePie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
+                          <Pie
+                            data={mealTypePie}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={90}
+                            label
+                          >
                             {mealTypePie.map((entry) => (
                               <Cell key={entry.name} fill={MEAL_TYPE_COLORS[entry.name as MealType]} />
                             ))}
@@ -443,21 +554,45 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <InsightRow label="Будни (ср. ккал)" value={insights.avgCaloriesWeekday != null ? `${Math.round(insights.avgCaloriesWeekday)}` : "—"} />
-                  <InsightRow label="Выходные (ср. ккал)" value={insights.avgCaloriesWeekend != null ? `${Math.round(insights.avgCaloriesWeekend)}` : "—"} />
-                  <InsightRow label="С активностью" value={insights.avgCaloriesWithActivity != null ? `${Math.round(insights.avgCaloriesWithActivity)}` : "—"} />
-                  <InsightRow label="Без активности" value={insights.avgCaloriesWithoutActivity != null ? `${Math.round(insights.avgCaloriesWithoutActivity)}` : "—"} />
+                  <InsightRow
+                    label="Будни (ср. ккал)"
+                    value={insights.avgCaloriesWeekday != null ? `${Math.round(insights.avgCaloriesWeekday)}` : "—"}
+                  />
+                  <InsightRow
+                    label="Выходные (ср. ккал)"
+                    value={insights.avgCaloriesWeekend != null ? `${Math.round(insights.avgCaloriesWeekend)}` : "—"}
+                  />
+                  <InsightRow
+                    label="С активностью"
+                    value={
+                      insights.avgCaloriesWithActivity != null ? `${Math.round(insights.avgCaloriesWithActivity)}` : "—"
+                    }
+                  />
+                  <InsightRow
+                    label="Без активности"
+                    value={
+                      insights.avgCaloriesWithoutActivity != null
+                        ? `${Math.round(insights.avgCaloriesWithoutActivity)}`
+                        : "—"
+                    }
+                  />
                 </div>
                 {insights.topCalorieDays.length > 0 && (
                   <div className="space-y-1">
                     <div className="text-sm font-medium">Топ-5 калорийных дней</div>
                     {insights.topCalorieDays.map((d) => (
-                      <InsightRow key={d.date} label={formatRuDate(d.date)} value={`${Math.round(d.totalCalories)} ккал`} />
+                      <InsightRow
+                        key={d.date}
+                        label={formatRuDate(d.date)}
+                        value={`${Math.round(d.totalCalories)} ккал`}
+                      />
                     ))}
                   </div>
                 )}
                 {chartData.some((d) => d.kbjuMissing) && (
-                  <p className="text-xs text-muted-foreground">Серые дни с записями без КБЖУ — данные DeepSeek не заполнены.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Серые дни с записями без КБЖУ — данные DeepSeek не заполнены.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -478,7 +613,11 @@ export default function AnalyticsPage() {
                         <YAxis dataKey="avgGapHours" name="Ср. перерыв, ч" />
                         <ZAxis dataKey="mealsCount" range={[40, 200]} />
                         <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-                        <Scatter name="Ср. перерыв" data={chartData.filter((d) => d.avgGapHours != null)} fill="#3b82f6" />
+                        <Scatter
+                          name="Ср. перерыв"
+                          data={chartData.filter((d) => d.avgGapHours != null)}
+                          fill="#3b82f6"
+                        />
                       </ScatterChart>
                     </ResponsiveContainer>
                   </div>
@@ -490,8 +629,22 @@ export default function AnalyticsPage() {
                         <YAxis domain={[0, 24]} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="firstMealDecimal" name="Первый приём" stroke="#16a34a" connectNulls dot={{ r: 2 }} />
-                        <Line type="monotone" dataKey="lastMealDecimal" name="Последний приём" stroke="#ef4444" connectNulls dot={{ r: 2 }} />
+                        <Line
+                          type="monotone"
+                          dataKey="firstMealDecimal"
+                          name="Первый приём"
+                          stroke="#16a34a"
+                          connectNulls
+                          dot={{ r: 2 }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="lastMealDecimal"
+                          name="Последний приём"
+                          stroke="#ef4444"
+                          connectNulls
+                          dot={{ r: 2 }}
+                        />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -512,7 +665,10 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <InsightRow label="Ср. окно питания" value={insights.avgEatingWindowHours != null ? `${insights.avgEatingWindowHours} ч` : "—"} />
+                  <InsightRow
+                    label="Ср. окно питания"
+                    value={insights.avgEatingWindowHours != null ? `${insights.avgEatingWindowHours} ч` : "—"}
+                  />
                   <InsightRow label="Дней с ужином после 21:00" value={String(insights.lateDinnerDays)} />
                 </div>
               </CardContent>
@@ -533,8 +689,22 @@ export default function AnalyticsPage() {
                       <YAxis domain={[0, 10]} />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="avgHunger" name="Голод до" stroke="#f59e0b" connectNulls dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="avgSatiety" name="Насыщение после" stroke="#16a34a" connectNulls dot={{ r: 2 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="avgHunger"
+                        name="Голод до"
+                        stroke="#f59e0b"
+                        connectNulls
+                        dot={{ r: 2 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="avgSatiety"
+                        name="Насыщение после"
+                        stroke="#16a34a"
+                        connectNulls
+                        dot={{ r: 2 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -589,7 +759,10 @@ export default function AnalyticsPage() {
                   </ResponsiveContainer>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <InsightRow label="Ср. шагов" value={insights.avgSteps != null ? `${Math.round(insights.avgSteps)}` : "—"} />
+                  <InsightRow
+                    label="Ср. шагов"
+                    value={insights.avgSteps != null ? `${Math.round(insights.avgSteps)}` : "—"}
+                  />
                   <InsightRow label="Дней с активностью" value={String(insights.activityDays)} />
                 </div>
               </CardContent>
@@ -622,7 +795,14 @@ export default function AnalyticsPage() {
                       <XAxis dataKey="label" interval="preserveStartEnd" />
                       <YAxis />
                       <Tooltip />
-                      <Line type="monotone" dataKey="waterLitres" name="Вода, л" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="waterLitres"
+                        name="Вода, л"
+                        stroke="#0ea5e9"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

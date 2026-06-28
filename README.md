@@ -13,7 +13,6 @@
 [![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
 
 </div>
 
@@ -50,30 +49,18 @@ Food Diary V2 — инструмент для ведения дневника п
 
 ## Возможности
 
-| Функция                                | Статус |
-| -------------------------------------- | :----: |
-| Регистрация / вход / выход             |   ✅   |
-| Добавить приём пищи                    |   ✅   |
-| Навигация по датам                     |   ✅   |
-| Шкала голода/насыщения 0–10            |   ✅   |
-| Контекст приёма (где, как)             |   ✅   |
-| Итоги дня (подъём/спорт/шаги)          |   ✅   |
-| Excel-отчёт для врача                  |   ✅   |
-| Удаление записи                        |   ✅   |
-| Редактирование записи                  |   ✅   |
-| Зашифрованное хранение секретов        |   ✅   |
-| Access/refresh sessions, idle timeout  |   ✅   |
-| HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
-| Unit/integration/E2E tests + CI        |   ✅   |
-| Админ-панель MVP                       |   ✅   |
-| Блокировка DeepSeek по дневному лимиту |   ✅   |
-| Аналитика питания и графики            |   ✅   |
-| Логин в админ-панели                   |   ✅   |
-| Перенос приёма между днями             |   ✅   |
-| Явные даты подъёма/отбоя               |   ✅   |
-| Календарные периоды аналитики          |   ✅   |
-| Самостоятельный сброс пароля по email  |   ✅   |
-| Распознавание фото                     | 🔜 V2  |
+| Функция                         | Статус |
+| ------------------------------- | :----: |
+| Регистрация / вход / выход      |   ✅   |
+| Добавить приём пищи             |   ✅   |
+| Навигация по датам              |   ✅   |
+| Шкала голода/насыщения 0–10     |   ✅   |
+| Контекст приёма (где, как)      |   ✅   |
+| Итоги дня (подъём/спорт/шаги)   |   ✅   |
+| Excel-отчёт для врача           |   ✅   |
+| Удаление записи                 |   ✅   |
+| Зашифрованное хранение секретов |   ✅   |
+| Распознавание фото              | 🔜 V2  |
 
 ### Excel-отчёт
 
@@ -120,26 +107,24 @@ Food Diary V2 — инструмент для ведения дневника п
 │                         │                                   │
 │  ┌──────────────────────▼───────────────────────────────┐   │
 │  │              data.db  (SQLite)                       │   │
-│  │              <project-dir>/data/                      │   │
+│  │              /srv/foodbot/data/                      │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Стек технологий
 
-| Слой                | Технология                                                                                     |
-| ------------------- | ---------------------------------------------------------------------------------------------- |
-| Frontend            | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query                                     |
-| Backend             | Node.js 20, Express, TypeScript                                                                |
-| База данных         | SQLite (better-sqlite3) + Drizzle ORM                                                          |
-| Аутентификация      | bcryptjs (cost 12), access JWT 30 минут в памяти React, refresh token 7 дней в httpOnly cookie |
-| Шифрование секретов | AES-256-GCM, ключ из `ENCRYPTION_KEY`                                                          |
-| Excel               | exceljs                                                                                        |
-| Контейнеризация     | Docker, Docker Compose (1 сервис: `api`)                                                       |
-| Reverse proxy       | Caddy + HTTPS                                                                                  |
-| Безопасность        | Helmet/CSP/HSTS, CORS whitelist, rate-limit auth/meals                                         |
-| Качество            | Vitest, Supertest, Playwright, ESLint, Prettier, GitHub Actions                                |
-| Часовой пояс        | МСК (UTC+3) — день = 00:00–23:59 MSK                                                           |
+| Слой                | Технология                                                 |
+| ------------------- | ---------------------------------------------------------- |
+| Frontend            | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query |
+| Backend             | Node.js 20, Express, TypeScript                            |
+| База данных         | SQLite (better-sqlite3) + Drizzle ORM                      |
+| Аутентификация      | bcryptjs (cost 12) + JWT (httpOnly cookie, 7 дней)         |
+| Шифрование секретов | AES-256-GCM, ключ из `ENCRYPTION_KEY`                      |
+| Excel               | exceljs                                                    |
+| Контейнеризация     | Docker, Docker Compose (1 сервис: `api`)                   |
+| Reverse proxy       | Caddy (опционально)                                        |
+| Часовой пояс        | МСК (UTC+3) — день = 00:00–23:59 MSK                       |
 
 ## Установка и запуск
 
@@ -151,14 +136,14 @@ Food Diary V2 — инструмент для ведения дневника п
 
 ### Шаг 0. Проверка готовности сервера
 
-Скрипт запускается **из папки проекта** (после клонирования на шаге 3). Он автоматически определяет рабочую директорию — захардкоженных путей нет.
+Перед установкой обязательно запустите скрипт проверки:
 
 ```bash
-# Выполняется из папки проекта:
+wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food-diary-v2/main/preflight-check.sh
 sudo bash preflight-check.sh
 ```
 
-Скрипт проверяет 11 параметров (OS, RAM, диск, сеть, Docker, порты, firewall, переменные окружения, образы, API health) и выводит цветной отчёт. При наличии типовых проблем запустите с флагом `--fix`:
+Скрипт проверяет 11 параметров (OS, RAM, диск, сеть, Docker, порты, firewall, переменные окружения, API health) и выводит цветной отчёт. При наличии типовых проблем запустите с флагом `--fix`:
 
 ```bash
 sudo bash preflight-check.sh --fix
@@ -173,19 +158,17 @@ sudo usermod -aG docker $USER
 newgrp docker   # применить без перелогина
 ```
 
-### Шаг 2. Выбор рабочей директории
-
-Выберите любую папку на сервере, где будет жить проект:
+### Шаг 2. Создание рабочей директории
 
 ```bash
-mkdir -p ~/food-diary && cd ~/food-diary
-# или любой другой путь, например:
-# mkdir -p /srv/foodbot && cd /srv/foodbot
+sudo mkdir -p /srv/foodbot/data
+sudo chown -R $USER:$USER /srv/foodbot
 ```
 
 ### Шаг 3. Клонирование репозитория
 
 ```bash
+cd /srv/foodbot
 git clone https://github.com/RazBudimirRus/food-diary-v2.git .
 ```
 
@@ -200,19 +183,8 @@ nano .env
 
 ```env
 JWT_SECRET=<случайная строка, минимум 40 символов>
-JWT_EXPIRES_IN=30m
-JWT_REFRESH_EXPIRES_IN=7d
-REFRESH_COOKIE_MAX_AGE=604800
-SESSION_IDLE_WARNING_MIN=25
-SESSION_IDLE_TIMEOUT_MIN=30
+JWT_EXPIRES_IN=7d
 ENCRYPTION_KEY=<случайная строка, минимум 40 символов>
-PUBLIC_URL=https://fooddiary.razbudimir.com
-ALLOWED_ORIGINS=https://fooddiary.razbudimir.com
-TRUST_PROXY=1
-# ADMIN_BOOTSTRAP_USERNAME=<существующий логин для роли admin>
-DEEPSEEK_DAILY_TOKEN_LIMIT=100000
-DEEPSEEK_INPUT_USD_PER_M_TOKENS=0.27
-DEEPSEEK_OUTPUT_USD_PER_M_TOKENS=1.10
 ```
 
 Сгенерировать значения:
@@ -227,21 +199,6 @@ openssl rand -hex 32   # для ENCRYPTION_KEY
 ```bash
 docker compose up -d --build
 ```
-
-### Локальная разработка и проверки
-
-```bash
-npm ci
-npm run dev
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run test:e2e
-```
-
-`npm run test:e2e` автоматически собирает приложение, поднимает production server на `127.0.0.1:5174`
-и запускает Playwright smoke-flow. При первом запуске может понадобиться `npx playwright install chromium`.
 
 Проверить статус:
 
@@ -291,7 +248,7 @@ caddy_config:
 ### Обновление
 
 ```bash
-cd <папка-проекта>
+cd /srv/foodbot
 git pull
 docker compose up -d --build
 ```
@@ -300,10 +257,10 @@ docker compose up -d --build
 
 ```bash
 # Ручной бэкап
-cp <project-dir>/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
+cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
 
 # Автоматический (cron, ежедневно в 03:00)
-echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
+echo "0 3 * * * cp /srv/foodbot/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
 ```
 
 ## Использование
@@ -314,10 +271,9 @@ echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).d
 2. При первом входе нажмите **«Регистрация»** → введите имя пользователя, e-mail и пароль
 3. После входа — навигация по датам стрелками в шапке (нельзя выбрать дату в будущем)
 4. Нажмите **«Добавить приём пищи»** → заполните форму
-5. Чтобы исправить запись, нажмите кнопку **«Редактировать»** в карточке приёма пищи, измените поля и сохраните
-6. Кнопка **«Отчёт»** в шапке → если итоги дня ещё не заполнены, откроется диалог (подъём/отбой/спорт/шаги). При повторном скачивании диалог не показывается
-7. Файл скачивается как `Дневник_питания_YYYY-MM-DD.xlsx`
-8. Для выхода — кнопка **«Выйти»** в шапке (иконка выхода)
+5. Кнопка **«Отчёт»** в шапке → если итоги дня ещё не заполнены, откроется диалог (подъём/отбой/спорт/шаги). При повторном скачивании диалог не показывается
+6. Файл скачивается как `Дневник_питания_YYYY-MM-DD.xlsx`
+7. Для выхода — кнопка **«Выйти»** в шапке (иконка выхода)
 
 > **Важно:** один день = 00:00–23:59 по МСК (UTC+3). Записи всегда относятся к московскому времени независимо от часового пояса устройства.
 
@@ -336,16 +292,13 @@ food-diary-v2/
 │       └── components/ui/       # shadcn/ui компоненты
 │
 ├── server/                      # Node.js backend (Express)
-│   ├── auth.ts                  # access JWT, refresh cookies, bcrypt, AES-256-GCM, requireAuth
+│   ├── auth.ts                  # JWT, bcrypt, AES-256-GCM, requireAuth
 │   ├── routes.ts                # REST API endpoints
 │   ├── storage.ts               # Drizzle ORM + SQLite
 │   └── excel.ts                 # Генератор Excel-отчётов
 │
 ├── shared/
 │   └── schema.ts                # Drizzle schema (users, secrets, days, meals)
-│
-├── test/                        # Vitest unit/integration tests
-├── tests/e2e/                   # Playwright E2E smoke tests
 │
 ├── bot/                         # (не используется в V1, зарезервировано для V2)
 │
@@ -359,194 +312,29 @@ food-diary-v2/
 
 ## API Reference
 
-| Method | Endpoint                |  Auth  | Description                                    |
-| ------ | ----------------------- | :----: | ---------------------------------------------- |
-| POST   | `/api/auth/register`    |   —    | Регистрация пользователя                       |
-| POST   | `/api/auth/login`       |   —    | Вход: access token в JSON + refresh cookie     |
-| POST   | `/api/auth/forgot-password` | — | Запрос ссылки сброса пароля на email (SMTP) |
-| POST   | `/api/auth/reset-password` | — | Установить новый пароль по токену из письма |
-| POST   | `/api/auth/refresh`     | cookie | Обновить access token по refresh cookie        |
-| POST   | `/api/auth/logout`      | cookie | Выход: отзывает refresh token и очищает cookie |
-| GET    | `/api/auth/me`          |   ✅   | Текущий пользователь                           |
-| GET    | `/api/secrets`          |   ✅   | Список сохранённых секретов                    |
-| PUT    | `/api/secrets/:name`    |   ✅   | Сохранить/обновить секрет (зашифровано)        |
-| GET    | `/api/days/:date`       |   ✅   | Данные дня + приёмы пищи (YYYY-MM-DD)          |
-| POST   | `/api/meals`            |   ✅   | Добавить приём пищи                            |
-| DELETE | `/api/meals/:id`        |   ✅   | Удалить запись                                 |
-| PATCH  | `/api/meals/:id`        |   ✅   | Обновить запись                                |
-| POST   | `/api/days/:id/summary` |   ✅   | Сохранить итоги дня                            |
-| GET    | `/api/report/:date`     |   ✅   | Скачать Excel (202 если итоги не заполнены)    |
-| GET    | `/api/analytics/summary` |   ✅   | Сводка аналитики питания за период             |
-| GET    | `/api/now`              |   —    | Текущие дата и время МСК                       |
+| Method | Endpoint                | Auth | Description                                 |
+| ------ | ----------------------- | :--: | ------------------------------------------- |
+| POST   | `/api/auth/register`    |  —   | Регистрация пользователя                    |
+| POST   | `/api/auth/login`       |  —   | Вход (возвращает JWT cookie)                |
+| POST   | `/api/auth/logout`      |  ✅  | Выход (очищает cookie)                      |
+| GET    | `/api/auth/me`          |  ✅  | Текущий пользователь                        |
+| GET    | `/api/secrets`          |  ✅  | Список сохранённых секретов                 |
+| PUT    | `/api/secrets/:name`    |  ✅  | Сохранить/обновить секрет (зашифровано)     |
+| DELETE | `/api/secrets/:name`    |  ✅  | Удалить секрет                              |
+| GET    | `/api/days/:date`       |  ✅  | Данные дня + приёмы пищи (YYYY-MM-DD)       |
+| POST   | `/api/meals`            |  ✅  | Добавить приём пищи                         |
+| DELETE | `/api/meals/:id`        |  ✅  | Удалить запись                              |
+| PATCH  | `/api/meals/:id`        |  ✅  | Обновить запись                             |
+| POST   | `/api/days/:id/summary` |  ✅  | Сохранить итоги дня                         |
+| GET    | `/api/report/:date`     |  ✅  | Скачать Excel (202 если итоги не заполнены) |
+| GET    | `/api/now`              |  —   | Текущие дата и время МСК                    |
 
 ## Roadmap
 
-- [x] Phase 6: HTTPS + Caddy deployment
-- [x] Phase 3: SQLite persistence, WAL mode, backups
-- [x] Phase 10: access/refresh session lifecycle + idle timeout
-- [x] Phase 2: security hardening and audit fixes
-- [x] Phase 1: tests, linting, E2E smoke, CI
-- [x] UX-1: edit existing meal entries
-- [x] Phase 4: admin panel MVP
-- [x] Phase 9: DeepSeek usage alerting / daily limit blocking
-- [x] Phase 11: analytics dashboard MVP
-- [x] UX-2: admin username visibility
-- [x] UX-3: move meals between days when editing
-- [x] UX-4: explicit wake/sleep dates
-- [x] UX-5: calendar analytics periods
-- [x] Phase 5: email password reset
-
-## Changelog
-
-### [1.15.0] — 2026-06-27
-
-**feat: Phase 5 self-service password reset**
-
-- Added `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`
-- Password reset tokens in SQLite (1 hour TTL, single use)
-- SMTP email via nodemailer; login form «Забыли пароль?»; `/#/reset-password` page
-- Rate limit 3 forgot-password requests per 15 min per IP; no user enumeration
-
-### [1.13.0] — 2026-06-27
-
-**feat: UX-2…UX-5 admin, meal move, sleep dates, calendar analytics**
-
-- Admin panel shows `username` as the primary identifier in users/sessions tables
-- Meal edit allows changing date; `PATCH /api/meals/:id` moves records between days
-- Day summary stores `wakeDate`/`sleepDate`; Excel and analytics use explicit date+time sleep math
-- Analytics uses calendar week/month/year periods with empty-day padding and prev/next navigation
-- Added `shared/dates.ts`, unit/integration coverage, updated E2E edit flow
-
-### [1.12.0] — 2026-06-27
-
-**feat: Phase 11 analytics dashboard MVP**
-
-- Added `/api/analytics/summary?from=YYYY-MM-DD&to=YYYY-MM-DD`
-- Aggregates meals, calories, БЖУ, water, hunger/satiety, sleep and steps per day
-- Added `/#/analytics` page with period switches, summary cards and Recharts graphs
-- Added integration coverage for analytics auth and per-user aggregates
-
-### [1.11.0] — 2026-06-27
-
-**feat: Phase 9 DeepSeek daily limit guard**
-
-- Blocks `/api/analyze` with `429` when `DEEPSEEK_DAILY_TOKEN_LIMIT` is reached
-- Returns structured limit status without calling DeepSeek after the limit is reached
-- Shows blocked/allowed analysis status in the admin DeepSeek usage card
-- Added integration coverage for daily limit blocking
-
-### [1.10.0] — 2026-06-27
-
-**feat: Phase 4 DeepSeek usage dashboard**
-
-- Added `api_usage` storage for DeepSeek token and cost tracking
-- Records DeepSeek prompt/completion tokens after successful КБЖУ analysis
-- Added admin DeepSeek usage summary with daily token limit status
-- Added dashboard cards and recent daily usage table to `/#/admin`
-- Added integration coverage for admin usage access
-- External notifications remain planned for Phase 9
-
-### [1.9.0] — 2026-06-27
-
-**feat: Phase 4 admin password reset**
-
-- Added admin user list endpoint and UI table
-- Added admin password reset action that returns a one-time temporary password
-- Revokes the selected user's refresh sessions after password reset
-- Added integration coverage for admin reset permissions and new-password login
-- Phase 4 still has DeepSeek usage dashboard/alerts pending
-
-### [1.8.0] — 2026-06-27
-
-**feat: Phase 4 session management**
-
-- Added admin API actions to revoke one refresh session or all sessions for a user
-- Added session management buttons to the guarded admin page
-- Added integration coverage for admin session revoke permissions and behavior
-- Phase 4 still has password reset and DeepSeek dashboard slices pending
-
-### [1.7.0] — 2026-06-27
-
-**feat: Phase 4 admin foundation**
-
-- Added `user/admin` roles, admin JWT payloads, and `requireAdmin` middleware for `/api/admin/*`
-- Added `ADMIN_BOOTSTRAP_USERNAME` startup bootstrap for promoting an existing user to admin
-- Added read-only `/api/admin/sessions` based on active refresh sessions
-- Added a guarded `/#/admin` page with an active sessions table
-- Added integration coverage for admin vs non-admin access
-
-### [1.6.0] — 2026-06-27
-
-**feat: редактирование приёмов пищи**
-
-- Добавлена кнопка **«Редактировать»** в карточку приёма пищи рядом с удалением
-- Форма редактирования открывается с текущими значениями записи и сохраняет изменения через `PATCH /api/meals/:id`
-- После сохранения обновляется TanStack Query cache текущего дня
-- Расширены integration-тесты PATCH и E2E flow: add → edit → verify updated card
-
-### [1.5.0] — 2026-06-27
-
-**feat: session lifecycle, security hardening, and CI quality gates**
-
-- Added refresh token table, hashed refresh tokens, 30-minute access JWTs, 7-day httpOnly refresh cookies
-- Added `/api/auth/refresh`; login/register/logout now rotate or revoke refresh sessions
-- React keeps access tokens in memory and refreshes them through the API client
-- Added frontend idle warning/logout timers (25/30 minutes)
-- Added Helmet/CSP/HSTS, CORS allowlist, rate limits for login and meal creation
-- Fixed IDOR in day summary updates and strict Zod validation for meal updates
-- Removed full JSON API response bodies from logs
-- Added Vitest unit tests, Supertest integration tests, Playwright E2E smoke test, ESLint, Prettier, Husky, lint-staged
-- Added GitHub Actions CI and Dependabot config
-
-### [1.4.0] — 2026-06-26
-
-**feat: HTTPS deployment and SQLite persistence**
-
-- Added Caddy reverse proxy with HTTPS support
-- Added secure cookie/proxy configuration for production
-- Enabled SQLite WAL mode and backup scripts
-- Added backup cron installer and deployment preflight checks
-
-### [1.2.0] — 2026-06-26
-
-**feat: отвязка от Telegram-бота, добавление авторизации и зашифрованных секретов**
-
-- Удалён сервис `bot` (Python/aiogram) из Docker Compose — теперь один сервис `api`
-- Добавлена таблица `users`: username, email, `passwordHash` (bcryptjs, cost 12)
-- Добавлена таблица `secrets`: зашифрованное хранилище ключ-значение на пользователя (AES-256-GCM)
-- Аутентификация через JWT в httpOnly cookie (срок 7 дней, sameSite: lax)
-- Новые эндпоинты: `POST /api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me`
-- Новые эндпоинты: `GET/PUT/DELETE /api/secrets/:name`
-- Middleware `requireAuth` — все маршруты `/api/*` защищены
-- Новая страница фронтенда `AuthPage.tsx` — вкладки входа и регистрации (shadcn/ui)
-- Контекст `AuthProvider` + хук `useAuth` в `client/src/lib/auth.tsx`
-- Кнопка выхода и отображение имени пользователя в шапке `DiaryPage`
-- Обновлён `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN`, `ENCRYPTION_KEY` (без `TELEGRAM_BOT_TOKEN`)
-- `preflight-check.sh` секция 11: валидация Telegram-токена заменена проверкой API health (`GET /api/auth/me`)
-
-### [1.1.0] — 2026-06-25
-
-**feat: скрипт проверки готовности сервера preflight-check.sh**
-
-- 11 разделов: ОС, RAM, диск, интернет, Docker, порты, firewall, переменные окружения, образы, синтаксис compose, токен
-- Цветной вывод с box-drawing символами, ✔/✘/⚠
-- Панель SUMMARY с блокерами и цветным вердиктом (зелёный/жёлтый/красный)
-- Режим `--fix`: автоустановка Docker, открытие портов, создание `.env` из шаблона
-- Проверка интернета через `https://hub.docker.com/`
-
-### [1.0.0] — 2026-06-25
-
-**feat: начальный MVP**
-
-- Фронтенд: React 18 + Vite + Tailwind CSS v3 + shadcn/ui
-- Бэкенд: Express + TypeScript + Drizzle ORM + SQLite
-- Ввод приёмов пищи: еда, напитки, шкала голода/насыщения (0–10), тип приёма, контекст
-- Навигация по датам (даты в будущем недоступны)
-- Диалог итогов дня: подъём, отбой, спорт, шаги, комментарий
-- Генератор Excel-отчётов (exceljs) — формат врача, 7 колонок, легенда шкалы голода, автоитоги
-- Docker Compose: сервисы `api` (Node.js) + `bot` (Python/aiogram 3)
-- Часовой пояс МСК (UTC+3) — граница дня 00:00–23:59 MSK
-- Двуязычный README (RU/EN) с диаграммой архитектуры и полным гайдом по установке
+- [x] V1: текстовый ввод, веб-форма, авторизация, зашифрованные секреты, Excel-отчёт
+- [ ] V2: распознавание фото через GigaChat Vision (Сбер)
+- [ ] V3: автоматический подсчёт КБЖУ (FatSecret / USDA API)
+- [ ] V4: статистика и графики по неделям/месяцам
 
 ## License
 
@@ -572,30 +360,18 @@ The app supports multiple users — each registers through the browser, data is 
 
 ## Features
 
-| Feature                                | Status |
-| -------------------------------------- | :----: |
-| Register / login / logout              |   ✅   |
-| Add meal entry                         |   ✅   |
-| Date navigation                        |   ✅   |
-| Hunger/satiety scale 0–10              |   ✅   |
-| Meal context (where, how)              |   ✅   |
-| Day summary (wake/sport/steps)         |   ✅   |
-| Excel report for doctor                |   ✅   |
-| Delete entry                           |   ✅   |
-| Edit entry                             |   ✅   |
-| Encrypted secrets storage              |   ✅   |
-| Access/refresh sessions, idle timeout  |   ✅   |
-| HTTPS/Caddy, Helmet, CORS, rate limits |   ✅   |
-| Unit/integration/E2E tests + CI        |   ✅   |
-| Admin panel MVP                        |   ✅   |
-| DeepSeek daily limit blocking          |   ✅   |
-| Nutrition analytics and charts         |   ✅   |
-| Admin username visibility              |   ✅   |
-| Move meals between days                |   ✅   |
-| Explicit wake/sleep dates              |   ✅   |
-| Calendar analytics periods             |   ✅   |
-| Self-service password reset by email   |   ✅   |
-| Photo recognition                      | 🔜 V2  |
+| Feature                        | Status |
+| ------------------------------ | :----: |
+| Register / login / logout      |   ✅   |
+| Add meal entry                 |   ✅   |
+| Date navigation                |   ✅   |
+| Hunger/satiety scale 0–10      |   ✅   |
+| Meal context (where, how)      |   ✅   |
+| Day summary (wake/sport/steps) |   ✅   |
+| Excel report for doctor        |   ✅   |
+| Delete entry                   |   ✅   |
+| Encrypted secrets storage      |   ✅   |
+| Photo recognition              | 🔜 V2  |
 
 ### Excel Report
 
@@ -630,26 +406,24 @@ Generated in the doctor's agreed format:
 │                         │                                   │
 │  ┌──────────────────────▼───────────────────────────────┐   │
 │  │              data.db  (SQLite)                       │   │
-│  │              <project-dir>/data/                      │   │
+│  │              /srv/foodbot/data/                      │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Tech Stack
 
-| Layer              | Technology                                                                                       |
-| ------------------ | ------------------------------------------------------------------------------------------------ |
-| Frontend           | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query                                       |
-| Backend            | Node.js 20, Express, TypeScript                                                                  |
-| Database           | SQLite (better-sqlite3) + Drizzle ORM                                                            |
-| Authentication     | bcryptjs (cost 12), 30-minute access JWT in React memory, 7-day refresh token in httpOnly cookie |
-| Secrets encryption | AES-256-GCM, key derived from `ENCRYPTION_KEY`                                                   |
-| Excel              | exceljs                                                                                          |
-| Containerization   | Docker, Docker Compose (1 service: `api`)                                                        |
-| Reverse proxy      | Caddy + HTTPS                                                                                    |
-| Security           | Helmet/CSP/HSTS, CORS allowlist, auth/meals rate limits                                          |
-| Quality            | Vitest, Supertest, Playwright, ESLint, Prettier, GitHub Actions                                  |
-| Timezone           | MSK (UTC+3) — day = 00:00–23:59 MSK                                                              |
+| Layer              | Technology                                                 |
+| ------------------ | ---------------------------------------------------------- |
+| Frontend           | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query |
+| Backend            | Node.js 20, Express, TypeScript                            |
+| Database           | SQLite (better-sqlite3) + Drizzle ORM                      |
+| Authentication     | bcryptjs (cost 12) + JWT (httpOnly cookie, 7 days)         |
+| Secrets encryption | AES-256-GCM, key derived from `ENCRYPTION_KEY`             |
+| Excel              | exceljs                                                    |
+| Containerization   | Docker, Docker Compose (1 service: `api`)                  |
+| Reverse proxy      | Caddy (optional)                                           |
+| Timezone           | MSK (UTC+3) — day = 00:00–23:59 MSK                        |
 
 ## Installation & Setup
 
@@ -661,14 +435,14 @@ Generated in the doctor's agreed format:
 
 ### Step 0. Server readiness check
 
-Run the preflight script **from the project directory** (after cloning in step 3). It auto-detects its working directory — no hardcoded paths.
+Run the preflight script before installing:
 
 ```bash
-# Run from the project directory:
+wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food-diary-v2/main/preflight-check.sh
 sudo bash preflight-check.sh
 ```
 
-The script checks 11 parameters (OS, RAM, disk, network, Docker, ports, firewall, environment variables, images, API health) and outputs a color-coded report. For automatic fixing of common issues:
+The script checks 11 parameters (OS, RAM, disk, network, Docker, ports, firewall, environment variables, API health) and outputs a color-coded report. For automatic fixing of common issues:
 
 ```bash
 sudo bash preflight-check.sh --fix
@@ -683,19 +457,17 @@ sudo usermod -aG docker $USER
 newgrp docker   # apply without re-login
 ```
 
-### Step 2. Choose working directory
-
-Pick any directory on the server where the project will live:
+### Step 2. Create working directory
 
 ```bash
-mkdir -p ~/food-diary && cd ~/food-diary
-# or any other path, e.g.:
-# mkdir -p /srv/foodbot && cd /srv/foodbot
+sudo mkdir -p /srv/foodbot/data
+sudo chown -R $USER:$USER /srv/foodbot
 ```
 
 ### Step 3. Clone the repository
 
 ```bash
+cd /srv/foodbot
 git clone https://github.com/RazBudimirRus/food-diary-v2.git .
 ```
 
@@ -710,19 +482,8 @@ Minimum `.env`:
 
 ```env
 JWT_SECRET=<random string, at least 40 characters>
-JWT_EXPIRES_IN=30m
-JWT_REFRESH_EXPIRES_IN=7d
-REFRESH_COOKIE_MAX_AGE=604800
-SESSION_IDLE_WARNING_MIN=25
-SESSION_IDLE_TIMEOUT_MIN=30
+JWT_EXPIRES_IN=7d
 ENCRYPTION_KEY=<random string, at least 40 characters>
-PUBLIC_URL=https://fooddiary.razbudimir.com
-ALLOWED_ORIGINS=https://fooddiary.razbudimir.com
-TRUST_PROXY=1
-# ADMIN_BOOTSTRAP_USERNAME=<existing username for admin role>
-DEEPSEEK_DAILY_TOKEN_LIMIT=100000
-DEEPSEEK_INPUT_USD_PER_M_TOKENS=0.27
-DEEPSEEK_OUTPUT_USD_PER_M_TOKENS=1.10
 ```
 
 Generate values on the server:
@@ -737,21 +498,6 @@ openssl rand -hex 32   # for ENCRYPTION_KEY
 ```bash
 docker compose up -d --build
 ```
-
-### Local development and checks
-
-```bash
-npm ci
-npm run dev
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run test:e2e
-```
-
-`npm run test:e2e` builds the app, starts the production server on `127.0.0.1:5174`,
-and runs the Playwright smoke flow. On first run, you may need `npx playwright install chromium`.
 
 Check status:
 
@@ -801,7 +547,7 @@ caddy_config:
 ### Update
 
 ```bash
-cd <project-dir>
+cd /srv/foodbot
 git pull
 docker compose up -d --build
 ```
@@ -810,10 +556,10 @@ docker compose up -d --build
 
 ```bash
 # Manual backup
-cp <project-dir>/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
+cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
 
 # Automated (cron, daily at 03:00)
-echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
+echo "0 3 * * * cp /srv/foodbot/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
 ```
 
 ## Usage
@@ -824,10 +570,9 @@ echo "0 3 * * * cp <project-dir>/data/data.db /backup/data-\$(date +\%Y\%m\%d).d
 2. On first visit click **"Register"** → enter username, email and password
 3. After login — use arrow buttons in the header to navigate between dates (future dates are disabled)
 4. Click **"Add meal"** → fill out the form
-5. To fix an entry, click **"Edit"** on the meal card, update the fields, and save
-6. Click **"Report"** in the header → if day summary isn't filled yet, a dialog opens (wake/bedtime/sport/steps). On repeat downloads the dialog is skipped
-7. File downloads as `Дневник_питания_YYYY-MM-DD.xlsx`
-8. To log out — click the **logout button** in the header
+5. Click **"Report"** in the header → if day summary isn't filled yet, a dialog opens (wake/bedtime/sport/steps). On repeat downloads the dialog is skipped
+6. File downloads as `Дневник_питания_YYYY-MM-DD.xlsx`
+7. To log out — click the **logout button** in the header
 
 > **Important:** one day = 00:00–23:59 MSK (UTC+3). Entries always use Moscow time regardless of the device's timezone.
 
@@ -846,16 +591,13 @@ food-diary-v2/
 │       └── components/ui/       # shadcn/ui components
 │
 ├── server/                      # Node.js backend (Express)
-│   ├── auth.ts                  # access JWT, refresh cookies, bcrypt, AES-256-GCM, requireAuth
+│   ├── auth.ts                  # JWT, bcrypt, AES-256-GCM, requireAuth
 │   ├── routes.ts                # REST API endpoints
 │   ├── storage.ts               # Drizzle ORM + SQLite
 │   └── excel.ts                 # Excel report generator
 │
 ├── shared/
 │   └── schema.ts                # Drizzle schema (users, secrets, days, meals)
-│
-├── test/                        # Vitest unit/integration tests
-├── tests/e2e/                   # Playwright E2E smoke tests
 │
 ├── bot/                         # (unused in V1, reserved for V2)
 │
@@ -869,194 +611,29 @@ food-diary-v2/
 
 ## API Reference
 
-| Method | Endpoint                |  Auth  | Description                                     |
-| ------ | ----------------------- | :----: | ----------------------------------------------- |
-| POST   | `/api/auth/register`    |   —    | Register a new user                             |
-| POST   | `/api/auth/login`       |   —    | Login: access token in JSON + refresh cookie    |
-| POST   | `/api/auth/forgot-password` | — | Request password reset link by email (SMTP) |
-| POST   | `/api/auth/reset-password` | — | Set new password using token from email |
-| POST   | `/api/auth/refresh`     | cookie | Refresh access token from refresh cookie        |
-| POST   | `/api/auth/logout`      | cookie | Logout: revokes refresh token and clears cookie |
-| GET    | `/api/auth/me`          |   ✅   | Current user info                               |
-| GET    | `/api/secrets`          |   ✅   | List saved secrets                              |
-| PUT    | `/api/secrets/:name`    |   ✅   | Save/update secret (encrypted)                  |
-| GET    | `/api/days/:date`       |   ✅   | Day data + meals (YYYY-MM-DD)                   |
-| POST   | `/api/meals`            |   ✅   | Add meal entry                                  |
-| DELETE | `/api/meals/:id`        |   ✅   | Delete entry                                    |
-| PATCH  | `/api/meals/:id`        |   ✅   | Update entry                                    |
-| POST   | `/api/days/:id/summary` |   ✅   | Save day summary                                |
-| GET    | `/api/report/:date`     |   ✅   | Download Excel (202 if summary needed)          |
-| GET    | `/api/analytics/summary` |   ✅   | Nutrition analytics summary for a date range    |
-| GET    | `/api/now`              |   —    | Current MSK date and time                       |
+| Method | Endpoint                | Auth | Description                            |
+| ------ | ----------------------- | :--: | -------------------------------------- |
+| POST   | `/api/auth/register`    |  —   | Register a new user                    |
+| POST   | `/api/auth/login`       |  —   | Login (sets JWT httpOnly cookie)       |
+| POST   | `/api/auth/logout`      |  ✅  | Logout (clears cookie)                 |
+| GET    | `/api/auth/me`          |  ✅  | Current user info                      |
+| GET    | `/api/secrets`          |  ✅  | List saved secrets                     |
+| PUT    | `/api/secrets/:name`    |  ✅  | Save/update secret (encrypted)         |
+| DELETE | `/api/secrets/:name`    |  ✅  | Delete secret                          |
+| GET    | `/api/days/:date`       |  ✅  | Day data + meals (YYYY-MM-DD)          |
+| POST   | `/api/meals`            |  ✅  | Add meal entry                         |
+| DELETE | `/api/meals/:id`        |  ✅  | Delete entry                           |
+| PATCH  | `/api/meals/:id`        |  ✅  | Update entry                           |
+| POST   | `/api/days/:id/summary` |  ✅  | Save day summary                       |
+| GET    | `/api/report/:date`     |  ✅  | Download Excel (202 if summary needed) |
+| GET    | `/api/now`              |  —   | Current MSK date and time              |
 
 ## Roadmap
 
-- [x] Phase 6: HTTPS + Caddy deployment
-- [x] Phase 3: SQLite persistence, WAL mode, backups
-- [x] Phase 10: access/refresh session lifecycle + idle timeout
-- [x] Phase 2: security hardening and audit fixes
-- [x] Phase 1: tests, linting, E2E smoke, CI
-- [x] UX-1: edit existing meal entries
-- [x] Phase 4: admin panel MVP
-- [x] Phase 9: DeepSeek usage alerting / daily limit blocking
-- [x] Phase 11: analytics dashboard MVP
-- [x] UX-2: admin username visibility
-- [x] UX-3: move meals between days when editing
-- [x] UX-4: explicit wake/sleep dates
-- [x] UX-5: calendar analytics periods
-- [x] Phase 5: email password reset
-
-## Changelog
-
-### [1.15.0] — 2026-06-27
-
-**feat: Phase 5 self-service password reset**
-
-- Added `POST /api/auth/forgot-password` and `POST /api/auth/reset-password`
-- Password reset tokens in SQLite (1 hour TTL, single use)
-- SMTP email via nodemailer; login form «Забыли пароль?»; `/#/reset-password` page
-- Rate limit 3 forgot-password requests per 15 min per IP; no user enumeration
-
-### [1.13.0] — 2026-06-27
-
-**feat: UX-2…UX-5 admin, meal move, sleep dates, calendar analytics**
-
-- Admin panel shows `username` as the primary identifier in users/sessions tables
-- Meal edit allows changing date; `PATCH /api/meals/:id` moves records between days
-- Day summary stores `wakeDate`/`sleepDate`; Excel and analytics use explicit date+time sleep math
-- Analytics uses calendar week/month/year periods with empty-day padding and prev/next navigation
-- Added `shared/dates.ts`, unit/integration coverage, updated E2E edit flow
-
-### [1.12.0] — 2026-06-27
-
-**feat: Phase 11 analytics dashboard MVP**
-
-- Added `/api/analytics/summary?from=YYYY-MM-DD&to=YYYY-MM-DD`
-- Aggregates meals, calories, macros, water, hunger/satiety, sleep and steps per day
-- Added `/#/analytics` page with period switches, summary cards and Recharts charts
-- Added integration coverage for analytics auth and per-user aggregates
-
-### [1.11.0] — 2026-06-27
-
-**feat: Phase 9 DeepSeek daily limit guard**
-
-- Blocks `/api/analyze` with `429` when `DEEPSEEK_DAILY_TOKEN_LIMIT` is reached
-- Returns structured limit status without calling DeepSeek after the limit is reached
-- Shows blocked/allowed analysis status in the admin DeepSeek usage card
-- Added integration coverage for daily limit blocking
-
-### [1.10.0] — 2026-06-27
-
-**feat: Phase 4 DeepSeek usage dashboard**
-
-- Added `api_usage` storage for DeepSeek token and cost tracking
-- Records DeepSeek prompt/completion tokens after successful nutrition analysis
-- Added admin DeepSeek usage summary with daily token limit status
-- Added dashboard cards and recent daily usage table to `/#/admin`
-- Added integration coverage for admin usage access
-- External notifications remain planned for Phase 9
-
-### [1.9.0] — 2026-06-27
-
-**feat: Phase 4 admin password reset**
-
-- Added admin user list endpoint and UI table
-- Added admin password reset action that returns a one-time temporary password
-- Revokes the selected user's refresh sessions after password reset
-- Added integration coverage for admin reset permissions and new-password login
-- Phase 4 still has DeepSeek usage dashboard/alerts pending
-
-### [1.8.0] — 2026-06-27
-
-**feat: Phase 4 session management**
-
-- Added admin API actions to revoke one refresh session or all sessions for a user
-- Added session management buttons to the guarded admin page
-- Added integration coverage for admin session revoke permissions and behavior
-- Phase 4 still has password reset and DeepSeek dashboard slices pending
-
-### [1.7.0] — 2026-06-27
-
-**feat: Phase 4 admin foundation**
-
-- Added `user/admin` roles, admin JWT payloads, and `requireAdmin` middleware for `/api/admin/*`
-- Added `ADMIN_BOOTSTRAP_USERNAME` startup bootstrap for promoting an existing user to admin
-- Added read-only `/api/admin/sessions` based on active refresh sessions
-- Added a guarded `/#/admin` page with an active sessions table
-- Added integration coverage for admin vs non-admin access
-
-### [1.6.0] — 2026-06-27
-
-**feat: edit existing meal entries**
-
-- Added an **Edit** action next to delete on meal cards
-- The edit form opens with current entry values and saves through `PATCH /api/meals/:id`
-- The current day's TanStack Query cache is updated after saving
-- Expanded PATCH integration coverage and E2E add → edit → verify coverage
-
-### [1.5.0] — 2026-06-27
-
-**feat: session lifecycle, security hardening, and CI quality gates**
-
-- Added refresh token table, hashed refresh tokens, 30-minute access JWTs, 7-day httpOnly refresh cookies
-- Added `/api/auth/refresh`; login/register/logout now rotate or revoke refresh sessions
-- React keeps access tokens in memory and refreshes them through the API client
-- Added frontend idle warning/logout timers (25/30 minutes)
-- Added Helmet/CSP/HSTS, CORS allowlist, rate limits for login and meal creation
-- Fixed IDOR in day summary updates and strict Zod validation for meal updates
-- Removed full JSON API response bodies from logs
-- Added Vitest unit tests, Supertest integration tests, Playwright E2E smoke test, ESLint, Prettier, Husky, lint-staged
-- Added GitHub Actions CI and Dependabot config
-
-### [1.4.0] — 2026-06-26
-
-**feat: HTTPS deployment and SQLite persistence**
-
-- Added Caddy reverse proxy with HTTPS support
-- Added secure cookie/proxy configuration for production
-- Enabled SQLite WAL mode and backup scripts
-- Added backup cron installer and deployment preflight checks
-
-### [1.2.0] — 2026-06-26
-
-**feat: remove Telegram bot, add authentication and encrypted secrets**
-
-- Removed Telegram bot (`bot/` service) from Docker Compose — now single `api` service
-- Added `users` table: username, email, `passwordHash` (bcryptjs cost 12)
-- Added `secrets` table: per-user encrypted key-value storage (AES-256-GCM)
-- Added JWT authentication via httpOnly cookie (7-day expiry, sameSite: lax)
-- New endpoints: `POST /api/auth/register`, `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me`
-- New endpoints: `GET/PUT/DELETE /api/secrets/:name`
-- `requireAuth` middleware — all `/api/*` routes are now protected
-- New frontend page: `AuthPage.tsx` — login + register tabs (shadcn/ui)
-- `AuthProvider` context + `useAuth` hook in `client/src/lib/auth.tsx`
-- Logout button and username display in `DiaryPage` header
-- Updated `.env.example`: `JWT_SECRET`, `JWT_EXPIRES_IN`, `ENCRYPTION_KEY` (no `TELEGRAM_BOT_TOKEN`)
-- `preflight-check.sh` section 11: replaced Telegram token validation with API health check (`GET /api/auth/me`)
-
-### [1.1.0] — 2026-06-25
-
-**feat: preflight-check.sh — server readiness script**
-
-- 11-section bash script: OS, RAM, disk, internet, Docker, ports, firewall, env vars, Docker images, compose syntax, Telegram token
-- Color output with box-drawing characters, ✔/✘/⚠ symbols
-- SUMMARY panel with blockers list and colored verdict (green/yellow/red)
-- `--fix` mode: auto-installs Docker, opens firewall ports, creates `.env` from template
-- Internet check via `https://hub.docker.com/`
-
-### [1.0.0] — 2026-06-25
-
-**feat: initial MVP**
-
-- React 18 + Vite + Tailwind CSS v3 + shadcn/ui frontend
-- Express + TypeScript + Drizzle ORM + SQLite backend
-- Meal logging: food, drink, hunger/satiety scale (0–10), meal type, context
-- Date navigation (no future dates)
-- Day summary dialog: wake time, bedtime, sport, steps, comment
-- Excel report generator (exceljs) — doctor format, 7 columns, hunger scale legend, auto-totals
-- Docker Compose: `api` (Node.js) + `bot` (Python/aiogram 3) services
-- MSK timezone (UTC+3) — day boundary at 00:00–23:59 MSK
-- Bilingual README (RU/EN) with architecture diagram and full install guide
+- [x] V1: text input, web form, authentication, encrypted secrets, Excel report
+- [ ] V2: photo recognition via GigaChat Vision (Sber)
+- [ ] V3: automatic KBJU calculation (FatSecret / USDA API)
+- [ ] V4: weekly/monthly statistics and charts
 
 ## License
 
