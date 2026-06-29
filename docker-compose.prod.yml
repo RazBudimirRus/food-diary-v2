@@ -1,0 +1,42 @@
+# Production docker-compose для сервера с внешним nginx (95.163.213.45)
+# Запуск: docker compose -f docker-compose.prod.yml up -d --build
+# Nginx проксирует на 127.0.0.1:5000
+
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: food_diary_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: "1"
+    volumes:
+      - data_db:/app/data
+    ports:
+      - "127.0.0.1:5000:5000"
+    networks:
+      - food_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  food_net:
+    driver: bridge
+
+volumes:
+  data_db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /srv/foodbot/data
