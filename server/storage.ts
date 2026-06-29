@@ -53,7 +53,8 @@ import {
   type PeriodInsights,
 } from "@shared/analytics";
 
-const DB_PATH = process.env.SQLITE_DB_PATH || "data.db";
+// data/ is the Docker volume mount point (/app/data inside container)
+const DB_PATH = process.env.SQLITE_DB_PATH || "data/data.db";
 const sqlite = new Database(DB_PATH);
 export const db = drizzle(sqlite, { schema });
 

@@ -133,8 +133,8 @@ app.get("/metrics", async (_req, res) => {
 
 (async () => {
   // Phase 26.1: Run versioned migrations before anything else
-  // Must match the default in storage.ts: process.env.SQLITE_DB_PATH || "data.db"
-  const dbPath = process.env.SQLITE_DB_PATH ?? "data.db";
+  // Must match the default in storage.ts: process.env.SQLITE_DB_PATH || "data/data.db"
+  const dbPath = process.env.SQLITE_DB_PATH ?? "data/data.db";
   runMigrations(dbPath);
 
   // Load DeepSeek key from env → encrypt → store in DB (idempotent)
