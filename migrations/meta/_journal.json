@@ -22,6 +22,13 @@
       "when": 1782767761835,
       "tag": "0002_add_idempotency_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1782774428312,
+      "tag": "0003_add_pd_consent_at",
+      "breakpoints": true
     }
   ]
 }
