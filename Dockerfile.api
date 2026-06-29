@@ -11,9 +11,10 @@ RUN apt-get update && apt-get install -y curl sqlite3 && rm -rf /var/lib/apt/lis
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/migrations ./migrations
 # SQLite db will be in /app/data mounted from host
 RUN mkdir -p /app/data
-WORKDIR /app/data
+# Keep WORKDIR as /app so process.cwd() == /app at runtime
 ENV NODE_ENV=production
 EXPOSE 5000
 CMD ["node", "/app/dist/index.cjs"]
