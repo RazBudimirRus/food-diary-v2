@@ -238,6 +238,7 @@ export const userProfiles = sqliteTable("user_profiles", {
   targetFat: real("target_fat"),
   targetCarbs: real("target_carbs"),
   onboardingSkipped: integer("onboarding_skipped", { mode: "boolean" }).default(false),
+  dietaryRestrictions: text("dietary_restrictions"),
   updatedAt: text("updated_at").notNull().default(""),
 });
 
@@ -384,3 +385,14 @@ export const photos = sqliteTable("photos", {
   createdAt: text("created_at").notNull().default(""),
 });
 export type Photo = typeof photos.$inferSelect;
+
+// ─── Phase 26.7 — Idempotency Keys ────────────────────────────────────────────
+export const idempotencyKeys = sqliteTable("idempotency_keys", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  key: text("key").notNull().unique(),
+  userId: integer("user_id").notNull(),
+  responseStatus: integer("response_status").notNull(),
+  responseBody: text("response_body").notNull(),
+  createdAt: text("created_at").notNull().default(""),
+  expiresAt: text("expires_at").notNull(),
+});

@@ -1,693 +1,237 @@
-<div align="center">
+# 🍽 Дневник питания v2
 
-# 🥗 Food Diary V2
+Веб-приложение для ведения дневника питания с кабинетом врача, AI-расчётом КБЖУ и фото блюд.
 
-**Личный дневник питания** — веб-приложение с авторизацией и выгрузкой отчёта в формате Excel для врача.
-
-**Personal food diary** — web application with authentication and Excel report export for your doctor.
+[![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions)
 
 ---
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+## Стек технологий
 
-</div>
-
----
-
-## Содержание / Contents
-
-- [🇷🇺 Русский](#-русский)
-  - [Описание](#описание)
-  - [Возможности](#возможности)
-  - [Архитектура](#архитектура)
-  - [Установка и запуск](#установка-и-запуск)
-  - [Использование](#использование)
-  - [Структура проекта](#структура-проекта)
-- [🇬🇧 English](#-english)
-  - [Description](#description)
-  - [Features](#features)
-  - [Architecture](#architecture)
-  - [Installation & Setup](#installation--setup)
-  - [Usage](#usage)
-  - [Project Structure](#project-structure)
+| Слой                 | Технологии                                                                     |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **Frontend**         | React 18, Vite 7, TypeScript, Tailwind CSS v3, shadcn/ui, Radix UI, Recharts   |
+| **Backend**          | Node.js 20, Express 5, TypeScript, Drizzle ORM                                 |
+| **База данных**      | SQLite (better-sqlite3) + versioned migrations (drizzle-kit)                   |
+| **Auth**             | bcrypt (cost 12) + JWT (30m access / 7d refresh httpOnly cookie) + AES-256-GCM |
+| **AI**               | DeepSeek API — расчёт КБЖУ по текстовому описанию                              |
+| **Хранилище фото**   | VK Object Storage (S3-compatible) + sharp (resize, EXIF strip)                 |
+| **Push-уведомления** | Web Push (VAPID)                                                               |
+| **Логи**             | pino + request_id (AsyncLocalStorage)                                          |
+| **Мониторинг**       | Prometheus-совместимые `/metrics`, Sentry/GlitchTip (опционально)              |
+| **Прокси**           | Caddy 2 (TLS termination, gzip, security headers)                              |
+| **CI/CD**            | GitHub Actions — typecheck, lint, vitest, playwright                           |
 
 ---
 
-# 🇷🇺 Русский
+## Реализованный функционал (v2.9.0)
 
-## Описание
+### Пользователь
 
-Food Diary V2 — инструмент для ведения дневника питания, разработанный для личного контроля и совместной работы с лечащим врачом или нутрициологом. Сервис позволяет фиксировать каждый приём пищи через веб-форму, отслеживать уровень голода и насыщения по шкале 0–10, а в конце дня скачивать готовый Excel-отчёт в формате, согласованном с врачом.
+- Дневник питания с разбивкой по дням (МСК-часовой пояс)
+- Ввод еды, напитков, воды с временными метками и шкалами голода/насыщения
+- AI-расчёт КБЖУ (DeepSeek) по текстовому описанию
+- Загрузка фото блюд (до 50 МБ, хранение в VK Object Storage)
+- Каталог продуктов пользователя (UX-7)
+- Аналитика: графики КБЖУ, макронутриентов, воды, сна за период
+- Excel-отчёт за день / диапазон дат
+- Сброс пароля через email
+- Push-уведомления
 
-Приложение поддерживает несколько пользователей — каждый регистрируется через браузер, данные изолированы. Секреты хранятся в зашифрованном виде (AES-256-GCM).
+### Врач
 
-> **Версия 1 (текущая):** текстовый ввод через веб-форму. Распознавание по фото (GigaChat Vision) запланировано в V2.
+- Кабинет врача: привязка пациентов по поиску, чтение дневников
+- Таргеты КБЖУ от врача пациенту
+- Заметки врача к приёмам пищи
+- Профиль врача (имя, телефон, Telegram)
 
-## Возможности
+### Администратор
 
-| Функция                         | Статус |
-| ------------------------------- | :----: |
-| Регистрация / вход / выход      |   ✅   |
-| Добавить приём пищи             |   ✅   |
-| Навигация по датам              |   ✅   |
-| Шкала голода/насыщения 0–10     |   ✅   |
-| Контекст приёма (где, как)      |   ✅   |
-| Итоги дня (подъём/спорт/шаги)   |   ✅   |
-| Excel-отчёт для врача           |   ✅   |
-| Удаление записи                 |   ✅   |
-| Зашифрованное хранение секретов |   ✅   |
-| Распознавание фото              | 🔜 V2  |
+- Управление пользователями: список, создание, смена роли (user/doctor/admin)
+- Мониторинг использования DeepSeek API (токены, стоимость, лимиты)
+- Bootstrap первого администратора через `ADMIN_BOOTSTRAP_USERNAME` в `.env`
 
-### Excel-отчёт
+### Профиль пользователя
 
-Формируется по формату лечащего врача:
+- Смена отображаемого имени
+- Сброс пароля
+- Анкета: пол, рост, вес, уровень активности
+- Профиль врача (для роли doctor)
+- Дата последнего входа
 
-- **7 колонок:** интервал приёма, голод до (0–10), тип приёма, что ел, что пил, насыщение после (0–10), контекст
-- **Итоги дня:** подъём, отбой, спорт, шаги, общий комментарий
-- **Автоматические итоги:** суммарный объём воды, количество приёмов, средний голод/насыщение — с пустыми полями «по версии врача»
-- **Цветная легенда шкалы голода** (зелёная зона 3–7, красная зона 0–2 и 8–10)
+### Безопасность
 
-### Шкала голода
-
-```
-0 — Экстремальный голод        🔴   7 — Комфортная сытость         🟢
-1 — Сильный голод              🔴   8 — Переел                     🔴
-2 — Ощутимый голод             🔴   9 — Дискомфорт от переедания   🔴
-3 — Основательно проголодался  🟢  10 — Экстремальное переедание   🔴
-4 — Лёгкий голод               🟢
-5 — Нейтрально                 🟢
-6 — Лёгкая сытость             🟢
-```
-
-## Архитектура
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        Клиенты                              │
-│              ┌──────────────────────────┐                   │
-│              │      Веб-браузер         │                   │
-│              └────────────┬─────────────┘                   │
-└───────────────────────────┼─────────────────────────────────┘
-                            │ HTTP/HTTPS
-┌───────────────────────────▼─────────────────────────────────┐
-│                     Docker Compose                          │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              api  (Node.js / Express)                │   │
-│  │                                                      │   │
-│  │  • Vite SPA (React 18)      • Auth (JWT + bcrypt)   │   │
-│  │  • REST API (/api/*)        • AES-256-GCM secrets    │   │
-│  │  • Excel generator          • requireAuth middleware  │   │
-│  │  • Drizzle ORM + SQLite                              │   │
-│  └──────────────────────┬───────────────────────────────┘   │
-│                         │                                   │
-│  ┌──────────────────────▼───────────────────────────────┐   │
-│  │              data.db  (SQLite)                       │   │
-│  │              /srv/foodbot/data/                      │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Стек технологий
-
-| Слой                | Технология                                                 |
-| ------------------- | ---------------------------------------------------------- |
-| Frontend            | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query |
-| Backend             | Node.js 20, Express, TypeScript                            |
-| База данных         | SQLite (better-sqlite3) + Drizzle ORM                      |
-| Аутентификация      | bcryptjs (cost 12) + JWT (httpOnly cookie, 7 дней)         |
-| Шифрование секретов | AES-256-GCM, ключ из `ENCRYPTION_KEY`                      |
-| Excel               | exceljs                                                    |
-| Контейнеризация     | Docker, Docker Compose (1 сервис: `api`)                   |
-| Reverse proxy       | Caddy (опционально)                                        |
-| Часовой пояс        | МСК (UTC+3) — день = 00:00–23:59 MSK                       |
-
-## Установка и запуск
-
-### Требования
-
-- Ubuntu 22.04 / 24.04 LTS
-- Docker >= 24 + Docker Compose plugin
-- Минимум 1 GB RAM, 5 GB свободного диска
+- Helmet.js (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- CORS allow-list через `ALLOWED_ORIGINS`
+- Rate limiting на аутентификацию и расчёт КБЖУ
+- Идемпотентность POST /api/meals (заголовок `Idempotency-Key`)
+- Caddy: HSTS preload, Referrer-Policy, Permissions-Policy, -Server
 
 ---
 
-### ⚡ Быстрый старт — интерактивный установщик
+## Быстрый старт (Docker)
 
-Самый простой способ установки — один скрипт, который ведёт тебя по шагам:
-
-```bash
-git clone https://github.com/RazBudimirRus/food-diary-v2.git /srv/foodbot
-cd /srv/foodbot
-sudo bash install.sh
-```
-
-Установщик автоматически:
-1. **Запускает preflight-check.sh** и показывает отчёт о готовности сервера
-2. **Спрашивает подтверждение** — ты явно отвечаешь что видел отчёт
-3. **Запрашивает домен** приложения и сразу прописывает его в `.env` (DOMAIN, PUBLIC_URL, ALLOWED_ORIGINS)
-4. **Генерирует секреты** (JWT_SECRET, ENCRYPTION_KEY) если не заданы
-5. **Запускает** `docker compose up -d --build` и проверяет что API ответил
-
-Если хочешь установить вручную — продолжай с Шага 0 ниже.
-
----
-
-### Шаг 0. Проверка готовности сервера
-
-Перед установкой обязательно запустите скрипт проверки:
+### 1. Клонировать и настроить
 
 ```bash
-wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food-diary-v2/main/preflight-check.sh
-sudo bash preflight-check.sh
-```
-
-Скрипт проверяет 13 параметров (OS, RAM, диск, сеть, Docker, порты, nginx/apache интеграция, firewall, .env, API health) и выводит цветной отчёт с готовыми конфигами для интеграции с существующим nginx/apache. При наличии типовых проблем запустите с флагом `--fix`:
-
-```bash
-sudo bash preflight-check.sh --fix
-```
-
-### Шаг 1. Установка Docker
-
-```bash
-curl -fsSL https://get.docker.com | sudo bash
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-newgrp docker   # применить без перелогина
-```
-
-### Шаг 2. Создание рабочей директории
-
-```bash
-sudo mkdir -p /srv/foodbot/data
-sudo chown -R $USER:$USER /srv/foodbot
-```
-
-### Шаг 3. Клонирование репозитория
-
-```bash
-cd /srv/foodbot
-git clone https://github.com/RazBudimirRus/food-diary-v2.git .
-```
-
-### Шаг 4. Настройка переменных окружения
-
-```bash
+git clone https://github.com/RazBudimirRus/food-diary-v2.git
+cd food-diary-v2
 cp .env.example .env
-nano .env
+# Отредактировать .env — заменить DOMAIN, JWT_SECRET, ENCRYPTION_KEY
 ```
 
-Минимальный `.env`:
-
-```env
-JWT_SECRET=<случайная строка, минимум 40 символов>
-JWT_EXPIRES_IN=7d
-ENCRYPTION_KEY=<случайная строка, минимум 40 символов>
-```
-
-Сгенерировать значения:
+### 2. TLS-сертификат
 
 ```bash
-openssl rand -hex 32   # для JWT_SECRET
-openssl rand -hex 32   # для ENCRYPTION_KEY
+# Wildcard-сертификат (*.razbudimir.com уже есть на сервере):
+mkdir -p certs
+cp /path/to/fullchain.pem certs/
+cp /path/to/privkey.pem   certs/
 ```
 
-### Шаг 5. Запуск
+### 3. Запустить
 
 ```bash
-docker compose up -d --build
+docker compose up -d
+# Приложение доступно на https://<DOMAIN>
 ```
 
-Проверить статус:
+### 4. Создать первого администратора
 
 ```bash
-docker compose ps
-docker compose logs -f
+# В .env: ADMIN_BOOTSTRAP_USERNAME=your_username
+docker compose restart api
 ```
 
-### Шаг 6. Доступ
+---
 
-| Сервис     | Адрес                                  |
-| ---------- | -------------------------------------- |
-| Веб-форма  | `http://<IP_сервера>:5000`             |
-| API health | `http://<IP_сервера>:5000/api/auth/me` |
-
-При первом входе нажмите **«Регистрация»** и создайте учётную запись.
-
-### Шаг 7 (опционально). Caddy + домен
-
-Если есть домен — раскомментируйте в `Caddyfile` блок с доменом и добавьте Caddy в `docker-compose.yml`:
-
-```yaml
-caddy:
-  image: caddy:2-alpine
-  container_name: food_caddy
-  restart: unless-stopped
-  ports:
-    - "80:80"
-    - "443:443"
-  volumes:
-    - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    - caddy_data:/data
-    - caddy_config:/config
-  networks:
-    - food_net
-  depends_on:
-    - api
-```
-
-Добавьте в раздел `volumes`:
-
-```yaml
-caddy_data:
-caddy_config:
-```
-
-### Обновление
+## Разработка локально
 
 ```bash
-cd /srv/foodbot
-git pull
-docker compose up -d --build
+npm install
+cp .env.example .env
+# Заполнить минимальный .env для dev (JWT_SECRET, ENCRYPTION_KEY)
+
+npm run dev       # Frontend + Backend на :5000
+npm run typecheck # TypeScript проверка
+npm test          # Vitest unit-тесты
+npm run test:e2e  # Playwright E2E (требует билда)
 ```
 
-### Бэкап базы данных
-
-```bash
-# Ручной бэкап
-cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
-
-# Автоматический (cron, ежедневно в 03:00)
-echo "0 3 * * * cp /srv/foodbot/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
-```
-
-## Использование
-
-### Веб-форма
-
-1. Откройте `http://<сервер>:5000`
-2. При первом входе нажмите **«Регистрация»** → введите имя пользователя, e-mail и пароль
-3. После входа — навигация по датам стрелками в шапке (нельзя выбрать дату в будущем)
-4. Нажмите **«Добавить приём пищи»** → заполните форму
-5. Кнопка **«Отчёт»** в шапке → если итоги дня ещё не заполнены, откроется диалог (подъём/отбой/спорт/шаги). При повторном скачивании диалог не показывается
-6. Файл скачивается как `Дневник_питания_YYYY-MM-DD.xlsx`
-7. Для выхода — кнопка **«Выйти»** в шапке (иконка выхода)
-
-> **Важно:** один день = 00:00–23:59 по МСК (UTC+3). Записи всегда относятся к московскому времени независимо от часового пояса устройства.
+---
 
 ## Структура проекта
 
 ```
 food-diary-v2/
-├── client/                      # React frontend (Vite)
+├── client/              # React 18 фронтенд
 │   └── src/
-│       ├── pages/
-│       │   ├── AuthPage.tsx     # Страница входа / регистрации
-│       │   └── DiaryPage.tsx    # Основной интерфейс дневника
-│       ├── lib/
-│       │   ├── auth.tsx         # AuthProvider + useAuth hook
-│       │   └── queryClient.ts   # API client (TanStack Query)
-│       └── components/ui/       # shadcn/ui компоненты
-│
-├── server/                      # Node.js backend (Express)
-│   ├── auth.ts                  # JWT, bcrypt, AES-256-GCM, requireAuth
-│   ├── routes.ts                # REST API endpoints
-│   ├── storage.ts               # Drizzle ORM + SQLite
-│   └── excel.ts                 # Генератор Excel-отчётов
-│
+│       ├── pages/       # AuthPage, DiaryPage, AdminPage, DoctorPage, ProfilePage, AnalyticsPage…
+│       ├── components/  # shadcn/ui компоненты + BottomNav, ErrorBoundary
+│       └── lib/         # auth.tsx, queryClient.ts, dates.ts
+├── server/              # Node.js + Express бэкенд
+│   ├── index.ts         # Точка входа: migrations → pino → express → routes
+│   ├── routes.ts        # Все API роуты (~1100 строк)
+│   ├── storage.ts       # Drizzle ORM + SQLite (~1500 строк)
+│   ├── migrate.ts       # Drizzle-kit migration runner (Phase 26.1)
+│   ├── logger.ts        # pino + AsyncLocalStorage request_id (Phase 27.1)
+│   ├── metrics.ts       # Prometheus /metrics (Phase 27.4)
+│   ├── sentry.ts        # Sentry/GlitchTip опционально (Phase 27.3)
+│   ├── deepseek.ts      # DeepSeek API клиент
+│   ├── s3.ts            # VK Object Storage (AWS SDK v3)
+│   └── auth.ts          # JWT, bcrypt, refresh-token логика
 ├── shared/
-│   └── schema.ts                # Drizzle schema (users, secrets, days, meals)
-│
-├── bot/                         # (не используется в V1, зарезервировано для V2)
-│
-├── docker-compose.yml           # Один сервис: api
-├── Dockerfile.api               # Node.js контейнер
-├── Caddyfile                    # Конфиг reverse proxy
-├── install.sh                    # Интерактивный установщик (preflight → домен → .env → запуск)
-├── preflight-check.sh           # Скрипт проверки сервера перед установкой
-├── DEPLOY.md                    # Детальный гайд по деплою (RU)
-└── .env.example                 # Шаблон переменных окружения
+│   ├── schema.ts        # Drizzle + Zod схемы (16 таблиц)
+│   └── dates.ts         # MSK timezone утилиты
+├── migrations/          # SQL-миграции (drizzle-kit generate)
+├── scripts/             # backup.sh, preflight.sh
+├── Caddyfile            # Caddy конфигурация (TLS, security headers)
+├── docker-compose.yml   # api + caddy сервисы
+├── Dockerfile.api       # Multi-stage build
+└── .env.example         # Все переменные с комментариями
 ```
-
-## API Reference
-
-| Method | Endpoint                | Auth | Description                                 |
-| ------ | ----------------------- | :--: | ------------------------------------------- |
-| POST   | `/api/auth/register`    |  —   | Регистрация пользователя                    |
-| POST   | `/api/auth/login`       |  —   | Вход (возвращает JWT cookie)                |
-| POST   | `/api/auth/logout`      |  ✅  | Выход (очищает cookie)                      |
-| GET    | `/api/auth/me`          |  ✅  | Текущий пользователь                        |
-| GET    | `/api/secrets`          |  ✅  | Список сохранённых секретов                 |
-| PUT    | `/api/secrets/:name`    |  ✅  | Сохранить/обновить секрет (зашифровано)     |
-| DELETE | `/api/secrets/:name`    |  ✅  | Удалить секрет                              |
-| GET    | `/api/days/:date`       |  ✅  | Данные дня + приёмы пищи (YYYY-MM-DD)       |
-| POST   | `/api/meals`            |  ✅  | Добавить приём пищи                         |
-| DELETE | `/api/meals/:id`        |  ✅  | Удалить запись                              |
-| PATCH  | `/api/meals/:id`        |  ✅  | Обновить запись                             |
-| POST   | `/api/days/:id/summary` |  ✅  | Сохранить итоги дня                         |
-| GET    | `/api/report/:date`     |  ✅  | Скачать Excel (202 если итоги не заполнены) |
-| GET    | `/api/now`              |  —   | Текущие дата и время МСК                    |
-
-## Roadmap
-
-- [x] V1: текстовый ввод, веб-форма, авторизация, зашифрованные секреты, Excel-отчёт
-- [ ] V2: распознавание фото через GigaChat Vision (Сбер)
-- [ ] V3: автоматический подсчёт КБЖУ (FatSecret / USDA API)
-- [ ] V4: статистика и графики по неделям/месяцам
-
-## License
-
-MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
-<div align="center">
-Made with ❤️ for health tracking · <a href="https://github.com/RazBudimirRus">@RazBudimirRus</a>
-</div>
+## API Endpoints (ключевые)
+
+| Метод   | Путь                              | Доступ | Описание                                        |
+| ------- | --------------------------------- | ------ | ----------------------------------------------- |
+| GET     | `/api/health`                     | Public | Проверка БД / S3 / DeepSeek                     |
+| GET     | `/api/metrics`                    | Public | Prometheus метрики                              |
+| POST    | `/api/auth/register`              | Public | Регистрация                                     |
+| POST    | `/api/auth/login`                 | Public | Вход                                            |
+| GET     | `/api/days`                       | Auth   | Список дней                                     |
+| POST    | `/api/meals`                      | Auth   | Добавить приём (поддерживает `Idempotency-Key`) |
+| POST    | `/api/meals/:id/analyze`          | Auth   | Расчёт КБЖУ (DeepSeek)                          |
+| POST    | `/api/photos`                     | Auth   | Загрузить фото блюда                            |
+| GET     | `/api/report/:date`               | Auth   | Excel за день                                   |
+| GET     | `/api/report/range`               | Auth   | Excel за диапазон                               |
+| GET/PUT | `/api/profile`                    | Auth   | Профиль пользователя                            |
+| GET     | `/api/doctor/patients`            | Doctor | Список пациентов                                |
+| POST    | `/api/doctor/patients/:id/assign` | Doctor | Привязать пациента                              |
+| GET     | `/api/admin/users`                | Admin  | Список пользователей                            |
+| POST    | `/api/admin/users/:id/set-role`   | Admin  | Сменить роль                                    |
 
 ---
 
-# 🇬🇧 English
+## Мониторинг и логи
 
-## Description
+```bash
+# Структурированные логи (pino JSON)
+docker compose logs -f api | jq .
 
-Food Diary V2 is a personal food diary web application designed for self-monitoring and collaboration with a doctor or nutritionist. It lets you log every meal through a web form, track hunger and satiety on a 0–10 scale, and download a ready-made Excel report at the end of the day in a format agreed with your doctor.
+# Prometheus метрики
+curl http://localhost:5000/metrics
 
-The app supports multiple users — each registers through the browser, data is isolated per account. Secrets are stored encrypted (AES-256-GCM).
-
-> **Version 1 (current):** text input via web form. Photo recognition (GigaChat Vision) is planned for V2.
-
-## Features
-
-| Feature                        | Status |
-| ------------------------------ | :----: |
-| Register / login / logout      |   ✅   |
-| Add meal entry                 |   ✅   |
-| Date navigation                |   ✅   |
-| Hunger/satiety scale 0–10      |   ✅   |
-| Meal context (where, how)      |   ✅   |
-| Day summary (wake/sport/steps) |   ✅   |
-| Excel report for doctor        |   ✅   |
-| Delete entry                   |   ✅   |
-| Encrypted secrets storage      |   ✅   |
-| Photo recognition              | 🔜 V2  |
-
-### Excel Report
-
-Generated in the doctor's agreed format:
-
-- **7 columns:** time interval, hunger before (0–10), meal type, food, drink, satiety after (0–10), context
-- **Day summary:** wake time, bedtime, sport activity, steps, general comment
-- **Auto totals:** total water volume, meal count, avg hunger/satiety — with empty "doctor's version" fields
-- **Color-coded hunger scale legend** (green zone 3–7, red zone 0–2 and 8–10)
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                          Clients                            │
-│              ┌──────────────────────────┐                   │
-│              │       Web browser        │                   │
-│              └────────────┬─────────────┘                   │
-└───────────────────────────┼─────────────────────────────────┘
-                            │ HTTP/HTTPS
-┌───────────────────────────▼─────────────────────────────────┐
-│                      Docker Compose                         │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              api  (Node.js / Express)                │   │
-│  │                                                      │   │
-│  │  • Vite SPA (React 18)      • Auth (JWT + bcrypt)   │   │
-│  │  • REST API (/api/*)        • AES-256-GCM secrets    │   │
-│  │  • Excel generator          • requireAuth middleware  │   │
-│  │  • Drizzle ORM + SQLite                              │   │
-│  └──────────────────────┬───────────────────────────────┘   │
-│                         │                                   │
-│  ┌──────────────────────▼───────────────────────────────┐   │
-│  │              data.db  (SQLite)                       │   │
-│  │              /srv/foodbot/data/                      │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+# Healthcheck
+curl https://fooddiary.razbudimir.com/api/health
 ```
 
-### Tech Stack
+### Grafana Dashboard
 
-| Layer              | Technology                                                 |
-| ------------------ | ---------------------------------------------------------- |
-| Frontend           | React 18, Vite, Tailwind CSS v3, shadcn/ui, TanStack Query |
-| Backend            | Node.js 20, Express, TypeScript                            |
-| Database           | SQLite (better-sqlite3) + Drizzle ORM                      |
-| Authentication     | bcryptjs (cost 12) + JWT (httpOnly cookie, 7 days)         |
-| Secrets encryption | AES-256-GCM, key derived from `ENCRYPTION_KEY`             |
-| Excel              | exceljs                                                    |
-| Containerization   | Docker, Docker Compose (1 service: `api`)                  |
-| Reverse proxy      | Caddy (optional)                                           |
-| Timezone           | MSK (UTC+3) — day = 00:00–23:59 MSK                        |
+Метрики доступны для импорта в существующий Grafana на том же сервере:
 
-## Installation & Setup
-
-### Requirements
-
-- Ubuntu 22.04 / 24.04 LTS
-- Docker >= 24 + Docker Compose plugin
-- At least 1 GB RAM, 5 GB free disk
+- `http_requests_total` — RPS по роутам
+- `http_request_duration_ms` — latency percentiles
+- `deepseek_api_calls_total` — использование AI
+- Стандартные Node.js метрики (heap, GC, event loop)
 
 ---
 
-### ⚡ Quick Start — interactive installer
+## Переменные окружения
 
-The easiest way to install — one script that guides you through each step:
+Полный список с комментариями: [`.env.example`](.env.example)
 
-```bash
-git clone https://github.com/RazBudimirRus/food-diary-v2.git /srv/foodbot
-cd /srv/foodbot
-sudo bash install.sh
-```
+Обязательные для продакшена:
 
-The installer automatically:
-1. **Runs preflight-check.sh** and shows the server readiness report
-2. **Asks for confirmation** — you explicitly acknowledge you've read the report
-3. **Asks for your domain** and writes it into `.env` (DOMAIN, PUBLIC_URL, ALLOWED_ORIGINS)
-4. **Generates secrets** (JWT_SECRET, ENCRYPTION_KEY) if not already set
-5. **Runs** `docker compose up -d --build` and verifies the API responds
-
-To install manually instead — follow Step 0 below.
+| Переменная         | Описание                                                 |
+| ------------------ | -------------------------------------------------------- |
+| `DOMAIN`           | Домен (без https://)                                     |
+| `JWT_SECRET`       | Мин. 32 символа — `openssl rand -hex 32`                 |
+| `ENCRYPTION_KEY`   | Мин. 32 символа — `openssl rand -hex 32`                 |
+| `DEEPSEEK_API_KEY` | Ключ DeepSeek (опционально)                              |
+| `VK_S3_*`          | VK Object Storage (опционально, без него фото отключены) |
 
 ---
 
-### Step 0. Server readiness check
+## Производственный сервер
 
-Run the preflight script before installing:
-
-```bash
-wget -qO preflight-check.sh https://raw.githubusercontent.com/RazBudimirRus/food-diary-v2/main/preflight-check.sh
-sudo bash preflight-check.sh
-```
-
-The script checks 13 parameters (OS, RAM, disk, network, Docker, ports, nginx/apache integration, firewall, .env, API health) and outputs a color-coded report with ready-to-use nginx/apache vhost configs. For automatic fixing of common issues:
-
-```bash
-sudo bash preflight-check.sh --fix
-```
-
-### Step 1. Install Docker
-
-```bash
-curl -fsSL https://get.docker.com | sudo bash
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-newgrp docker   # apply without re-login
-```
-
-### Step 2. Create working directory
-
-```bash
-sudo mkdir -p /srv/foodbot/data
-sudo chown -R $USER:$USER /srv/foodbot
-```
-
-### Step 3. Clone the repository
-
-```bash
-cd /srv/foodbot
-git clone https://github.com/RazBudimirRus/food-diary-v2.git .
-```
-
-### Step 4. Configure environment variables
-
-```bash
-cp .env.example .env
-nano .env
-```
-
-Minimum `.env`:
-
-```env
-JWT_SECRET=<random string, at least 40 characters>
-JWT_EXPIRES_IN=7d
-ENCRYPTION_KEY=<random string, at least 40 characters>
-```
-
-Generate values on the server:
-
-```bash
-openssl rand -hex 32   # for JWT_SECRET
-openssl rand -hex 32   # for ENCRYPTION_KEY
-```
-
-### Step 5. Start
-
-```bash
-docker compose up -d --build
-```
-
-Check status:
-
-```bash
-docker compose ps
-docker compose logs -f
-```
-
-### Step 6. Access
-
-| Service    | URL                                   |
-| ---------- | ------------------------------------- |
-| Web form   | `http://<server_ip>:5000`             |
-| API health | `http://<server_ip>:5000/api/auth/me` |
-
-On first visit click **"Register"** to create an account.
-
-### Step 7 (optional). Caddy + custom domain
-
-Uncomment the domain block in `Caddyfile` and add Caddy to `docker-compose.yml`:
-
-```yaml
-caddy:
-  image: caddy:2-alpine
-  container_name: food_caddy
-  restart: unless-stopped
-  ports:
-    - "80:80"
-    - "443:443"
-  volumes:
-    - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    - caddy_data:/data
-    - caddy_config:/config
-  networks:
-    - food_net
-  depends_on:
-    - api
-```
-
-Add to the `volumes` section:
-
-```yaml
-caddy_data:
-caddy_config:
-```
-
-### Update
-
-```bash
-cd /srv/foodbot
-git pull
-docker compose up -d --build
-```
-
-### Database backup
-
-```bash
-# Manual backup
-cp /srv/foodbot/data/data.db /backup/data-$(date +%Y%m%d_%H%M%S).db
-
-# Automated (cron, daily at 03:00)
-echo "0 3 * * * cp /srv/foodbot/data/data.db /backup/data-\$(date +\%Y\%m\%d).db" | crontab -
-```
-
-## Usage
-
-### Web Form
-
-1. Open `http://<server>:5000`
-2. On first visit click **"Register"** → enter username, email and password
-3. After login — use arrow buttons in the header to navigate between dates (future dates are disabled)
-4. Click **"Add meal"** → fill out the form
-5. Click **"Report"** in the header → if day summary isn't filled yet, a dialog opens (wake/bedtime/sport/steps). On repeat downloads the dialog is skipped
-6. File downloads as `Дневник_питания_YYYY-MM-DD.xlsx`
-7. To log out — click the **logout button** in the header
-
-> **Important:** one day = 00:00–23:59 MSK (UTC+3). Entries always use Moscow time regardless of the device's timezone.
-
-## Project Structure
-
-```
-food-diary-v2/
-├── client/                      # React frontend (Vite)
-│   └── src/
-│       ├── pages/
-│       │   ├── AuthPage.tsx     # Login / register page
-│       │   └── DiaryPage.tsx    # Main diary interface
-│       ├── lib/
-│       │   ├── auth.tsx         # AuthProvider + useAuth hook
-│       │   └── queryClient.ts   # API client (TanStack Query)
-│       └── components/ui/       # shadcn/ui components
-│
-├── server/                      # Node.js backend (Express)
-│   ├── auth.ts                  # JWT, bcrypt, AES-256-GCM, requireAuth
-│   ├── routes.ts                # REST API endpoints
-│   ├── storage.ts               # Drizzle ORM + SQLite
-│   └── excel.ts                 # Excel report generator
-│
-├── shared/
-│   └── schema.ts                # Drizzle schema (users, secrets, days, meals)
-│
-├── bot/                         # (unused in V1, reserved for V2)
-│
-├── docker-compose.yml           # Single service: api
-├── Dockerfile.api               # Node.js container
-├── Caddyfile                    # Reverse proxy config
-├── preflight-check.sh           # Pre-install server readiness check
-├── DEPLOY.md                    # Detailed deploy guide (RU)
-└── .env.example                 # Environment variables template
-```
-
-## API Reference
-
-| Method | Endpoint                | Auth | Description                            |
-| ------ | ----------------------- | :--: | -------------------------------------- |
-| POST   | `/api/auth/register`    |  —   | Register a new user                    |
-| POST   | `/api/auth/login`       |  —   | Login (sets JWT httpOnly cookie)       |
-| POST   | `/api/auth/logout`      |  ✅  | Logout (clears cookie)                 |
-| GET    | `/api/auth/me`          |  ✅  | Current user info                      |
-| GET    | `/api/secrets`          |  ✅  | List saved secrets                     |
-| PUT    | `/api/secrets/:name`    |  ✅  | Save/update secret (encrypted)         |
-| DELETE | `/api/secrets/:name`    |  ✅  | Delete secret                          |
-| GET    | `/api/days/:date`       |  ✅  | Day data + meals (YYYY-MM-DD)          |
-| POST   | `/api/meals`            |  ✅  | Add meal entry                         |
-| DELETE | `/api/meals/:id`        |  ✅  | Delete entry                           |
-| PATCH  | `/api/meals/:id`        |  ✅  | Update entry                           |
-| POST   | `/api/days/:id/summary` |  ✅  | Save day summary                       |
-| GET    | `/api/report/:date`     |  ✅  | Download Excel (202 if summary needed) |
-| GET    | `/api/now`              |  —   | Current MSK date and time              |
-
-## Roadmap
-
-- [x] V1: text input, web form, authentication, encrypted secrets, Excel report
-- [ ] V2: photo recognition via GigaChat Vision (Sber)
-- [ ] V3: automatic KBJU calculation (FatSecret / USDA API)
-- [ ] V4: weekly/monthly statistics and charts
-
-## License
-
-MIT — see [LICENSE](LICENSE) for details.
+- **IP:** 95.163.213.45 (VK Cloud, Ubuntu 24.04)
+- **Домен:** [fooddiary.razbudimir.com](https://fooddiary.razbudimir.com)
+- **TLS:** Wildcard `*.razbudimir.com` (истекает 05.03.2027)
+- **Данные:** `/srv/foodbot/data/` (volume mount)
+- **Бэкапы:** `scripts/backup.sh` — локальные + VK Object Storage
 
 ---
 
-<div align="center">
-Made with ❤️ for health tracking · <a href="https://github.com/RazBudimirRus">@RazBudimirRus</a>
-</div>
+## Snapshot-ветка
+
+Текущее состояние на 29.06.2026 зафиксировано в ветке `v2.9.0-snapshot`.  
+Все новые изменения идут в `main`.
+
+---
+
+## Лицензия
+
+MIT

@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, and, or, like, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type {
   User,
@@ -41,6 +41,7 @@ import {
   foodCatalogItems,
   foodCatalogEntries,
   photos,
+  idempotencyKeys,
 } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
 import {
@@ -254,91 +255,8 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_photos_meal ON photos(meal_id);
 `);
 
-// Миграция: добавляем pd_consent_at в users (152-ФЗ)
-try {
-  sqlite.exec("ALTER TABLE users ADD COLUMN pd_consent_at TEXT");
-} catch {
-  // Колонка уже существует — игнорируем
-}
-
-try {
-  sqlite.exec(
-    "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'doctor', 'admin'))",
-  );
-} catch {
-  // Колонка уже существует — игнорируем
-}
-
-// Миграция: добавляем колонки КБЖУ в уже существующие таблицы
-for (const col of ["calories", "protein", "fat", "carbs"]) {
-  try {
-    sqlite.exec(`ALTER TABLE meals ADD COLUMN ${col} REAL`);
-  } catch {
-    // Колонка уже существует — игнорируем
-  }
-}
-
-for (const col of ["wake_date", "sleep_date"]) {
-  try {
-    sqlite.exec(`ALTER TABLE days ADD COLUMN ${col} TEXT`);
-  } catch {
-    // Колонка уже существует — игнорируем
-  }
-}
-
-// Миграция: расширяем role enum — убираем старый CHECK(role IN ('user','admin'))
-// SQLite не поддерживает ALTER COLUMN, единственный способ — recreation pattern
-try {
-  // Проверяем, есть ли ещё ограничение на 'doctor'
-  const roleCheck = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get() as
-    | { sql: string }
-    | undefined;
-
-  if (roleCheck?.sql?.includes("'user', 'admin'") || roleCheck?.sql?.includes("'user','admin'")) {
-    // Пересоздаём таблицу users без CHECK constraint на role
-    sqlite.exec(`
-      PRAGMA foreign_keys = OFF;
-
-      CREATE TABLE users_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL UNIQUE,
-        email TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        display_name TEXT,
-        role TEXT NOT NULL DEFAULT 'user',
-        pd_consent_at TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-
-      INSERT INTO users_new SELECT id, username, email, password_hash, display_name, role, pd_consent_at, created_at FROM users;
-
-      DROP TABLE users;
-      ALTER TABLE users_new RENAME TO users;
-
-      PRAGMA foreign_keys = ON;
-    `);
-    console.info("[migration] users table recreated — CHECK constraint on role removed");
-  }
-} catch (e) {
-  console.error("[migration] role constraint removal failed:", e);
-}
-
-// Миграция: dietary_restrictions в user_profiles (Phase 20)
-try {
-  sqlite.exec("ALTER TABLE user_profiles ADD COLUMN dietary_restrictions TEXT");
-} catch {
-  // уже есть
-}
-
-// Миграция: last_login_at в users
-try {
-  sqlite.exec("ALTER TABLE users ADD COLUMN last_login_at TEXT");
-} catch {
-  // уже есть
-}
-
-// Миграция: role 'doctor' support — update users CHECK via no-op (SQLite не перепроверяет)
-// existing rows with role='user'/'admin' не затронуты
+// Phase 26.1: Все миграции вынесены в /migrations/ (drizzle-kit).
+// Запуск: runMigrations() в server/index.ts перед инициализацией storage.
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -1507,6 +1425,43 @@ class SqliteStorage implements IStorage {
   countUserPhotos(userId: number): number {
     const row = sqlite.prepare("SELECT COUNT(*) as cnt FROM photos WHERE user_id = ?").get(userId) as { cnt: number };
     return row.cnt;
+  }
+  // ── Idempotency Keys (Phase 26.7) ────────────────────────────────────────────
+  getIdempotencyKey(key: string, userId: number): { status: number; body: string } | null {
+    const row = db
+      .select()
+      .from(idempotencyKeys)
+      .where(and(eq(idempotencyKeys.key, key), eq(idempotencyKeys.userId, userId)))
+      .get();
+    if (!row) return null;
+    // Check expiry
+    if (new Date(row.expiresAt) < new Date()) {
+      db.delete(idempotencyKeys).where(eq(idempotencyKeys.key, key)).run();
+      return null;
+    }
+    return { status: row.responseStatus, body: row.responseBody };
+  }
+
+  saveIdempotencyKey(key: string, userId: number, status: number, body: string): void {
+    const now = new Date();
+    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h TTL
+    db.insert(idempotencyKeys)
+      .values({
+        key,
+        userId,
+        responseStatus: status,
+        responseBody: body,
+        createdAt: now.toISOString(),
+        expiresAt: expires.toISOString(),
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
+  deleteExpiredIdempotencyKeys(): void {
+    db.delete(idempotencyKeys)
+      .where(sql`${idempotencyKeys.expiresAt} < datetime('now')`)
+      .run();
   }
 }
 

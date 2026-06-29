@@ -19,7 +19,7 @@ services:
     networks:
       - food_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/now"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3

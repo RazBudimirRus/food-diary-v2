@@ -218,7 +218,7 @@ export default function DiaryPage() {
   const [pendingDownloadDate, setPendingDownloadDate] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
-  const [uploadingPhotoMealId, setUploadingPhotoMealId] = useState<number | null>(null);
+  const [_uploadingPhotoMealId, setUploadingPhotoMealId] = useState<number | null>(null);
   const [editingMealId, setEditingMealId] = useState<number | null>(null);
   const [editingOriginalDate, setEditingOriginalDate] = useState<string | null>(null);
 
@@ -516,27 +516,6 @@ export default function DiaryPage() {
     setEditingMealId(null);
     setEditingOriginalDate(null);
     setKbjuResult(null);
-  }
-
-  /** Phase 21: download multi-day range report */
-  async function downloadRangeReport(from: string, to: string) {
-    try {
-      const res = await apiRequest("GET", `/api/report/range?from=${from}&to=${to}`);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        toast({ title: "Ошибка", description: data.error || "Не удалось сформировать отчёт", variant: "destructive" });
-        return;
-      }
-      const blob = await res.blob();
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `Дневник_питания_${from}_${to}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast({ title: "Файл загружен" });
-    } catch {
-      toast({ title: "Ошибка", description: "Нет соединения с сервером", variant: "destructive" });
-    }
   }
 
   async function downloadReport(date: string, force = false) {

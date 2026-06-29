@@ -8,6 +8,49 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Eye, EyeOff } from "lucide-react";
+
+// Phase 26.6: reusable password input with show/hide toggle
+function PasswordInput({
+  id,
+  value,
+  onChange,
+  autoComplete,
+  placeholder,
+  "data-testid": testId,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  autoComplete: string;
+  placeholder?: string;
+  "data-testid"?: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={show ? "text" : "password"}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        data-testid={testId}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        aria-label={show ? "Скрыть пароль" : "Показать пароль"}
+        onClick={() => setShow((v) => !v)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        tabIndex={-1}
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
+      </button>
+    </div>
+  );
+}
 
 export default function AuthPage() {
   const { login, register } = useAuth();
@@ -148,7 +191,7 @@ export default function AuthPage() {
                       id="f-email"
                       type="email"
                       autoComplete="email"
-                      placeholder="you@example.com"
+                      placeholder="вы@пример.рф"
                       value={fEmail}
                       onChange={(e) => setFEmail(e.target.value)}
                       data-testid="input-forgot-email"
@@ -178,10 +221,12 @@ export default function AuthPage() {
                     <Label htmlFor="l-username" className="text-xs">
                       Логин
                     </Label>
+                    {/* Phase 26.4: name + autoComplete для менеджеров паролей */}
                     <Input
                       id="l-username"
+                      name="username"
                       autoComplete="username"
-                      placeholder="your_username"
+                      placeholder="ваш_логин"
                       value={lUsername}
                       onChange={(e) => setLUsername(e.target.value)}
                       data-testid="input-login-username"
@@ -191,9 +236,9 @@ export default function AuthPage() {
                     <Label htmlFor="l-password" className="text-xs">
                       Пароль
                     </Label>
-                    <Input
+                    {/* Phase 26.6: toggle показать/скрыть пароль */}
+                    <PasswordInput
                       id="l-password"
-                      type="password"
                       autoComplete="current-password"
                       value={lPassword}
                       onChange={(e) => setLPassword(e.target.value)}
@@ -231,8 +276,9 @@ export default function AuthPage() {
                   </Label>
                   <Input
                     id="r-username"
+                    name="username"
                     autoComplete="username"
-                    placeholder="your_username"
+                    placeholder="ваш_логин"
                     value={rUsername}
                     onChange={(e) => setRUsername(e.target.value)}
                     data-testid="input-reg-username"
@@ -244,7 +290,9 @@ export default function AuthPage() {
                   </Label>
                   <Input
                     id="r-displayname"
-                    placeholder="Глеб"
+                    name="displayname"
+                    autoComplete="name"
+                    placeholder="Иван Иванов"
                     value={rDisplayName}
                     onChange={(e) => setRDisplayName(e.target.value)}
                     data-testid="input-reg-displayname"
@@ -257,8 +305,9 @@ export default function AuthPage() {
                   <Input
                     id="r-email"
                     type="email"
+                    name="email"
                     autoComplete="email"
-                    placeholder="you@example.com"
+                    placeholder="вы@пример.рф"
                     value={rEmail}
                     onChange={(e) => setREmail(e.target.value)}
                     data-testid="input-reg-email"
@@ -268,9 +317,8 @@ export default function AuthPage() {
                   <Label htmlFor="r-password" className="text-xs">
                     Пароль <span className="text-muted-foreground">(мин. 8 символов)</span>
                   </Label>
-                  <Input
+                  <PasswordInput
                     id="r-password"
-                    type="password"
                     autoComplete="new-password"
                     value={rPassword}
                     onChange={(e) => setRPassword(e.target.value)}
@@ -281,9 +329,8 @@ export default function AuthPage() {
                   <Label htmlFor="r-password2" className="text-xs">
                     Повторите пароль
                   </Label>
-                  <Input
+                  <PasswordInput
                     id="r-password2"
-                    type="password"
                     autoComplete="new-password"
                     value={rPassword2}
                     onChange={(e) => setRPassword2(e.target.value)}
@@ -299,10 +346,10 @@ export default function AuthPage() {
                     data-testid="input-reg-pdconsent"
                   />
                   <label htmlFor="r-pdconsent" className="text-xs text-muted-foreground leading-snug cursor-pointer">
-                    Я даю согласие на обработку персональных данных в соответствии с
+                    Я даю согласие на обработку персональных данных в соответствии с{" "}
                     <a href="#/privacy" className="text-primary underline">
                       Политикой конфиденциальности
-                    </a>
+                    </a>{" "}
                     (152-ФЗ)
                   </label>
                 </div>
@@ -322,7 +369,7 @@ export default function AuthPage() {
       </Card>
 
       <p className="text-xs text-muted-foreground mt-6 text-center max-w-xs">
-        Данные хранятся локально на вашем сервере. Пароль хэшируется bcrypt (cost 12). Секреты шифруются AES-256-GCM.
+        Данные хранятся на вашем сервере. Пароль хэшируется bcrypt (cost 12). Секреты шифруются AES-256-GCM.
       </p>
     </div>
   );

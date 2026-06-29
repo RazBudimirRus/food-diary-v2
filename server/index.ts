@@ -1,6 +1,6 @@
 import "dotenv/config";
-import express, { Response, NextFunction } from 'express';
-import type { Request } from 'express';
+import express, { Response, NextFunction } from "express";
+import type { Request } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
@@ -8,6 +8,14 @@ import { serveStatic } from "./static";
 import { createServer } from "node:http";
 import { initDeepSeekKey } from "./deepseek";
 import { storage } from "./storage";
+import { runMigrations } from "./migrate";
+import { logger, requestContext } from "./logger";
+import { registry, httpRequestsTotal, httpRequestDurationMs } from "./metrics";
+import { initSentry } from "./sentry";
+import { randomUUID } from "crypto";
+
+// Phase 27.3: init Sentry before everything else
+initSentry();
 
 const app = express();
 const httpServer = createServer(app);
@@ -23,42 +31,46 @@ function allowedOrigins(): string[] {
     .filter(Boolean);
   const publicUrl = process.env.PUBLIC_URL ? [process.env.PUBLIC_URL] : [];
   const domainUrl = process.env.DOMAIN ? [`https://${process.env.DOMAIN}`] : [];
-  const devOrigins = process.env.NODE_ENV === "production"
-    ? []
-    : ["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000", "http://127.0.0.1:5173"];
+  const devOrigins =
+    process.env.NODE_ENV === "production"
+      ? []
+      : ["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000", "http://127.0.0.1:5173"];
 
   return Array.from(new Set([...configured, ...publicUrl, ...domainUrl, ...devOrigins]));
 }
 
-app.use(helmet({
-  contentSecurityPolicy: process.env.NODE_ENV === "production"
-    ? {
-        directives: {
-          defaultSrc: ["'self'"],
-          baseUri: ["'self'"],
-          objectSrc: ["'none'"],
-          frameAncestors: ["'none'"],
-          scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", "data:"],
-          fontSrc: ["'self'", "data:"],
-          connectSrc: ["'self'"],
-        },
-      }
-    : false,
-  hsts: process.env.NODE_ENV === "production"
-    ? { maxAge: 31536000, includeSubDomains: true, preload: true }
-    : false,
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy:
+      process.env.NODE_ENV === "production"
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              baseUri: ["'self'"],
+              objectSrc: ["'none'"],
+              frameAncestors: ["'none'"],
+              scriptSrc: ["'self'"],
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              imgSrc: ["'self'", "data:"],
+              fontSrc: ["'self'", "data:"],
+              connectSrc: ["'self'"],
+            },
+          }
+        : false,
+    hsts: process.env.NODE_ENV === "production" ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+  }),
+);
 
 const corsOrigins = allowedOrigins();
-app.use(cors({
-  credentials: true,
-  origin(origin, callback) {
-    if (!origin || corsOrigins.includes(origin)) return callback(null, true);
-    return callback(null, false);
-  },
-}));
+app.use(
+  cors({
+    credentials: true,
+    origin(origin, callback) {
+      if (!origin || corsOrigins.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
+  }),
+);
 
 declare module "http" {
   interface IncomingMessage {
@@ -76,32 +88,54 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Phase 27.1: keep legacy log() for backward compat — now delegates to pino
 export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info({ source }, message);
 }
 
+// Phase 27.1: request_id + structured HTTP logging middleware
 app.use((req, res, next) => {
+  const requestId = (req.headers["x-request-id"] as string) || randomUUID();
   const start = Date.now();
-  const path = req.path;
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
-    }
+  requestContext.run({ requestId }, () => {
+    res.setHeader("X-Request-ID", requestId);
+
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      const route = req.route?.path ?? req.path;
+      // Phase 27.4: record Prometheus metrics
+      const labels = { method: req.method, route, status_code: String(res.statusCode) };
+      httpRequestsTotal.inc(labels);
+      httpRequestDurationMs.observe(labels, duration);
+
+      if (req.path.startsWith("/api")) {
+        logger.info(
+          { method: req.method, path: req.path, status: res.statusCode, durationMs: duration, requestId },
+          "request",
+        );
+      }
+    });
+
+    next();
   });
+});
 
-  next();
+// Phase 27.4: /metrics endpoint for Prometheus scraping
+app.get("/metrics", async (_req, res) => {
+  try {
+    res.set("Content-Type", registry.contentType);
+    res.end(await registry.metrics());
+  } catch {
+    res.status(500).end();
+  }
 });
 
 (async () => {
+  // Phase 26.1: Run versioned migrations before anything else
+  const dbPath = process.env.SQLITE_DB_PATH ?? "./data/food_diary.db";
+  runMigrations(dbPath);
+
   // Load DeepSeek key from env → encrypt → store in DB (idempotent)
   initDeepSeekKey();
 
@@ -116,28 +150,53 @@ app.use((req, res, next) => {
   }
 
   storage.deleteExpiredOrRevokedRefreshTokens();
-  setInterval(() => {
-    storage.deleteExpiredOrRevokedRefreshTokens();
-  }, 60 * 60 * 1000);
+  setInterval(
+    () => {
+      storage.deleteExpiredOrRevokedRefreshTokens();
+    },
+    60 * 60 * 1000,
+  );
 
   storage.deleteExpiredPasswordResetTokens();
-  setInterval(() => {
-    storage.deleteExpiredPasswordResetTokens();
-  }, 60 * 60 * 1000);
+  setInterval(
+    () => {
+      storage.deleteExpiredPasswordResetTokens();
+    },
+    60 * 60 * 1000,
+  );
+
+  // Phase 26.7: clean up expired idempotency keys every hour
+  storage.deleteExpiredIdempotencyKeys();
+  setInterval(
+    () => {
+      storage.deleteExpiredIdempotencyKeys();
+    },
+    60 * 60 * 1000,
+  );
 
   await registerRoutes(httpServer, app);
 
+  // Phase 27.5: prod error handler — no stack leak
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const ctx = requestContext.getStore();
+    const requestId = ctx?.requestId ?? "unknown";
 
-    console.error("Internal Server Error:", err);
+    logger.error({ err, status, requestId }, "unhandled error");
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    if (process.env.NODE_ENV === "production") {
+      // Never expose stack or internal message in production
+      return res.status(status).json({
+        error: status < 500 ? err.message || "Request error" : "Internal server error",
+        requestId,
+      });
+    }
+
+    return res.status(status).json({ error: err.message, stack: err.stack, requestId });
   });
 
   // importantly only setup vite in development and after

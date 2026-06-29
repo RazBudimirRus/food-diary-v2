@@ -6,7 +6,7 @@ export interface AuthUser {
   username: string;
   email: string;
   displayName?: string | null;
-  role: "user" | "admin";
+  role: "user" | "admin" | "doctor";
 }
 
 interface AuthCtx {

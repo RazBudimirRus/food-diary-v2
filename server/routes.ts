@@ -137,7 +137,13 @@ export function registerRoutes(httpServer: Server, app: Express) {
   function issueSession(
     req: AuthRequest,
     res: any,
-    user: { id: number; username: string; email: string; displayName?: string | null; role: "user" | "admin" },
+    user: {
+      id: number;
+      username: string;
+      email: string;
+      displayName?: string | null;
+      role: "user" | "admin" | "doctor";
+    },
   ) {
     const rawRefreshToken = generateRefreshToken();
     const expiresAt = getRefreshExpiresAt();
@@ -399,6 +405,15 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   app.post("/api/meals", requireAuth, mealCreateLimiter, (req: AuthRequest, res) => {
     try {
+      // Phase 26.7: Idempotency — replay cached response if key already used
+      const iKey = req.headers["idempotency-key"] as string | undefined;
+      if (iKey) {
+        const cached = storage.getIdempotencyKey(iKey, req.user!.id);
+        if (cached) {
+          return res.status(cached.status).json(JSON.parse(cached.body));
+        }
+      }
+
       const parsed = addMealSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -425,7 +440,12 @@ export function registerRoutes(httpServer: Server, app: Express) {
         fat: data.fat ?? null,
         carbs: data.carbs ?? null,
       });
-      res.json({ meal, day });
+      const responseBody = { meal, day };
+      // Phase 26.7: Save idempotency key after successful creation
+      if (iKey) {
+        storage.saveIdempotencyKey(iKey, req.user!.id, 200, JSON.stringify(responseBody));
+      }
+      res.json(responseBody);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }
@@ -534,7 +554,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
       // Phase 20: get user dietary restrictions
       const userProfile = storage.getUserProfile(req.user!.id);
-      const dietaryRestrictions = (userProfile as any)?.dietaryRestrictions ?? null;
+      const dietaryRestrictions = userProfile?.dietaryRestrictions ?? null;
       const result = await analyzeNutrition(parsed.data.foodText, parsed.data.drinkText, dietaryRestrictions);
       if (result.usage) {
         storage.recordApiUsage({
@@ -715,7 +735,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
   /** GET /api/user/dietary-restrictions */
   app.get("/api/user/dietary-restrictions", requireAuth, (req: AuthRequest, res) => {
     const profile = storage.getUserProfile(req.user!.id);
-    const raw = (profile as any)?.dietaryRestrictions;
+    const raw = profile?.dietaryRestrictions;
     let parsed: string[] = [];
     try {
       parsed = raw ? JSON.parse(raw) : [];
@@ -740,7 +760,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** POST /api/admin/users/:id/set-role (admin only) */
   app.post("/api/admin/users/:id/set-role", requireAuth, requireAdmin, (req: AuthRequest, res) => {
-    const userId = parseInt(req.params.id, 10);
+    const userId = parseInt(paramValue(req.params.id), 10);
     const { role } = req.body;
     if (!["user", "doctor", "admin"].includes(role)) {
       return res.status(400).json({ error: "Допустимые роли: user, doctor, admin" });
@@ -784,7 +804,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** POST /api/doctor/patients/:id/assign */
   app.post("/api/doctor/patients/:id/assign", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const patientId = parseInt(req.params.id, 10);
+    const patientId = parseInt(paramValue(req.params.id), 10);
     const doctor = storage.getDoctorByUserId(req.user!.id);
     if (!doctor)
       return res.status(400).json({ error: "Сначала заполните профиль врача — перейдите на вкладку Профиль" });
@@ -795,14 +815,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
     try {
       const dp = storage.assignPatient(doctor.id, patientId);
       res.json({ doctorPatient: dp });
-    } catch (e: any) {
+    } catch {
       res.status(409).json({ error: "Этот пациент уже привязан к вам" });
     }
   });
 
   /** DELETE /api/doctor/patients/:id */
   app.delete("/api/doctor/patients/:id", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const patientId = parseInt(req.params.id, 10);
+    const patientId = parseInt(paramValue(req.params.id), 10);
     const doctor = storage.getDoctorByUserId(req.user!.id);
     if (!doctor) return res.status(404).json({ error: "Врач не найден" });
     storage.removePatient(doctor.id, patientId);
@@ -811,7 +831,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** GET /api/doctor/patients/:id/diary?date=YYYY-MM-DD */
   app.get("/api/doctor/patients/:id/diary", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const patientId = parseInt(req.params.id, 10);
+    const patientId = parseInt(paramValue(req.params.id), 10);
     const doctor = storage.getDoctorByUserId(req.user!.id);
     if (!doctor) return res.status(403).json({ error: "Врач не найден" });
 
@@ -832,7 +852,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!process.env.VAPID_PUBLIC_KEY) {
       return res.status(503).json({ error: "Web Push не настроен" });
     }
-    const patientId = parseInt(req.params.id, 10);
+    const patientId = parseInt(paramValue(req.params.id), 10);
     const { title, body } = req.body;
     if (!title) return res.status(400).json({ error: "title обязателен" });
 
@@ -875,7 +895,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** POST /api/doctor/meals/:mealId/notes */
   app.post("/api/doctor/meals/:mealId/notes", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const mealId = parseInt(req.params.mealId, 10);
+    const mealId = parseInt(paramValue(req.params.mealId), 10);
     const doctor = storage.getDoctorByUserId(req.user!.id);
     if (!doctor) return res.status(400).json({ error: "Профиль врача не найден" });
     const { note, suggestedKcal } = req.body;
@@ -885,7 +905,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** GET /api/meals/:id/notes */
   app.get("/api/meals/:id/notes", requireAuth, (req: AuthRequest, res) => {
-    const mealId = parseInt(req.params.id, 10);
+    const mealId = parseInt(paramValue(req.params.id), 10);
     const notes = storage.getDoctorMealNotes(mealId);
     res.json({ notes });
   });
@@ -896,7 +916,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** POST /api/doctor/patients/:id/plans */
   app.post("/api/doctor/patients/:id/plans", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const patientId = parseInt(req.params.id, 10);
+    const patientId = parseInt(paramValue(req.params.id), 10);
     const doctor = storage.getDoctorByUserId(req.user!.id);
     if (!doctor) return res.status(400).json({ error: "Профиль врача не найден" });
     const parsed = insertDoctorPlanSchema.safeParse({ ...req.body, patientId });
@@ -907,14 +927,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** GET /api/doctor/patients/:id/plans */
   app.get("/api/doctor/patients/:id/plans", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const patientId = parseInt(req.params.id, 10);
+    const patientId = parseInt(paramValue(req.params.id), 10);
     const plans = storage.getDoctorPlansForPatient(patientId);
     res.json({ plans });
   });
 
   /** DELETE /api/doctor/plans/:id */
   app.delete("/api/doctor/plans/:id", requireAuth, requireDoctor, (req: AuthRequest, res) => {
-    const planId = parseInt(req.params.id, 10);
+    const planId = parseInt(paramValue(req.params.id), 10);
     storage.deleteDoctorPlan(planId);
     res.json({ ok: true });
   });
@@ -964,14 +984,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** DELETE /api/catalog/:id */
   app.delete("/api/catalog/:id", requireAuth, (req: AuthRequest, res) => {
-    const itemId = parseInt(req.params.id, 10);
+    const itemId = parseInt(paramValue(req.params.id), 10);
     storage.deleteCatalogItem(req.user!.id, itemId);
     res.json({ ok: true });
   });
 
   /** POST /api/catalog/from-meal/:mealId */
   app.post("/api/catalog/from-meal/:mealId", requireAuth, (req: AuthRequest, res) => {
-    const mealId = parseInt(req.params.mealId, 10);
+    const mealId = parseInt(paramValue(req.params.mealId), 10);
     const meal = storage.getMeal(mealId);
     if (!meal) return res.status(404).json({ error: "Приём пищи не найден" });
     if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
@@ -1011,7 +1031,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
   /** GET /api/photos/:photo_id — proxy, no direct S3 URL */
   app.get("/api/photos/:photo_id", requireAuth, async (req: AuthRequest, res) => {
     if (!isS3Configured()) return res.status(503).json({ error: "S3 не настроен" });
-    const photo = storage.getPhoto(req.params.photo_id);
+    const photo = storage.getPhoto(paramValue(req.params.photo_id));
     if (!photo) return res.status(404).json({ error: "Фото не найдено" });
     if (photo.userId !== req.user!.id) {
       // Врач тоже может просматривать
@@ -1031,7 +1051,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
   /** DELETE /api/photos/:photo_id */
   app.delete("/api/photos/:photo_id", requireAuth, async (req: AuthRequest, res) => {
     if (!isS3Configured()) return res.status(503).json({ error: "S3 не настроен" });
-    const photo = storage.getPhoto(req.params.photo_id);
+    const photo = storage.getPhoto(paramValue(req.params.photo_id));
     if (!photo) return res.status(404).json({ error: "Фото не найдено" });
     if (photo.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
     try {
@@ -1045,7 +1065,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   /** GET /api/meals/:id/photos */
   app.get("/api/meals/:id/photos", requireAuth, (req: AuthRequest, res) => {
-    const mealId = parseInt(req.params.id, 10);
+    const mealId = parseInt(paramValue(req.params.id), 10);
     const meal = storage.getMeal(mealId);
     if (!meal) return res.status(404).json({ error: "Приём пищи не найден" });
     // Доступ: пользователь или врач пациента
@@ -1061,5 +1081,52 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   app.get("/api/now", (_req, res) => {
     res.json({ date: getMskDate(), time: getMskTime() });
+  });
+
+  // Phase 27.2: /api/health — real dependency checks
+  app.get("/api/health", async (_req, res) => {
+    const checks: Record<string, { ok: boolean; detail?: string }> = {};
+
+    // DB check: simple liveness via storage
+    try {
+      const testDate = getMskDate();
+      checks.db = { ok: !!testDate, detail: "sqlite ok" };
+    } catch (e: any) {
+      checks.db = { ok: false, detail: e.message };
+    }
+
+    // S3 check
+    try {
+      if (isS3Configured()) {
+        const { S3Client, HeadBucketCommand } = await import("@aws-sdk/client-s3");
+        const s3 = new S3Client({
+          endpoint: process.env.VK_S3_ENDPOINT,
+          region: process.env.VK_S3_REGION ?? "ru-msk",
+          credentials: {
+            accessKeyId: process.env.VK_S3_ACCESS_KEY ?? "",
+            secretAccessKey: process.env.VK_S3_SECRET_KEY ?? "",
+          },
+          forcePathStyle: true,
+        });
+        await s3.send(new HeadBucketCommand({ Bucket: process.env.VK_S3_BUCKET ?? "" }));
+        checks.s3 = { ok: true };
+      } else {
+        checks.s3 = { ok: true, detail: "not configured" };
+      }
+    } catch (e: any) {
+      checks.s3 = { ok: false, detail: e.message };
+    }
+
+    // DeepSeek check
+    try {
+      const available = isDeepSeekAvailable();
+      checks.deepseek = { ok: true, detail: available ? "configured" : "not configured" };
+    } catch (e: any) {
+      checks.deepseek = { ok: false, detail: e.message };
+    }
+
+    const allOk = Object.values(checks).every((c) => c.ok);
+    const status = allOk ? "ok" : "degraded";
+    res.status(allOk ? 200 : 503).json({ status, checks, uptime: process.uptime() });
   });
 }
