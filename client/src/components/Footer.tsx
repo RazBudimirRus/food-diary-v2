@@ -83,6 +83,7 @@ export function Footer() {
       <div className="border-t px-6 py-3 text-center text-xs text-muted-foreground">
         © {year} ИП Сердитых Глеб Будимирович. Все права защищены. Создано с использованием генеративного ИИ и
         самописного кода.
+        <span className="ml-2 text-muted-foreground/50 whitespace-nowrap">v{__APP_VERSION__}</span>
       </div>
     </footer>
   );

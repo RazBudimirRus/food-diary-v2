@@ -2,17 +2,26 @@
  * AboutPage — мобильный раздел «О нас» / юридическая информация (UX-9).
  * Доступен через нижнее меню на мобильных.
  */
-import { Send, ExternalLink, Mail, ShieldCheck, Info, ArrowLeft } from "lucide-react";
+import { Send, ExternalLink, Mail, ShieldCheck, Info, ArrowLeft, Copy, Check } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { BottomNav } from "@/components/BottomNav";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
+import { useState } from "react";
 
 export default function AboutPage() {
   const year = new Date().getFullYear();
   const { user } = useAuth();
   const [location] = useLocation();
+  const [copied, setCopied] = useState(false);
+
+  function copyVersion() {
+    void navigator.clipboard.writeText(`v${__APP_VERSION__}`).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -102,6 +111,34 @@ export default function AboutPage() {
             <p className="text-xs text-muted-foreground leading-relaxed">
               Персональные данные хранятся исключительно на серверах, расположенных на территории Российской Федерации.
             </p>
+          </CardContent>
+        </Card>
+
+        {/* Версия приложения (UX-13) */}
+        <Card>
+          <CardContent className="py-3">
+            <button
+              onClick={copyVersion}
+              className="w-full flex items-center justify-between text-sm text-muted-foreground hover:text-foreground transition-colors group"
+              aria-label="Нажмите, чтобы скопировать версию"
+            >
+              <span>
+                Версия приложения: <span className="font-mono font-medium text-foreground">v{__APP_VERSION__}</span>
+              </span>
+              <span className="flex items-center gap-1 text-xs opacity-50 group-hover:opacity-100 transition-opacity">
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3 text-green-500" />
+                    <span className="text-green-500">Скопировано</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" />
+                    <span>Скопировать</span>
+                  </>
+                )}
+              </span>
+            </button>
           </CardContent>
         </Card>
       </div>
