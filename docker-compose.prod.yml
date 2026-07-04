@@ -15,11 +15,14 @@ services:
     networks:
       - food_net
     healthcheck:
-      test: ["CMD", "clamdcheck"]
-      interval: 60s
+      # clamav/clamav:1.4 ships clamdcheck at /usr/local/bin/clamdcheck
+      # It checks the Unix socket at /var/run/clamav/clamd.sock
+      test: ["CMD", "sh", "-c", "echo PING | nc -q1 -U /var/run/clamav/clamd.sock | grep -q PONG"]
+      interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 10
+      # First run: freshclam must finish downloading virus databases (~300 MB)
+      start_period: 300s
 
   api:
     build:
@@ -43,7 +46,7 @@ services:
       - food_net
     depends_on:
       clamav:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
