@@ -182,10 +182,19 @@ app.get("/metrics", async (_req, res) => {
   );
 
   // Phase 31.1: hard-delete meals soft-deleted more than 60s ago, runs every 5 minutes
-  storage.hardDeleteExpiredMeals();
+  // Wrapped in try/catch: migration 0005 may not yet exist on older DBs at first boot
+  try {
+    storage.hardDeleteExpiredMeals();
+  } catch (e: any) {
+    log(`hardDeleteExpiredMeals skipped at startup: ${e.message}`, "migrate");
+  }
   setInterval(
     () => {
-      storage.hardDeleteExpiredMeals();
+      try {
+        storage.hardDeleteExpiredMeals();
+      } catch (e: any) {
+        log(`hardDeleteExpiredMeals interval error: ${e.message}`, "migrate");
+      }
     },
     5 * 60 * 1000,
   );
