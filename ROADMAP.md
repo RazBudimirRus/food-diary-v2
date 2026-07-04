@@ -1,7 +1,7 @@
 # 🗺 Food Diary V2 — RoadMap
 
 **Версия:** 2.6.0  
-**Дата обновления:** 28 июня 2026  
+**Дата обновления:** 5 июля 2026  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
 **Стек:** React 18 + Vite · Node.js 20 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
@@ -56,6 +56,7 @@
 | v2.13.0 · 2026-07-04 | Волна 4 (тестирование) | ✅ Реализовано | 99 тестов (26 integration + 73 unit), coverage 40.1% с threshold, server/**mocks**/deepseek.ts, helpers/meals/diary-utils unit tests, E2E TC-02/03/05/11, миграция 0000 baseline fix |
 | v2.14.0 · 2026-07-04 | Волна 5 (тестирование v2) | ✅ Реализовано | 242 теста, coverage 40.1%→56.8%, threshold 55%, repositories/doctor-routes/catalog-routes/mail/csrf/deepseek/user-routes тесты, test helpers factory |
 | v2.15.0 · 2026-07-04 | Волна 6 (UX-полировка, Phase 31) | ✅ Реализовано | Soft-delete meals + undo toast (5 сек), skeleton loaders в AnalyticsPage, real-time zod валидация в AuthPage, aria-labels на иконочных кнопках, dark mode toggle в ProfilePage, migration 0005 |
+| v2.16.0 · 2026-07-05 | Волна 7 (Phase 28 остаток) | ✅ Реализовано | MFA TOTP для doctor/admin (otpauth, QR-код, login 2nd step), ClamAV antivirus (docker-compose сервис + scan middleware), scrypt KDF для ENCRYPTION_KEY (заменён SHA-256), migration 0006 (mfa_enabled, mfa_secret) |
 
 ---
 
@@ -2476,7 +2477,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
 ## Фаза 28 — Безопасность: Второй уровень
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.16.0)
 > **Приоритет:** Высокий
 > **Сложность:** Высокая
 > **Источник:** Аудит: «Безопасность — 7/10»
@@ -2931,7 +2932,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 | 25    | GigaChat (Сбер) — второй AI-помощник           | Средний     | Высокая   | 📋 Запланировано                                                                                      |
 | 26    | Tech Debt Sprint: срочные исправления          | Критический | Средняя   | ✅ Реализовано (v2.10.0)                                                                              |
 | 27    | Наблюдаемость (pino, Sentry, /health, metrics) | Критический | Средняя   | ✅ Реализовано (v2.10.0)                                                                              |
-| 28    | Безопасность: CSRF, MFA, EXIF, ClamAV          | Высокий     | Высокая   | 🔄 Частично (v2.11.0): CSRF+EXIF+reset-pw; MFA+ClamAV — отложено                                      |
+| 28    | Безопасность: CSRF, MFA, EXIF, ClamAV          | Высокий     | Высокая   | ✅ Реализовано (v2.11.0+v2.16.0): CSRF+EXIF+reset-pw+scrypt (v2.11/v2.16), MFA TOTP+ClamAV (v2.16.0)  |
 | 29    | Рефакторинг: расщепление монолитов             | Высокий     | Высокая   | 📋 Запланировано                                                                                      |
 | 30    | Тестирование: расширение покрытия              | Высокий     | Высокая   | ✅ Реализовано (v2.13.0): 99 тестов, coverage 40.1%, DeepSeek mock, E2E TC-02/03/05/11                |
 | 31    | UX-полировка: undo, skeleton, a11y, dark       | Высокий     | Средняя   | ✅ Реализовано (v2.15.0): soft-delete + undo, skeletons, zod валидация, aria-labels, dark mode toggle |

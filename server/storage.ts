@@ -337,6 +337,10 @@ export interface IStorage {
   updateUserPassword(userId: number, passwordHash: string): User | undefined;
   updateUserProfile(userId: number, data: { displayName?: string }): User | undefined;
   setLastLogin(userId: number): void;
+  // Phase 28.2: MFA
+  setMfaSecret(userId: number, packedSecret: string): void;
+  enableMfa(userId: number): void;
+  disableMfa(userId: number): void;
   deleteUser(userId: number): void;
   getUserAllData(userId: number): { user: User | undefined; days: Day[]; meals: Meal[]; apiUsage: ApiUsage[] };
   getUserProfile(userId: number): UserProfile | undefined;
@@ -630,6 +634,17 @@ class SqliteStorage implements IStorage {
 
   setLastLogin(userId: number): void {
     db.update(users).set({ lastLoginAt: new Date().toISOString() }).where(eq(users.id, userId)).run();
+  }
+
+  // Phase 28.2: MFA
+  setMfaSecret(userId: number, packedSecret: string): void {
+    db.update(users).set({ mfaSecret: packedSecret }).where(eq(users.id, userId)).run();
+  }
+  enableMfa(userId: number): void {
+    db.update(users).set({ mfaEnabled: true }).where(eq(users.id, userId)).run();
+  }
+  disableMfa(userId: number): void {
+    db.update(users).set({ mfaEnabled: false, mfaSecret: null }).where(eq(users.id, userId)).run();
   }
 
   listUsers(): User[] {

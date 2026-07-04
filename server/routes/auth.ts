@@ -20,6 +20,7 @@ import {
   type AuthRequest,
 } from "../auth";
 import { isSmtpConfigured, sendPasswordResetEmail } from "../mail";
+import { generateMfaSetup, verifyMfaToken } from "../mfa";
 import { setCsrfToken } from "../csrf";
 import { loginLimiter, forgotPasswordLimiter } from "./limiters";
 import {
@@ -61,6 +62,18 @@ export function registerAuthRoutes(app: Express) {
 
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Неверный логин или пароль" });
+
+    // Phase 28.2: MFA second step for doctor/admin
+    if (user.mfaEnabled && user.mfaSecret) {
+      const { totp } = req.body as { totp?: string };
+      if (!totp) {
+        // Signal client to show TOTP prompt
+        return res.status(202).json({ mfaRequired: true });
+      }
+      if (!verifyMfaToken(user.mfaSecret, totp)) {
+        return res.status(401).json({ error: "Неверный код MFA" });
+      }
+    }
 
     storage.setLastLogin(user.id);
     res.json(issueSession(req, res, user));
@@ -274,5 +287,70 @@ export function registerAuthRoutes(app: Express) {
   app.get("/api/user/my-doctor", requireAuth, (req: AuthRequest, res) => {
     const doctor = storage.getPatientDoctor(req.user!.id);
     res.json({ doctor: doctor ?? null });
+  });
+
+  // ── MFA (Phase 28.2) ────────────────────────────────────────────────────────
+
+  /**
+   * POST /api/auth/mfa/setup
+   * Generates a new TOTP secret and returns QR code data URL.
+   * Does NOT enable MFA yet — call /mfa/verify-setup with a valid code first.
+   * Only doctor/admin roles can enable MFA.
+   */
+  app.post("/api/auth/mfa/setup", requireAuth, async (req: AuthRequest, res) => {
+    const user = req.user!;
+    if (user.role === "user")
+      return res.status(403).json({ error: "MFA доступна только для врачей и администраторов" });
+    try {
+      const { packedSecret, qrDataUrl, uri } = await generateMfaSetup(user.username);
+      // Store secret temporarily (not yet activated)
+      storage.setMfaSecret(user.id, packedSecret);
+      res.json({ qrDataUrl, uri, mfaEnabled: user.mfaEnabled });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /**
+   * POST /api/auth/mfa/verify-setup
+   * Verifies the first TOTP code after scanning QR. Activates MFA on success.
+   * Body: { token: "123456" }
+   */
+  app.post("/api/auth/mfa/verify-setup", requireAuth, (req: AuthRequest, res) => {
+    const user = req.user!;
+    const { token } = req.body as { token?: string };
+    if (!token) return res.status(400).json({ error: "Поле token обязательно" });
+    if (!user.mfaSecret) return res.status(400).json({ error: "Сначала вызовите /mfa/setup" });
+    if (!verifyMfaToken(user.mfaSecret, token)) {
+      return res.status(400).json({ error: "Неверный код. Проверьте время на устройстве и повторите" });
+    }
+    storage.enableMfa(user.id);
+    res.json({ ok: true, mfaEnabled: true });
+  });
+
+  /**
+   * POST /api/auth/mfa/disable
+   * Disables MFA. Requires current TOTP code for confirmation.
+   * Body: { token: "123456" }
+   */
+  app.post("/api/auth/mfa/disable", requireAuth, (req: AuthRequest, res) => {
+    const user = req.user!;
+    const { token } = req.body as { token?: string };
+    if (!token) return res.status(400).json({ error: "Поле token обязательно" });
+    if (!user.mfaEnabled || !user.mfaSecret) return res.status(400).json({ error: "MFA не включена" });
+    if (!verifyMfaToken(user.mfaSecret, token)) {
+      return res.status(400).json({ error: "Неверный код MFA" });
+    }
+    storage.disableMfa(user.id);
+    res.json({ ok: true, mfaEnabled: false });
+  });
+
+  /**
+   * GET /api/auth/mfa/status
+   * Returns current MFA status for the authenticated user.
+   */
+  app.get("/api/auth/mfa/status", requireAuth, (req: AuthRequest, res) => {
+    const user = req.user!;
+    res.json({ mfaEnabled: user.mfaEnabled, canEnable: user.role !== "user" });
   });
 }

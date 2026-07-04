@@ -13,7 +13,8 @@ interface AuthCtx {
   user: AuthUser | null;
   accessToken: string | null;
   loading: boolean;
-  login(username: string, password: string): Promise<void>;
+  /** Returns true when MFA is required (202). Caller should re-invoke with totp. */
+  login(username: string, password: string, totp?: string): Promise<{ mfaRequired: boolean }>;
   register(username: string, email: string, password: string, displayName?: string): Promise<void>;
   logout(): Promise<void>;
 }
@@ -46,14 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  async function login(username: string, password: string) {
-    const r = await apiRequest("POST", "/api/auth/login", { username, password });
+  async function login(username: string, password: string, totp?: string): Promise<{ mfaRequired: boolean }> {
+    const body: Record<string, string> = { username, password };
+    if (totp) body.totp = totp;
+    const r = await apiRequest("POST", "/api/auth/login", body);
+    if (r.status === 202) {
+      return { mfaRequired: true };
+    }
     if (!r.ok) {
       const err = await r.json();
       throw new Error(err.error ?? "Ошибка входа");
     }
     const data = await r.json();
     rememberSession(data.accessToken, data.user);
+    return { mfaRequired: false };
   }
 
   async function register(username: string, email: string, password: string, displayName?: string) {

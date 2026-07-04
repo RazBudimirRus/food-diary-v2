@@ -5,6 +5,22 @@
 version: "3.9"
 
 services:
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: food_diary_clamav
+    restart: unless-stopped
+    volumes:
+      - clamav_db:/var/lib/clamav
+      - clamav_sock:/var/run/clamav
+    networks:
+      - food_net
+    healthcheck:
+      test: ["CMD", "clamdcheck"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
   api:
     build:
       context: .
@@ -16,12 +32,18 @@ services:
     environment:
       NODE_ENV: production
       TRUST_PROXY: "1"
+      # Phase 28.4: ClamAV socket path (shared volume with clamav service)
+      CLAMAV_SOCKET: /var/run/clamav/clamd.sock
     volumes:
       - data_db:/app/data
+      - clamav_sock:/var/run/clamav:ro
     ports:
       - "127.0.0.1:5000:5000"
     networks:
       - food_net
+    depends_on:
+      clamav:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
@@ -40,3 +62,5 @@ volumes:
       type: none
       o: bind
       device: /srv/foodbot/data
+  clamav_db:
+  clamav_sock:

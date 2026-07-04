@@ -31,6 +31,19 @@ export function registerPhotosRoutes(app: Express) {
       const photo = storage.savePhoto({ id: photoId, userId: req.user!.id, mealId, s3Key, sizeBytes });
       res.json({ photo });
     } catch (e: any) {
+      // Phase 28.4: virus detected (422) or other upload error
+      if (e.status === 422) {
+        // Write audit log entry for virus detection
+        storage
+          .addAuditLog({
+            userId: req.user!.id,
+            action: "photo_virus_detected",
+            detail: `s3Key=${s3Key} filename=${req.file.originalname ?? "unknown"} reason=${e.message}`,
+            ip: req.ip ?? null,
+          })
+          .catch(() => {}); // fire-and-forget, don\'t break the response
+        return res.status(422).json({ error: e.message });
+      }
       res.status(500).json({ error: e.message });
     }
   });

@@ -83,6 +83,10 @@ export default function AuthPage() {
   const [lUsername, setLUsername] = useState("");
   const [lPassword, setLPassword] = useState("");
 
+  // MFA step (after 202 mfaRequired)
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaTotp, setMfaTotp] = useState("");
+
   // Register form
   const [rUsername, setRUsername] = useState("");
   const [rEmail, setREmail] = useState("");
@@ -114,9 +118,18 @@ export default function AuthPage() {
     e.preventDefault();
     setPending(true);
     try {
-      await login(lUsername, lPassword);
+      const result = await login(lUsername, lPassword, mfaRequired ? mfaTotp : undefined);
+      if (result.mfaRequired) {
+        setMfaRequired(true);
+        setMfaTotp("");
+      }
     } catch (err: any) {
-      toast({ title: "Ошибка входа", description: err.message, variant: "destructive" });
+      if (mfaRequired) {
+        toast({ title: "Неверный код", description: err.message, variant: "destructive" });
+        setMfaTotp("");
+      } else {
+        toast({ title: "Ошибка входа", description: err.message, variant: "destructive" });
+      }
     } finally {
       setPending(false);
     }
@@ -283,22 +296,59 @@ export default function AuthPage() {
                       data-testid="input-login-password"
                     />
                   </div>
+                  {/* Phase 28.2: MFA TOTP step */}
+                  {mfaRequired && (
+                    <div className="space-y-1">
+                      <Label htmlFor="l-totp" className="text-xs">
+                        Код из приложения (TOTP)
+                      </Label>
+                      <Input
+                        id="l-totp"
+                        name="totp"
+                        autoComplete="one-time-code"
+                        inputMode="numeric"
+                        placeholder="123456"
+                        maxLength={6}
+                        value={mfaTotp}
+                        onChange={(e) => setMfaTotp(e.target.value.replace(/\D/g, ""))}
+                        autoFocus
+                        data-testid="input-login-totp"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Введите 6-значный код из вашего приложения-аутентификатора.
+                      </p>
+                    </div>
+                  )}
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={pending || !lUsername || !lPassword}
+                    disabled={pending || !lUsername || !lPassword || (mfaRequired && mfaTotp.length !== 6)}
                     data-testid="btn-login"
                   >
-                    {pending ? "Вхожу..." : "Войти"}
+                    {pending ? "Вхожу..." : mfaRequired ? "Подтвердить" : "Войти"}
                   </Button>
-                  <button
-                    type="button"
-                    className="w-full text-xs text-primary underline"
-                    onClick={() => setShowForgotPassword(true)}
-                    data-testid="btn-show-forgot-password"
-                  >
-                    Забыли пароль?
-                  </button>
+                  {mfaRequired && (
+                    <button
+                      type="button"
+                      className="w-full text-xs text-muted-foreground underline"
+                      onClick={() => {
+                        setMfaRequired(false);
+                        setMfaTotp("");
+                      }}
+                    >
+                      Назад ко входу
+                    </button>
+                  )}
+                  {!mfaRequired && (
+                    <button
+                      type="button"
+                      className="w-full text-xs text-primary underline"
+                      onClick={() => setShowForgotPassword(true)}
+                      data-testid="btn-show-forgot-password"
+                    >
+                      Забыли пароль?
+                    </button>
+                  )}
                 </CardContent>
               </form>
             )}

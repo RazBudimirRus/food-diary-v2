@@ -16,6 +16,9 @@ export const users = sqliteTable("users", {
   pdConsentAt: text("pd_consent_at"), // ISO timestamp when user consented (152-ФЗ)
   createdAt: text("created_at").notNull().default(""),
   lastLoginAt: text("last_login_at"),
+  // Phase 28.2: MFA TOTP
+  mfaEnabled: integer("mfa_enabled", { mode: "boolean" }).notNull().default(false),
+  mfaSecret: text("mfa_secret"), // AES-256-GCM encrypted TOTP secret
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, passwordHash: true });

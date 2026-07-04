@@ -7,13 +7,15 @@ import type { User } from "@shared/schema";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const JWT_SECRET = process.env.JWT_SECRET || (() => {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET must be set in production");
-  }
-  console.warn("[auth] JWT_SECRET not set — using insecure dev default");
-  return "dev-insecure-secret-change-me";
-})();
+const JWT_SECRET =
+  process.env.JWT_SECRET ||
+  (() => {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("JWT_SECRET must be set in production");
+    }
+    console.warn("[auth] JWT_SECRET not set — using insecure dev default");
+    return "dev-insecure-secret-change-me";
+  })();
 
 const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || "30m") as jwt.SignOptions["expiresIn"];
 const REFRESH_COOKIE_NAME = "refresh_token";
@@ -71,16 +73,21 @@ export function clearLegacyAuthCookieOptions(): CookieOptions {
 
 // AES-256-GCM key for encrypting secrets in DB
 // Must be 32 bytes (256 bits). Derived from ENCRYPTION_KEY env var.
-const ENCRYPTION_KEY_RAW = process.env.ENCRYPTION_KEY || (() => {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("ENCRYPTION_KEY must be set in production");
-  }
-  console.warn("[auth] ENCRYPTION_KEY not set — using insecure dev default");
-  return "dev-insecure-encryption-key-32b!!";
-})();
+const ENCRYPTION_KEY_RAW =
+  process.env.ENCRYPTION_KEY ||
+  (() => {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("ENCRYPTION_KEY must be set in production");
+    }
+    console.warn("[auth] ENCRYPTION_KEY not set — using insecure dev default");
+    return "dev-insecure-encryption-key-32b!!";
+  })();
 
-// Derive a fixed 32-byte key from whatever string is in env
-const ENC_KEY = crypto.createHash("sha256").update(ENCRYPTION_KEY_RAW).digest();
+// Phase 28.6: Derive a fixed 32-byte key via scrypt (KDF) instead of raw SHA-256.
+// Salt is deterministic and fixed so the same ENCRYPTION_KEY always produces the same ENC_KEY.
+// N=2^14 is deliberately low for a startup-time synchronous KDF (not a user password).
+const _ENC_SALT = Buffer.from("food-diary-enc-salt-v1");
+const ENC_KEY = crypto.scryptSync(ENCRYPTION_KEY_RAW, _ENC_SALT, 32, { N: 16384, r: 8, p: 1 });
 
 // ── Password ──────────────────────────────────────────────────────────────────
 

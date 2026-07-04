@@ -17,13 +17,24 @@ import path from "path";
  */
 function applyGuardedDDL(sqlite: InstanceType<typeof Database>): void {
   // 0005: deleted_at column on meals
-  const cols = sqlite.pragma("table_info(meals)") as { name: string }[];
-  if (!cols.some((c) => c.name === "deleted_at")) {
+  const mealCols = sqlite.pragma("table_info(meals)") as { name: string }[];
+  if (!mealCols.some((c) => c.name === "deleted_at")) {
     console.info("[migrate] Applying guarded DDL: meals.deleted_at");
     sqlite.exec(
       "ALTER TABLE meals ADD COLUMN deleted_at text;" +
         "CREATE INDEX IF NOT EXISTS idx_meals_deleted_at ON meals(deleted_at) WHERE deleted_at IS NOT NULL;",
     );
+  }
+
+  // 0006: mfa_enabled + mfa_secret columns on users
+  const userCols = sqlite.pragma("table_info(users)") as { name: string }[];
+  if (!userCols.some((c) => c.name === "mfa_enabled")) {
+    console.info("[migrate] Applying guarded DDL: users.mfa_enabled");
+    sqlite.exec("ALTER TABLE users ADD COLUMN mfa_enabled integer NOT NULL DEFAULT 0;");
+  }
+  if (!userCols.some((c) => c.name === "mfa_secret")) {
+    console.info("[migrate] Applying guarded DDL: users.mfa_secret");
+    sqlite.exec("ALTER TABLE users ADD COLUMN mfa_secret text;");
   }
 }
 

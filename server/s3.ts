@@ -6,6 +6,7 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
 import { Readable } from "stream";
+import net from "net";
 
 const ENDPOINT = process.env.VK_S3_ENDPOINT || "https://hb.ru-msk.vkcloud-storage.ru";
 const REGION = process.env.VK_S3_REGION || "ru-msk";
@@ -34,11 +35,79 @@ function getClient(): S3Client {
   return _client;
 }
 
+// ── Phase 28.4: ClamAV antivirus scan ───────────────────────────────────────
+
+const CLAMAV_SOCKET = process.env.CLAMAV_SOCKET || "";
+
+/**
+ * Scan a buffer with ClamAV via clamd Unix socket protocol (INSTREAM).
+ * Returns the scan result line, e.g. "stream: OK" or "stream: Eicar-Test-Signature FOUND".
+ * Throws if ClamAV is unreachable or returns ERROR.
+ */
+function clamScan(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const sock = net.createConnection(CLAMAV_SOCKET);
+    let response = "";
+    const chunks: Buffer[] = [];
+
+    sock.on("connect", () => {
+      // INSTREAM: send zINSTREAM\0 then chunks prefixed by 4-byte big-endian length, terminate with 0-length
+      const cmd = Buffer.from("zINSTREAM\0");
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(buffer.length, 0);
+      const terminator = Buffer.alloc(4); // 0x00000000
+      sock.write(Buffer.concat([cmd, len, buffer, terminator]));
+    });
+
+    sock.on("data", (chunk: Buffer) => chunks.push(chunk));
+
+    sock.on("end", () => {
+      response = Buffer.concat(chunks).toString().trim();
+      resolve(response);
+    });
+
+    sock.on("error", reject);
+
+    sock.setTimeout(15000);
+    sock.on("timeout", () => {
+      sock.destroy();
+      reject(new Error("ClamAV scan timed out"));
+    });
+  });
+}
+
+/**
+ * Scan buffer for viruses. Throws a 422-tagged error on virus detection.
+ * Silently skips if CLAMAV_SOCKET is not configured (dev/offline).
+ */
+export async function scanForViruses(buffer: Buffer, label = "upload"): Promise<void> {
+  if (!CLAMAV_SOCKET) return; // not configured — skip in dev
+  let result: string;
+  try {
+    result = await clamScan(buffer);
+  } catch (err: any) {
+    console.error(`[clamav] scan error for ${label}:`, err.message);
+    // Don't block upload if ClamAV is temporarily unavailable — log and continue
+    return;
+  }
+  if (result.includes("FOUND")) {
+    const virus = result.replace(/^stream:\s*/, "").replace(/\s*FOUND$/, "");
+    console.warn(`[clamav] virus detected in ${label}: ${virus}`);
+    const err: any = new Error(`Файл отклонён: обнаружена угроза безопасности (${virus})`);
+    err.status = 422;
+    throw err;
+  }
+  console.info(`[clamav] ${label}: ${result}`);
+}
+
 /**
  * Конвертирует буфер в WebP и загружает в S3.
  * Возвращает размер итогового файла в байтах.
  */
 export async function uploadPhoto(s3Key: string, buffer: Buffer, mimeType: string): Promise<number> {
+  // Phase 28.4: antivirus scan of raw upload buffer before any processing
+  await scanForViruses(buffer, s3Key);
+
   // Конвертируем в WebP через sharp (качество 85)
   // Phase 28.1: sharp по умолчанию (без вызова .withMetadata()) уже убирает всю
   // EXIF-метаинформацию (включая GPS-геолокацию) при конвертации. Важно:
