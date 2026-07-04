@@ -23,6 +23,16 @@ export function registerCatalogRoutes(app: Express) {
     res.json({ item });
   });
 
+  /** PUT /api/catalog/:id — переименовать / изменить описание */
+  app.put("/api/catalog/:id", requireAuth, (req: AuthRequest, res) => {
+    const itemId = parseInt(paramValue(req.params.id), 10);
+    const { name, description } = req.body as { name?: string; description?: string };
+    if (!name?.trim()) return res.status(400).json({ error: "Название обязательно" });
+    const item = storage.updateCatalogItem(req.user!.id, itemId, { name: name.trim(), description });
+    if (!item) return res.status(404).json({ error: "Шаблон не найден" });
+    res.json({ item });
+  });
+
   /** DELETE /api/catalog/:id */
   app.delete("/api/catalog/:id", requireAuth, (req: AuthRequest, res) => {
     const itemId = parseInt(paramValue(req.params.id), 10);

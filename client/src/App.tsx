@@ -34,6 +34,7 @@ const DoctorPage = lazy(() => import("@/pages/DoctorPage"));
 const AnalyticsPage = lazy(() => import("@/pages/AnalyticsPage"));
 const AboutPage = lazy(() => import("@/pages/AboutPage"));
 const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
+const CatalogPage = lazy(() => import("@/pages/CatalogPage"));
 
 // ── Page transition wrapper ───────────────────────────────────────────────────
 function PageFade({ children }: { children: React.ReactNode }) {
@@ -111,6 +112,7 @@ function AnimatedRoutes() {
           <Route path="/admin" component={AdminRoute} />
           <Route path="/doctor" component={DoctorRoute} />
           <Route path="/about" component={AboutPage} />
+          <Route path="/catalog" component={CatalogPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/privacy" component={PrivacyPage} />
           <Route component={NotFound} />

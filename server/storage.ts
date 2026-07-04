@@ -414,6 +414,11 @@ export interface IStorage {
   // UX-7 — Food Catalog
   getCatalogItems(userId: number): Array<FoodCatalogItem & { entries: FoodCatalogEntry[] }>;
   createCatalogItem(userId: number, data: CreateCatalogItem): FoodCatalogItem & { entries: FoodCatalogEntry[] };
+  updateCatalogItem(
+    userId: number,
+    itemId: number,
+    data: { name: string; description?: string },
+  ): (FoodCatalogItem & { entries: FoodCatalogEntry[] }) | null;
   deleteCatalogItem(userId: number, itemId: number): void;
   saveMealToCatalog(userId: number, mealId: number, name: string): FoodCatalogItem & { entries: FoodCatalogEntry[] };
 
@@ -1384,6 +1389,28 @@ class SqliteStorage implements IStorage {
       entries.push(entry);
     }
     return { ...item, entries };
+  }
+
+  updateCatalogItem(
+    userId: number,
+    itemId: number,
+    data: { name: string; description?: string },
+  ): (FoodCatalogItem & { entries: FoodCatalogEntry[] }) | null {
+    const existing = db
+      .select()
+      .from(foodCatalogItems)
+      .where(and(eq(foodCatalogItems.id, itemId), eq(foodCatalogItems.userId, userId)))
+      .get();
+    if (!existing) return null;
+    db.update(foodCatalogItems)
+      .set({ name: data.name, description: data.description ?? null })
+      .where(eq(foodCatalogItems.id, itemId))
+      .run();
+    const updated = db.select().from(foodCatalogItems).where(eq(foodCatalogItems.id, itemId)).get()!;
+    return {
+      ...updated,
+      entries: db.select().from(foodCatalogEntries).where(eq(foodCatalogEntries.catalogItemId, itemId)).all(),
+    };
   }
 
   deleteCatalogItem(userId: number, itemId: number): void {

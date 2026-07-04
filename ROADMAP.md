@@ -1,7 +1,7 @@
 # 🗺 Food Diary V2 — RoadMap
 
 **Версия:** 2.6.0  
-**Дата обновления:** 5 июля 2026  
+**Дата обновления:** 5 июля 2026 (v2.17.0)  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
 **Стек:** React 18 + Vite · Node.js 20 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
@@ -57,6 +57,7 @@
 | v2.14.0 · 2026-07-04 | Волна 5 (тестирование v2) | ✅ Реализовано | 242 теста, coverage 40.1%→56.8%, threshold 55%, repositories/doctor-routes/catalog-routes/mail/csrf/deepseek/user-routes тесты, test helpers factory |
 | v2.15.0 · 2026-07-04 | Волна 6 (UX-полировка, Phase 31) | ✅ Реализовано | Soft-delete meals + undo toast (5 сек), skeleton loaders в AnalyticsPage, real-time zod валидация в AuthPage, aria-labels на иконочных кнопках, dark mode toggle в ProfilePage, migration 0005 |
 | v2.16.0 · 2026-07-05 | Волна 7 (Phase 28 остаток) | ✅ Реализовано | MFA TOTP для doctor/admin (otpauth, QR-код, login 2nd step), ClamAV antivirus (docker-compose сервис + scan middleware), scrypt KDF для ENCRYPTION_KEY (заменён SHA-256), migration 0006 (mfa_enabled, mfa_secret) |
+| v2.17.0 · 2026-07-05 | Волна 8 (UX-7/10/11/12/13) | ✅ Реализовано | CatalogPage /#/catalog + PUT rename, BottomNav «Каталог», UX-11 inline bookmark на foodText/drinkText (Popover), UX-7/10/12/13 подтверждены реализованными |
 
 ---
 
@@ -1487,7 +1488,7 @@ GET    /api/user/active-plan             — текущий активный п�
 
 ## UX-7 — Каталог еды пользователя (My Food Catalog)
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.17.0)
 > **Приоритет:** Высокий
 > **Сложность:** Средняя
 > **Зависимость:** Фаза 15 (кабинет врача — для доступа врача к каталогу)
@@ -1621,7 +1622,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-10 — Редактирование приёма пищи через всплывающее окно (мобильная версия)
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.17.0)
 > **Приоритет:** Высокий
 > **Сложность:** Средняя
 > **Затрагивает:** DiaryPage (мобильная карточка приёма)
@@ -1658,7 +1659,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-11 — Добавление приёма пищи в каталог прямо из дневника
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.17.0)
 > **Приоритет:** Высокий
 > **Сложность:** Средняя
 > **Затрагивает:** DiaryPage (карточка приёма), CatalogPage
@@ -1695,7 +1696,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-12 — Кнопка «Рассчитать КБЖУ по всему дню»
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.17.0)
 > **Приоритет:** Высокий
 > **Сложность:** Низкая
 > **Затрагивает:** DiaryPage (шапка дня / футер дня)
@@ -1733,7 +1734,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-13 — Отображение версии приложения
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.17.0)
 > **Приоритет:** Средний
 > **Сложность:** Низкая
 > **Затрагивает:** Футер (десктоп), раздел «О приложении» (мобайл)

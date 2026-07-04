@@ -1,12 +1,15 @@
 // MealCard.tsx — renders a single meal entry card: meal type, food text, drinks,
 // hunger/fullness, КБЖУ data, photo upload, and action buttons (edit, delete, save
 // to catalog). Extracted verbatim from DiaryPage.tsx (29.4 refactor).
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trash2, Clock, Pencil, Camera, Star, Flame } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Trash2, Clock, Pencil, Camera, Star, Flame, BookmarkPlus } from "lucide-react";
 import type { Meal } from "@shared/schema";
 import { MEAL_TYPE_COLORS, hungerColor } from "@/lib/diary-utils";
 
@@ -28,6 +31,39 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
     onSuccess: () => {
       toast({ title: "Сохранено в каталог" });
       queryClient.invalidateQueries({ queryKey: ["/api/catalog"] });
+    },
+    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
+  });
+
+  // UX-11: quick save individual food/drink line to catalog
+  const [addLineName, setAddLineName] = useState("");
+  const [addLineOpen, setAddLineOpen] = useState<"food" | "drink" | null>(null);
+
+  const saveLineToCatalogMutation = useMutation({
+    mutationFn: ({
+      name,
+      text,
+      kcal,
+      protein,
+      fat,
+      carbs,
+    }: {
+      name: string;
+      text: string;
+      kcal?: number | null;
+      protein?: number | null;
+      fat?: number | null;
+      carbs?: number | null;
+    }) =>
+      apiRequest("POST", "/api/catalog", {
+        name,
+        entries: [{ mealName: text, kcal, protein, fat, carbs }],
+      }).then((r) => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog"] });
+      setAddLineOpen(null);
+      setAddLineName("");
+      toast({ title: "Добавлено в каталог" });
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
@@ -124,14 +160,128 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
           </div>
         </div>
 
-        {meal.foodText && <p className="text-sm mt-1.5 text-foreground">🍽 {meal.foodText}</p>}
+        {meal.foodText && (
+          <div className="flex items-start gap-1 mt-1.5 group/food">
+            <p className="text-sm text-foreground flex-1">🍽 {meal.foodText}</p>
+            {/* UX-11: save food line to catalog */}
+            <Popover
+              open={addLineOpen === "food"}
+              onOpenChange={(v) => {
+                setAddLineOpen(v ? "food" : null);
+                if (v) setAddLineName(meal.foodText?.slice(0, 60) ?? "");
+              }}
+            >
+              <PopoverTrigger asChild>
+                <button
+                  className="opacity-0 group-hover/food:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-primary p-0.5 rounded shrink-0 mt-0.5"
+                  title="Сохранить в каталог"
+                  aria-label="Сохранить блюдо в каталог"
+                >
+                  <BookmarkPlus className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3 space-y-2" side="top" align="start">
+                <p className="text-xs font-medium">Добавить в каталог</p>
+                <Input
+                  value={addLineName}
+                  onChange={(e) => setAddLineName(e.target.value)}
+                  placeholder="Название шаблона"
+                  className="h-8 text-sm"
+                  maxLength={80}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && addLineName.trim()) {
+                      saveLineToCatalogMutation.mutate({
+                        name: addLineName.trim(),
+                        text: meal.foodText!,
+                        kcal: meal.calories,
+                        protein: meal.protein,
+                        fat: meal.fat,
+                        carbs: meal.carbs,
+                      });
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  className="w-full h-7 text-xs"
+                  disabled={!addLineName.trim() || saveLineToCatalogMutation.isPending}
+                  onClick={() =>
+                    saveLineToCatalogMutation.mutate({
+                      name: addLineName.trim(),
+                      text: meal.foodText!,
+                      kcal: meal.calories,
+                      protein: meal.protein,
+                      fat: meal.fat,
+                      carbs: meal.carbs,
+                    })
+                  }
+                >
+                  {saveLineToCatalogMutation.isPending ? "Сохраняю..." : "Сохранить"}
+                </Button>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
         {meal.drinkText && (
-          <p className="text-sm mt-0.5 text-foreground">
-            💧 {meal.drinkText}
-            {meal.waterUnits ? (
-              <span className="text-muted-foreground text-xs ml-1">({(meal.waterUnits * 0.5).toFixed(1)} л)</span>
-            ) : null}
-          </p>
+          <div className="flex items-start gap-1 mt-0.5 group/drink">
+            <p className="text-sm text-foreground flex-1">
+              💧 {meal.drinkText}
+              {meal.waterUnits ? (
+                <span className="text-muted-foreground text-xs ml-1">({(meal.waterUnits * 0.5).toFixed(1)} л)</span>
+              ) : null}
+            </p>
+            {/* UX-11: save drink line to catalog */}
+            <Popover
+              open={addLineOpen === "drink"}
+              onOpenChange={(v) => {
+                setAddLineOpen(v ? "drink" : null);
+                if (v) setAddLineName(meal.drinkText?.slice(0, 60) ?? "");
+              }}
+            >
+              <PopoverTrigger asChild>
+                <button
+                  className="opacity-0 group-hover/drink:opacity-100 focus:opacity-100 transition-opacity text-muted-foreground hover:text-primary p-0.5 rounded shrink-0 mt-0.5"
+                  title="Сохранить напиток в каталог"
+                  aria-label="Сохранить напиток в каталог"
+                >
+                  <BookmarkPlus className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3 space-y-2" side="top" align="start">
+                <p className="text-xs font-medium">Добавить в каталог</p>
+                <Input
+                  value={addLineName}
+                  onChange={(e) => setAddLineName(e.target.value)}
+                  placeholder="Название шаблона"
+                  className="h-8 text-sm"
+                  maxLength={80}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && addLineName.trim()) {
+                      saveLineToCatalogMutation.mutate({
+                        name: addLineName.trim(),
+                        text: meal.drinkText!,
+                      });
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  className="w-full h-7 text-xs"
+                  disabled={!addLineName.trim() || saveLineToCatalogMutation.isPending}
+                  onClick={() =>
+                    saveLineToCatalogMutation.mutate({
+                      name: addLineName.trim(),
+                      text: meal.drinkText!,
+                    })
+                  }
+                >
+                  {saveLineToCatalogMutation.isPending ? "Сохраняю..." : "Сохранить"}
+                </Button>
+              </PopoverContent>
+            </Popover>
+          </div>
         )}
         {meal.contextNote && <p className="text-xs mt-1 text-muted-foreground italic">"{meal.contextNote}"</p>}
         {/* КБЖУ badge */}
