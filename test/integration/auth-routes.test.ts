@@ -5,6 +5,7 @@ import { join } from "node:path";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import crypto from "crypto";
+import { runMigrations } from "../../server/migrate";
 
 interface AuthResponse {
   accessToken: string;
@@ -28,6 +29,7 @@ async function registerUser(username: string): Promise<AuthResponse> {
       email: `${username}@example.com`,
       password: "password123",
       displayName: username,
+      pdConsent: true,
     })
     .expect(200);
 
@@ -61,6 +63,9 @@ beforeAll(async () => {
   process.env.JWT_REFRESH_EXPIRES_IN = "7d";
   process.env.REFRESH_COOKIE_MAX_AGE = "604800";
 
+  // Run migrations BEFORE importing routes (storage.ts opens DB at module load time)
+  runMigrations(process.env.SQLITE_DB_PATH!);
+
   app = express();
   server = createServer(app);
   app.use(express.json());
@@ -83,6 +88,7 @@ describe("auth routes", () => {
         email: "alice@example.com",
         password: "password123",
         displayName: "Alice",
+        pdConsent: true,
       })
       .expect(200);
 
@@ -101,6 +107,7 @@ describe("auth routes", () => {
         username: "refresh_user",
         email: "refresh_user@example.com",
         password: "password123",
+        pdConsent: true,
       })
       .expect(200);
 
@@ -114,10 +121,7 @@ describe("auth routes", () => {
     await request(app).get("/api/auth/me").expect(401);
 
     const auth = await registerUser("protected_user");
-    const me = await request(app)
-      .get("/api/auth/me")
-      .set("Authorization", `Bearer ${auth.accessToken}`)
-      .expect(200);
+    const me = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${auth.accessToken}`).expect(200);
 
     expect(me.body.username).toBe("protected_user");
   });
@@ -267,9 +271,7 @@ describe("DeepSeek usage limits", () => {
 
 describe("analytics routes", () => {
   it("requires auth for nutrition analytics", async () => {
-    await request(app)
-      .get("/api/analytics/summary?from=2026-06-01&to=2026-06-30")
-      .expect(401);
+    await request(app).get("/api/analytics/summary?from=2026-06-01&to=2026-06-30").expect(401);
   });
 
   it("returns per-user nutrition analytics summary", async () => {
@@ -372,10 +374,7 @@ describe("admin routes", () => {
   it("forbids non-admin users from reading active sessions", async () => {
     const auth = await registerUser("admin_forbidden_user");
 
-    await request(app)
-      .get("/api/admin/sessions")
-      .set("Authorization", `Bearer ${auth.accessToken}`)
-      .expect(403);
+    await request(app).get("/api/admin/sessions").set("Authorization", `Bearer ${auth.accessToken}`).expect(403);
   });
 
   it("allows admin users to read active sessions", async () => {
@@ -389,9 +388,12 @@ describe("admin routes", () => {
       .expect(200);
 
     expect(res.body.sessions).toEqual(expect.any(Array));
-    expect(res.body.sessions.some((session: { username: string; role: string }) =>
-      session.username === auth.user.username && session.role === "admin"
-    )).toBe(true);
+    expect(
+      res.body.sessions.some(
+        (session: { username: string; role: string }) =>
+          session.username === auth.user.username && session.role === "admin",
+      ),
+    ).toBe(true);
   });
 
   it("allows admin users to list users without password hashes", async () => {
@@ -422,6 +424,7 @@ describe("admin routes", () => {
         email: "jsmith@example.com",
         password: "password123",
         displayName: "Dr. Smith",
+        pdConsent: true,
       })
       .expect(200);
 
@@ -438,10 +441,7 @@ describe("admin routes", () => {
   it("forbids non-admin users from reading DeepSeek usage", async () => {
     const auth = await registerUser("admin_usage_forbidden_user");
 
-    await request(app)
-      .get("/api/admin/deepseek/usage")
-      .set("Authorization", `Bearer ${auth.accessToken}`)
-      .expect(403);
+    await request(app).get("/api/admin/deepseek/usage").set("Authorization", `Bearer ${auth.accessToken}`).expect(403);
   });
 
   it("allows admin users to read DeepSeek usage summary", async () => {
@@ -489,8 +489,8 @@ describe("admin routes", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`)
       .expect(200);
 
-    const targetSession = before.body.sessions.find((session: { username: string; id: number }) =>
-      session.username === target.user.username
+    const targetSession = before.body.sessions.find(
+      (session: { username: string; id: number }) => session.username === target.user.username,
     );
     expect(targetSession).toBeTruthy();
 
@@ -523,9 +523,9 @@ describe("admin routes", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`)
       .expect(200);
 
-    expect(after.body.sessions.some((session: { username: string }) =>
-      session.username === target.user.username
-    )).toBe(false);
+    expect(after.body.sessions.some((session: { username: string }) => session.username === target.user.username)).toBe(
+      false,
+    );
   });
 
   it("forbids non-admin users from resetting passwords", async () => {
@@ -566,10 +566,7 @@ describe("admin routes", () => {
 
 describe("password reset routes", () => {
   it("returns 503 when SMTP is not configured", async () => {
-    await request(app)
-      .post("/api/auth/forgot-password")
-      .send({ email: "anyone@example.com" })
-      .expect(503);
+    await request(app).post("/api/auth/forgot-password").send({ email: "anyone@example.com" }).expect(503);
   });
 
   it("resets password with a valid token and revokes old login", async () => {

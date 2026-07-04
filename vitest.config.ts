@@ -16,6 +16,9 @@ export default defineConfig({
       reporter: ["text", "html"],
       include: ["server/**/*.ts", "shared/**/*.ts"],
       exclude: ["server/vite.ts", "**/*.test.ts"],
+      thresholds: {
+        lines: 40,
+      },
     },
   },
 });

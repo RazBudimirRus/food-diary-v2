@@ -178,7 +178,6 @@ CREATE TABLE `users` (
 	`password_hash` text NOT NULL,
 	`display_name` text,
 	`role` text DEFAULT 'user' NOT NULL,
-	`pd_consent_at` text,
 	`created_at` text DEFAULT '' NOT NULL,
 	`last_login_at` text
 );
