@@ -1,0 +1,9 @@
+// Re-exports all repositories for convenience
+export { UserRepository } from "./user";
+export { MealRepository } from "./meal";
+export { DayRepository } from "./day";
+export { DoctorRepository } from "./doctor";
+export { SessionRepository } from "./session";
+export { CatalogRepository } from "./catalog";
+export { PhotoRepository } from "./photo";
+export { AuditRepository } from "./audit";

@@ -1,237 +1,147 @@
-# 🍽 Дневник питания v2
+# Food Diary V2
 
-Веб-приложение для ведения дневника питания с кабинетом врача, AI-расчётом КБЖУ и фото блюд.
+> Персональный веб-сервис дневника питания для врачебного наблюдения.
 
-[![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions)
+[![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-2.12.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
----
+## Возможности
 
-## Стек технологий
+| Функция                                                                      | Статус |
+| ---------------------------------------------------------------------------- | ------ |
+| Дневник питания (завтрак / обед / перекус / ужин)                            | ✅     |
+| Авторизация: bcrypt + JWT (30 мин) + refresh token (7 дней, httpOnly cookie) | ✅     |
+| Шифрование секретов AES-256-GCM                                              | ✅     |
+| Запись задним числом с date-picker (дефолт — сегодня МСК)                    | ✅     |
+| Расчёт КБЖУ через DeepSeek API                                               | ✅     |
+| Пакетный расчёт КБЖУ по всему дню (UX-12)                                    | ✅     |
+| Excel-отчёт за день / произвольный период                                    | ✅     |
+| Аналитика питания (графики, статистика)                                      | ✅     |
+| Каталог продуктов пользователя                                               | ✅     |
+| Фото приёмов пищи в VK Object Storage (S3)                                   | ✅     |
+| Кабинет врача: пациенты, дневники, планы питания                             | ✅     |
+| Аудит-лог действий врача и администратора                                    | ✅     |
+| Административная панель                                                      | ✅     |
+| Push-уведомления (Web Push / VAPID)                                          | ✅     |
+| CSRF-защита (double-submit cookie)                                           | ✅     |
+| EXIF strip при загрузке фото                                                 | ✅     |
+| 152-ФЗ: экспорт и удаление данных пользователя                               | ✅     |
+| Редактирование приёма — bottom sheet на мобиле (UX-10)                       | ✅     |
+| Версия приложения в футере и «О приложении» (UX-13)                          | ✅     |
+| Preflight-check скрипт                                                       | ✅     |
+| API-документация (Swagger UI) `/api/docs`                                    | ✅     |
+| Docker Compose (production + dev)                                            | ✅     |
+| Prometheus metrics `/metrics` + `/api/health`                                | ✅     |
+| Pino structured logging + Sentry error tracking                              | ✅     |
 
-| Слой                 | Технологии                                                                     |
-| -------------------- | ------------------------------------------------------------------------------ |
-| **Frontend**         | React 18, Vite 7, TypeScript, Tailwind CSS v3, shadcn/ui, Radix UI, Recharts   |
-| **Backend**          | Node.js 20, Express 5, TypeScript, Drizzle ORM                                 |
-| **База данных**      | SQLite (better-sqlite3) + versioned migrations (drizzle-kit)                   |
-| **Auth**             | bcrypt (cost 12) + JWT (30m access / 7d refresh httpOnly cookie) + AES-256-GCM |
-| **AI**               | DeepSeek API — расчёт КБЖУ по текстовому описанию                              |
-| **Хранилище фото**   | VK Object Storage (S3-compatible) + sharp (resize, EXIF strip)                 |
-| **Push-уведомления** | Web Push (VAPID)                                                               |
-| **Логи**             | pino + request_id (AsyncLocalStorage)                                          |
-| **Мониторинг**       | Prometheus-совместимые `/metrics`, Sentry/GlitchTip (опционально)              |
-| **Прокси**           | Caddy 2 (TLS termination, gzip, security headers)                              |
-| **CI/CD**            | GitHub Actions — typecheck, lint, vitest, playwright                           |
+## Стек
 
----
+| Слой           | Технологии                                                               |
+| -------------- | ------------------------------------------------------------------------ |
+| Frontend       | React 18 · Vite · TypeScript · Tailwind CSS · shadcn/ui · TanStack Query |
+| Backend        | Node.js 20 · Express · TypeScript · Drizzle ORM · better-sqlite3         |
+| Инфраструктура | Docker Compose · nginx · Ubuntu 24.04                                    |
+| Безопасность   | bcryptjs · JWT · AES-256-GCM · CSRF · EXIF strip                         |
+| AI             | DeepSeek API (КБЖУ анализ)                                               |
+| Хранилище      | SQLite (данные) · VK Object Storage / S3 (фото)                          |
+| Мониторинг     | Prometheus · Grafana · Sentry · Pino                                     |
 
-## Реализованный функционал (v2.9.0)
+## Архитектура
 
-### Пользователь
+```
+client/          — React SPA (Vite)
+  src/
+    components/  — UI компоненты (shadcn/ui + кастомные)
+    pages/       — Страницы приложения
+    hooks/       — Кастомные React хуки
+    lib/         — Утилиты (auth, queryClient, diary-utils)
+server/          — Express backend
+  routes/        — API роуты по доменам (auth, meals, doctor, admin, photos, reports, catalog)
+  repositories/  — Репозитории (тонкие обёртки над storage)
+  config.ts      — Именованные константы
+  storage.ts     — Drizzle ORM + SQLite
+  auth.ts        — JWT, bcrypt, middleware
+  deepseek.ts    — DeepSeek API интеграция
+  s3.ts          — VK Object Storage (S3)
+  openapi.ts     — OpenAPI 3.0 спека
+shared/          — Общий код (schema, types, dates)
+  schema/        — Drizzle tables, Zod validators, TypeScript types
+  dates.ts       — MSK timezone утилиты
+docs/
+  adr/           — Architectural Decision Records
+migrations/      — Drizzle migrations
+```
 
-- Дневник питания с разбивкой по дням (МСК-часовой пояс)
-- Ввод еды, напитков, воды с временными метками и шкалами голода/насыщения
-- AI-расчёт КБЖУ (DeepSeek) по текстовому описанию
-- Загрузка фото блюд (до 50 МБ, хранение в VK Object Storage)
-- Каталог продуктов пользователя (UX-7)
-- Аналитика: графики КБЖУ, макронутриентов, воды, сна за период
-- Excel-отчёт за день / диапазон дат
-- Сброс пароля через email
-- Push-уведомления
-
-### Врач
-
-- Кабинет врача: привязка пациентов по поиску, чтение дневников
-- Таргеты КБЖУ от врача пациенту
-- Заметки врача к приёмам пищи
-- Профиль врача (имя, телефон, Telegram)
-
-### Администратор
-
-- Управление пользователями: список, создание, смена роли (user/doctor/admin)
-- Мониторинг использования DeepSeek API (токены, стоимость, лимиты)
-- Bootstrap первого администратора через `ADMIN_BOOTSTRAP_USERNAME` в `.env`
-
-### Профиль пользователя
-
-- Смена отображаемого имени
-- Сброс пароля
-- Анкета: пол, рост, вес, уровень активности
-- Профиль врача (для роли doctor)
-- Дата последнего входа
-
-### Безопасность
-
-- Helmet.js (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
-- CORS allow-list через `ALLOWED_ORIGINS`
-- Rate limiting на аутентификацию и расчёт КБЖУ
-- Идемпотентность POST /api/meals (заголовок `Idempotency-Key`)
-- Caddy: HSTS preload, Referrer-Policy, Permissions-Policy, -Server
-
----
-
-## Быстрый старт (Docker)
-
-### 1. Клонировать и настроить
+## Быстрый старт (разработка)
 
 ```bash
 git clone https://github.com/RazBudimirRus/food-diary-v2.git
 cd food-diary-v2
-cp .env.example .env
-# Отредактировать .env — заменить DOMAIN, JWT_SECRET, ENCRYPTION_KEY
-```
-
-### 2. TLS-сертификат
-
-```bash
-# Wildcard-сертификат (*.razbudimir.com уже есть на сервере):
-mkdir -p certs
-cp /path/to/fullchain.pem certs/
-cp /path/to/privkey.pem   certs/
-```
-
-### 3. Запустить
-
-```bash
-docker compose up -d
-# Приложение доступно на https://<DOMAIN>
-```
-
-### 4. Создать первого администратора
-
-```bash
-# В .env: ADMIN_BOOTSTRAP_USERNAME=your_username
-docker compose restart api
-```
-
----
-
-## Разработка локально
-
-```bash
+cp .env.example .env   # заполнить переменные
 npm install
-cp .env.example .env
-# Заполнить минимальный .env для dev (JWT_SECRET, ENCRYPTION_KEY)
-
-npm run dev       # Frontend + Backend на :5000
-npm run typecheck # TypeScript проверка
-npm test          # Vitest unit-тесты
-npm run test:e2e  # Playwright E2E (требует билда)
+npm run dev            # http://localhost:5000
 ```
 
----
-
-## Структура проекта
-
-```
-food-diary-v2/
-├── client/              # React 18 фронтенд
-│   └── src/
-│       ├── pages/       # AuthPage, DiaryPage, AdminPage, DoctorPage, ProfilePage, AnalyticsPage…
-│       ├── components/  # shadcn/ui компоненты + BottomNav, ErrorBoundary
-│       └── lib/         # auth.tsx, queryClient.ts, dates.ts
-├── server/              # Node.js + Express бэкенд
-│   ├── index.ts         # Точка входа: migrations → pino → express → routes
-│   ├── routes.ts        # Все API роуты (~1100 строк)
-│   ├── storage.ts       # Drizzle ORM + SQLite (~1500 строк)
-│   ├── migrate.ts       # Drizzle-kit migration runner (Phase 26.1)
-│   ├── logger.ts        # pino + AsyncLocalStorage request_id (Phase 27.1)
-│   ├── metrics.ts       # Prometheus /metrics (Phase 27.4)
-│   ├── sentry.ts        # Sentry/GlitchTip опционально (Phase 27.3)
-│   ├── deepseek.ts      # DeepSeek API клиент
-│   ├── s3.ts            # VK Object Storage (AWS SDK v3)
-│   └── auth.ts          # JWT, bcrypt, refresh-token логика
-├── shared/
-│   ├── schema.ts        # Drizzle + Zod схемы (16 таблиц)
-│   └── dates.ts         # MSK timezone утилиты
-├── migrations/          # SQL-миграции (drizzle-kit generate)
-├── scripts/             # backup.sh, preflight.sh
-├── Caddyfile            # Caddy конфигурация (TLS, security headers)
-├── docker-compose.yml   # api + caddy сервисы
-├── Dockerfile.api       # Multi-stage build
-└── .env.example         # Все переменные с комментариями
-```
-
----
-
-## API Endpoints (ключевые)
-
-| Метод   | Путь                              | Доступ | Описание                                        |
-| ------- | --------------------------------- | ------ | ----------------------------------------------- |
-| GET     | `/api/health`                     | Public | Проверка БД / S3 / DeepSeek                     |
-| GET     | `/api/metrics`                    | Public | Prometheus метрики                              |
-| POST    | `/api/auth/register`              | Public | Регистрация                                     |
-| POST    | `/api/auth/login`                 | Public | Вход                                            |
-| GET     | `/api/days`                       | Auth   | Список дней                                     |
-| POST    | `/api/meals`                      | Auth   | Добавить приём (поддерживает `Idempotency-Key`) |
-| POST    | `/api/meals/:id/analyze`          | Auth   | Расчёт КБЖУ (DeepSeek)                          |
-| POST    | `/api/photos`                     | Auth   | Загрузить фото блюда                            |
-| GET     | `/api/report/:date`               | Auth   | Excel за день                                   |
-| GET     | `/api/report/range`               | Auth   | Excel за диапазон                               |
-| GET/PUT | `/api/profile`                    | Auth   | Профиль пользователя                            |
-| GET     | `/api/doctor/patients`            | Doctor | Список пациентов                                |
-| POST    | `/api/doctor/patients/:id/assign` | Doctor | Привязать пациента                              |
-| GET     | `/api/admin/users`                | Admin  | Список пользователей                            |
-| POST    | `/api/admin/users/:id/set-role`   | Admin  | Сменить роль                                    |
-
----
-
-## Мониторинг и логи
+## Production деплой
 
 ```bash
-# Структурированные логи (pino JSON)
-docker compose logs -f api | jq .
-
-# Prometheus метрики
-curl http://localhost:5000/metrics
-
-# Healthcheck
-curl https://fooddiary.razbudimir.com/api/health
+ssh <server>
+cd /srv/foodbot
+git pull origin main
+sudo docker compose -f docker-compose.prod.yml up -d --build
+curl http://localhost:5000/api/health
 ```
 
-### Grafana Dashboard
+### Переменные окружения (.env)
 
-Метрики доступны для импорта в существующий Grafana на том же сервере:
+| Переменная                                                 | Описание                              | Обязательна |
+| ---------------------------------------------------------- | ------------------------------------- | ----------- |
+| `PORT`                                                     | Порт сервера (default: 5000)          | —           |
+| `NODE_ENV`                                                 | `production` / `development`          | ✅          |
+| `DOMAIN`                                                   | Домен приложения                      | ✅          |
+| `JWT_SECRET`                                               | Секрет для подписи JWT (≥ 32 символа) | ✅          |
+| `JWT_EXPIRES_IN`                                           | TTL access token (default: `30m`)     | —           |
+| `JWT_REFRESH_EXPIRES_IN`                                   | TTL refresh token (default: `7d`)     | —           |
+| `ENCRYPTION_KEY`                                           | 32-байтный hex-ключ AES-256-GCM       | ✅          |
+| `DEEPSEEK_API_KEY`                                         | API ключ DeepSeek                     | ✅          |
+| `DEEPSEEK_DAILY_TOKEN_LIMIT`                               | Лимит токенов в сутки                 | —           |
+| `VK_S3_ENDPOINT`                                           | Endpoint VK Object Storage            | —           |
+| `VK_S3_BUCKET`                                             | Имя bucket                            | —           |
+| `VK_S3_ACCESS_KEY` / `VK_S3_SECRET_KEY`                    | S3 credentials                        | —           |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web Push VAPID                        | —           |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS`      | Email (reset password)                | —           |
+| `LOG_LEVEL`                                                | Pino log level (default: `info`)      | —           |
+| `TRUST_PROXY`                                              | `1` за nginx                          | —           |
 
-- `http_requests_total` — RPS по роутам
-- `http_request_duration_ms` — latency percentiles
-- `deepseek_api_calls_total` — использование AI
-- Стандартные Node.js метрики (heap, GC, event loop)
+## API документация
 
----
+Swagger UI доступен по адресу: `http://localhost:5000/api/docs`
 
-## Переменные окружения
+В production: `https://fooddiary.razbudimir.com/api/docs`
 
-Полный список с комментариями: [`.env.example`](.env.example)
+## Архитектурные решения
 
-Обязательные для продакшена:
+Решения зафиксированы в `docs/adr/`:
 
-| Переменная         | Описание                                                 |
-| ------------------ | -------------------------------------------------------- |
-| `DOMAIN`           | Домен (без https://)                                     |
-| `JWT_SECRET`       | Мин. 32 символа — `openssl rand -hex 32`                 |
-| `ENCRYPTION_KEY`   | Мин. 32 символа — `openssl rand -hex 32`                 |
-| `DEEPSEEK_API_KEY` | Ключ DeepSeek (опционально)                              |
-| `VK_S3_*`          | VK Object Storage (опционально, без него фото отключены) |
+- [ADR-001](docs/adr/ADR-001-sqlite-vs-postgres.md) — SQLite vs PostgreSQL
+- [ADR-002](docs/adr/ADR-002-bcryptjs-vs-argon2.md) — bcryptjs vs argon2
+- [ADR-003](docs/adr/ADR-003-wouter-vs-react-router.md) — wouter vs react-router
+- [ADR-004](docs/adr/ADR-004-monorepo-structure.md) — монорепо без Turborepo
 
----
+## Roadmap
 
-## Производственный сервер
+Подробный roadmap с волнами, фазами и UX-задачами: [ROADMAP.md](ROADMAP.md)
 
-- **IP:** 95.163.213.45 (VK Cloud, Ubuntu 24.04)
-- **Домен:** [fooddiary.razbudimir.com](https://fooddiary.razbudimir.com)
-- **TLS:** Wildcard `*.razbudimir.com` (истекает 05.03.2027)
-- **Данные:** `/srv/foodbot/data/` (volume mount)
-- **Бэкапы:** `scripts/backup.sh` — локальные + VK Object Storage
-
----
-
-## Snapshot-ветка
-
-Текущее состояние на 29.06.2026 зафиксировано в ветке `v2.9.0-snapshot`.  
-Все новые изменения идут в `main`.
-
----
+| Волна  | Версия  | Статус | Что вошло                                                              |
+| ------ | ------- | ------ | ---------------------------------------------------------------------- |
+| Wave 1 | v2.10.0 | ✅     | Migrations, nginx hardening, pino, Sentry, /health, /metrics           |
+| Wave 2 | v2.11.0 | ✅     | Audit log, CSRF, EXIF, bottom sheet, batch КБЖУ, версия приложения     |
+| Wave 3 | v2.12.0 | ✅     | Рефакторинг монолитов, repositories, OpenAPI, ADR, README              |
+| Wave 4 | v2.13.0 | 📋     | Тестирование (Playwright E2E, vitest unit, 40% coverage)               |
+| Wave 5 | v2.14.0 | 📋     | UX-полировка (undo, skeleton, empty states, a11y)                      |
+| Wave 6 | v2.15.0 | 📋     | Продуктовые фичи (weight tracking, PDF, email digest, GigaChat Vision) |
 
 ## Лицензия
 
-MIT
+MIT © 2026 Глеб Сердитых

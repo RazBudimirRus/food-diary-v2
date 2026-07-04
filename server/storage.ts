@@ -46,7 +46,7 @@ import {
   idempotencyKeys,
   auditLog,
 } from "@shared/schema";
-import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
+import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskToday } from "@shared/dates";
 import {
   computeMealTimingMetrics,
   computePeriodInsights,
@@ -265,8 +265,7 @@ sqlite.exec(`
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
 export function getMskDate(utcMs?: number): string {
-  const d = new Date((utcMs ?? Date.now()) + 3 * 60 * 60 * 1000);
-  return d.toISOString().slice(0, 10);
+  return mskToday(utcMs);
 }
 
 export function getMskTime(): string {
