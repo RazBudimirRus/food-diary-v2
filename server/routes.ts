@@ -50,6 +50,8 @@ import {
   PHOTO_MAX_PER_USER,
 } from "./s3";
 import webpush from "web-push";
+import { auditLog } from "./audit";
+import { setCsrfToken } from "./csrf";
 
 // ── Doctor role middleware ──────────────────────────────────────────────────
 function requireDoctor(req: AuthRequest, res: any, next: any) {
@@ -281,7 +283,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
   /** GET /api/auth/me */
   app.get("/api/auth/me", requireAuth, (req: AuthRequest, res) => {
     const u = req.user!;
-    res.json(publicUser(u));
+    const csrfToken = setCsrfToken(req, res);
+    res.json({ ...publicUser(u), csrfToken });
   });
 
   /** PUT /api/profile — update displayName */
@@ -314,7 +317,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
       });
 
       const publicUrl = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
-      const resetUrl = `${publicUrl}/#/reset-password?token=${rawToken}`;
+      // Phase 28.3: ссылка ведёт на настоящий путь /reset-password (а не на хэш-маршрут)
+      const resetUrl = `${publicUrl}/reset-password?token=${rawToken}`;
 
       try {
         await sendPasswordResetEmail(user.email, resetUrl);
@@ -590,8 +594,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   // ── Admin ──────────────────────────────────────────────────────────────────
 
-  app.get("/api/admin/users", requireAuth, requireAdmin, (_req: AuthRequest, res) => {
+  app.get("/api/admin/users", requireAuth, requireAdmin, (req: AuthRequest, res) => {
     const users = storage.listUsers().map(publicUser);
+    void auditLog(req, "admin.view_user");
     res.json({ users });
   });
 
@@ -628,6 +633,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!storage.getUserById(userId)) return res.status(404).json({ error: "User not found" });
 
     storage.revokeUserRefreshTokens(userId);
+    void auditLog(req, "admin.revoke_sessions", userId);
     res.json({ ok: true });
   });
 
@@ -642,7 +648,29 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!user) return res.status(404).json({ error: "User not found" });
 
     storage.revokeUserRefreshTokens(userId);
+    void auditLog(req, "admin.reset_password", userId);
     res.json({ user: publicUser(user), temporaryPassword });
+  });
+
+  /** GET /api/admin/audit-log — Phase 24 */
+  app.get("/api/admin/audit-log", requireAuth, requireAdmin, async (req: AuthRequest, res) => {
+    const actorRaw = req.query.actor as string | undefined;
+    const targetRaw = req.query.target as string | undefined;
+    const action = (req.query.action as string | undefined) || undefined;
+    const from = (req.query.from as string | undefined) || undefined;
+    const to = (req.query.to as string | undefined) || undefined;
+    const limitRaw = req.query.limit as string | undefined;
+
+    const actorId = actorRaw !== undefined ? Number(actorRaw) : undefined;
+    if (actorId !== undefined && !Number.isInteger(actorId)) return res.status(400).json({ error: "Invalid actor id" });
+    const targetId = targetRaw !== undefined ? Number(targetRaw) : undefined;
+    if (targetId !== undefined && !Number.isInteger(targetId))
+      return res.status(400).json({ error: "Invalid target id" });
+    const limit = limitRaw !== undefined ? Number(limitRaw) : 100;
+    if (!Number.isInteger(limit) || limit <= 0) return res.status(400).json({ error: "Invalid limit" });
+
+    const entries = await storage.getAuditLog({ actorId, targetId, action, from, to, limit });
+    res.json({ entries });
   });
 
   // ── Phase 16: 152-ФЗ ────────────────────────────────────────────────────────
@@ -765,8 +793,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!["user", "doctor", "admin"].includes(role)) {
       return res.status(400).json({ error: "Допустимые роли: user, doctor, admin" });
     }
-    const updated = storage.setUserRole(userId, role);
+    const updated = storage.setUserRole(userId, role as "user" | "doctor" | "admin");
     if (!updated) return res.status(404).json({ error: "Пользователь не найден" });
+    void auditLog(req, "admin.set_role", userId, { role });
     res.json({ user: updated });
   });
 
@@ -814,6 +843,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     // admin может быть пациентом: врач читает только дневник, не управляет аккаунтом
     try {
       const dp = storage.assignPatient(doctor.id, patientId);
+      void auditLog(req, "doctor.assign_patient", patientId);
       res.json({ doctorPatient: dp });
     } catch {
       res.status(409).json({ error: "Этот пациент уже привязан к вам" });
@@ -826,6 +856,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const doctor = storage.getDoctorByUserId(req.user!.id);
     if (!doctor) return res.status(404).json({ error: "Врач не найден" });
     storage.removePatient(doctor.id, patientId);
+    void auditLog(req, "doctor.remove_patient", patientId);
     res.json({ ok: true });
   });
 
@@ -842,6 +873,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
     const date = (req.query.date as string) || getMskDate();
     const day = storage.getDayByDate(patientId, date);
+    void auditLog(req, "doctor.view_diary", patientId, { date });
     if (!day) return res.json({ day: null, meals: [] });
     const meals = storage.getMealsByDay(day.id);
     res.json({ day, meals });
@@ -900,6 +932,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!doctor) return res.status(400).json({ error: "Профиль врача не найден" });
     const { note, suggestedKcal } = req.body;
     const result = storage.addDoctorMealNote({ doctorId: doctor.id, mealId, note, suggestedKcal });
+    void auditLog(req, "doctor.add_meal_note", mealId, { note, suggestedKcal });
     res.json({ note: result });
   });
 
@@ -922,6 +955,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const parsed = insertDoctorPlanSchema.safeParse({ ...req.body, patientId });
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const plan = storage.createDoctorPlan(doctor.id, parsed.data);
+    void auditLog(req, "doctor.create_plan", patientId, { planId: plan.id });
     res.json({ plan });
   });
 
@@ -936,7 +970,14 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.delete("/api/doctor/plans/:id", requireAuth, requireDoctor, (req: AuthRequest, res) => {
     const planId = parseInt(paramValue(req.params.id), 10);
     storage.deleteDoctorPlan(planId);
+    void auditLog(req, "doctor.delete_plan", planId);
     res.json({ ok: true });
+  });
+
+  /** GET /api/doctor/audit-log — Phase 24 (только свои действия, последние 50) */
+  app.get("/api/doctor/audit-log", requireAuth, requireDoctor, async (req: AuthRequest, res) => {
+    const entries = await storage.getAuditLog({ actorId: req.user!.id, limit: 50 });
+    res.json({ entries });
   });
 
   /** GET /api/user/active-plan */

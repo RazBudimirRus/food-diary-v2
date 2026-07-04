@@ -4,10 +4,11 @@
  */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Stethoscope, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock, BookOpen } from "lucide-react";
+import { Stethoscope, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock, BookOpen, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -42,7 +43,29 @@ interface Doctor {
   telegramUrl?: string;
 }
 
-type Tab = "patients" | "diary";
+interface AuditLogEntry {
+  id: number;
+  actorId: number;
+  actorRole: "user" | "doctor" | "admin";
+  action: string;
+  targetId: number | null;
+  detail: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+function formatHistoryDate(value: string) {
+  return new Date(value).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+type Tab = "patients" | "diary" | "history";
 
 async function apiCall(path: string, opts?: RequestInit) {
   const method = (opts?.method ?? "GET") as string;
@@ -128,6 +151,13 @@ export default function DoctorPage() {
     enabled: !!selectedPatient && tab === "diary",
   });
 
+  // ── History (audit log, Phase 24.8) ───────────────────────────────────────
+  const { data: historyData, isLoading: historyLoading } = useQuery<{ entries: AuditLogEntry[] }>({
+    queryKey: ["/api/doctor/audit-log"],
+    enabled: tab === "history",
+  });
+  const historyEntries = historyData?.entries ?? [];
+
   // ── Notify patient ────────────────────────────────────────────────────────
   const notify = useMutation({
     mutationFn: (patientId: number) =>
@@ -168,7 +198,7 @@ export default function DoctorPage() {
       {/* Tabs */}
       <div className="max-w-2xl mx-auto px-4 pt-4">
         <div className="flex gap-1 mb-4 border rounded-lg p-1 bg-muted/40">
-          {(["patients", "diary"] as Tab[]).map((t) => (
+          {(["patients", "diary", "history"] as Tab[]).map((t) => (
             <button
               key={t}
               className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
@@ -176,7 +206,7 @@ export default function DoctorPage() {
               }`}
               onClick={() => setTab(t)}
             >
-              {t === "patients" ? "Пациенты" : "Дневник"}
+              {t === "patients" ? "Пациенты" : t === "diary" ? "Дневник" : "История"}
             </button>
           ))}
         </div>
@@ -364,6 +394,47 @@ export default function DoctorPage() {
                   </CardContent>
                 </Card>
               </>
+            )}
+          </div>
+        )}
+
+        {/* ── History tab ── */}
+        {tab === "history" && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium flex items-center gap-2">
+              <History className="h-4 w-4" /> Мои последние действия
+            </p>
+            {historyLoading && <p className="text-sm text-muted-foreground text-center py-6">Загрузка...</p>}
+            {!historyLoading && historyEntries.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">Действий пока нет</p>
+            )}
+            {!historyLoading && historyEntries.length > 0 && (
+              <Card>
+                <CardContent className="px-0 py-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Дата</TableHead>
+                        <TableHead>Действие</TableHead>
+                        <TableHead>Цель</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {historyEntries.map((entry) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="whitespace-nowrap text-xs">
+                            {formatHistoryDate(entry.createdAt)}
+                          </TableCell>
+                          <TableCell className="text-xs">{entry.action}</TableCell>
+                          <TableCell className="text-xs">
+                            {entry.targetId != null ? `#${entry.targetId}` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             )}
           </div>
         )}

@@ -3,7 +3,9 @@ import express, { Response, NextFunction } from "express";
 import type { Request } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
+import { csrfMiddleware } from "./csrf";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
 import { initDeepSeekKey } from "./deepseek";
@@ -87,6 +89,10 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Phase 28.2: cookies must be parsed before CSRF middleware can read them
+app.use(cookieParser());
+app.use(csrfMiddleware);
 
 // Phase 27.1: keep legacy log() for backward compat — now delegates to pino
 export function log(message: string, source = "express") {

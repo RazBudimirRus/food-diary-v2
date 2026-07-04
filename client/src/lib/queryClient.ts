@@ -1,10 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
 // Rewrite API calls to use the proxy port in deployed environments
-const API_BASE =
-  typeof window !== "undefined" && (window as any).__PORT_5000__
-    ? (window as any).__PORT_5000__
-    : "";
+const API_BASE = typeof window !== "undefined" && (window as any).__PORT_5000__ ? (window as any).__PORT_5000__ : "";
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<AuthRefreshResult | null> | null = null;
@@ -28,12 +25,17 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 }
 
 function shouldTryRefresh(path: string) {
-  return ![
-    "/api/auth/login",
-    "/api/auth/register",
-    "/api/auth/logout",
-    "/api/auth/refresh",
-  ].includes(path);
+  return !["/api/auth/login", "/api/auth/register", "/api/auth/logout", "/api/auth/refresh"].includes(path);
+}
+
+// Phase 28.2 — CSRF double-submit cookie: читаем токен из cookie и отправляем
+// его же в заголовке X-CSRF-Token для всех мутирующих запросов.
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function getCsrfToken(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 export async function refreshAccessToken(notifyOnFailure = true): Promise<AuthRefreshResult | null> {
@@ -48,7 +50,7 @@ export async function refreshAccessToken(notifyOnFailure = true): Promise<AuthRe
           if (notifyOnFailure) onUnauthorized?.();
           return null;
         }
-        const data = await res.json() as AuthRefreshResult;
+        const data = (await res.json()) as AuthRefreshResult;
         setAccessToken(data.accessToken);
         return data;
       })
@@ -64,15 +66,15 @@ export async function refreshAccessToken(notifyOnFailure = true): Promise<AuthRe
   return refreshPromise;
 }
 
-export async function apiRequest(
-  method: string,
-  path: string,
-  body?: unknown
-): Promise<Response> {
+export async function apiRequest(method: string, path: string, body?: unknown): Promise<Response> {
   const url = `${API_BASE}${path}`;
-  const headers: HeadersInit = body ? { "Content-Type": "application/json" } : {};
+  const headers: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
+  }
+  if (!SAFE_METHODS.has(method.toUpperCase())) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
   }
 
   const res = await fetch(url, {
@@ -87,8 +89,12 @@ export async function apiRequest(
   const refreshed = await refreshAccessToken();
   if (!refreshed) return res;
 
-  const retryHeaders: HeadersInit = body ? { "Content-Type": "application/json" } : {};
+  const retryHeaders: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
   retryHeaders.Authorization = `Bearer ${refreshed.accessToken}`;
+  if (!SAFE_METHODS.has(method.toUpperCase())) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) retryHeaders["X-CSRF-Token"] = csrfToken;
+  }
   return fetch(url, {
     method,
     headers: retryHeaders,

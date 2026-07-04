@@ -124,6 +124,13 @@ function AnimatedRoutes() {
 function Routes() {
   const { user, loading } = useAuth();
 
+  // Phase 28.3: /reset-password теперь настоящий путь (а не хэш-маршрут),
+  // поэтому обрабатываем его до любой логики хэш-роутера и вне зависимости от
+  // статуса авторизации.
+  if (typeof window !== "undefined" && window.location.pathname === "/reset-password") {
+    return <ResetPasswordPage />;
+  }
+
   if (loading) return <PageLoader />;
 
   if (!user) {

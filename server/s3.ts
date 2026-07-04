@@ -40,8 +40,12 @@ function getClient(): S3Client {
  */
 export async function uploadPhoto(s3Key: string, buffer: Buffer, mimeType: string): Promise<number> {
   // Конвертируем в WebP через sharp (качество 85)
+  // Phase 28.1: sharp по умолчанию (без вызова .withMetadata()) уже убирает всю
+  // EXIF-метаинформацию (включая GPS-геолокацию) при конвертации. Важно:
+  // вызов .rotate() должен быть до любого потенциального .withMetadata(), чтобы сначала
+  // применить EXIF-ориентацию, а затем уже убрать сам EXIF.
   const webpBuffer = await sharp(buffer)
-    .rotate() // применяем EXIF-ориентацию
+    .rotate() // применяем EXIF-ориентацию перед удалением метаданных
     .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
     .webp({ quality: 85 })
     .toBuffer();

@@ -6,7 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
-function readResetTokenFromHash(): string | null {
+// Phase 28.3: ссылка сброса пароля теперь ведёт на настоящий путь
+// /reset-password?token=... (а не на хэш #/reset-password?token=...).
+// Оставляем поддержку старого хэш-формата для писем, отправленных до обновления.
+function readResetToken(): string | null {
+  const fromSearch = new URLSearchParams(window.location.search).get("token");
+  if (fromSearch) return fromSearch;
+
   const hash = window.location.hash;
   const queryStart = hash.indexOf("?");
   if (queryStart === -1) return null;
@@ -15,7 +21,7 @@ function readResetTokenFromHash(): string | null {
 
 export default function ResetPasswordPage() {
   const { toast } = useToast();
-  const token = useMemo(() => readResetTokenFromHash(), []);
+  const token = useMemo(() => readResetToken(), []);
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [pending, setPending] = useState(false);
@@ -64,13 +70,15 @@ export default function ResetPasswordPage() {
             <div className="space-y-4 text-center">
               <p className="text-sm text-muted-foreground">Пароль успешно изменён.</p>
               <Button asChild className="w-full">
-                <a href="#/">Перейти ко входу</a>
+                <a href="/">Перейти ко входу</a>
               </Button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor="new-password" className="text-xs">Новый пароль</Label>
+                <Label htmlFor="new-password" className="text-xs">
+                  Новый пароль
+                </Label>
                 <Input
                   id="new-password"
                   type="password"
@@ -81,7 +89,9 @@ export default function ResetPasswordPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="new-password2" className="text-xs">Повторите пароль</Label>
+                <Label htmlFor="new-password2" className="text-xs">
+                  Повторите пароль
+                </Label>
                 <Input
                   id="new-password2"
                   type="password"
@@ -100,7 +110,9 @@ export default function ResetPasswordPage() {
                 {pending ? "Сохраняю..." : "Сохранить пароль"}
               </Button>
               <div className="text-center">
-                <a href="#/" className="text-xs text-primary underline">Вернуться ко входу</a>
+                <a href="/" className="text-xs text-primary underline">
+                  Вернуться ко входу
+                </a>
               </div>
             </form>
           )}

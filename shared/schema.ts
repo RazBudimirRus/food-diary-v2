@@ -1,6 +1,7 @@
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 export const users = sqliteTable("users", {
@@ -396,3 +397,21 @@ export const idempotencyKeys = sqliteTable("idempotency_keys", {
   createdAt: text("created_at").notNull().default(""),
   expiresAt: text("expires_at").notNull(),
 });
+
+// ─── Phase 24 — Audit Log ──────────────────────────────────────────────────────
+export const auditLog = sqliteTable("audit_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  actorId: integer("actor_id").notNull(),
+  actorRole: text("actor_role").notNull(),
+  action: text("action").notNull(),
+  targetId: integer("target_id"),
+  detail: text("detail"), // JSON string
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+export type AuditLogEntry = typeof auditLog.$inferSelect;
+export type NewAuditLogEntry = typeof auditLog.$inferInsert;

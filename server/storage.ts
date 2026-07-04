@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc, gte, lte, type SQL } from "drizzle-orm";
 import * as schema from "@shared/schema";
 import type {
   User,
@@ -23,6 +23,8 @@ import type {
   CreateCatalogItem,
   Photo,
   PushSubscription,
+  AuditLogEntry,
+  NewAuditLogEntry,
 } from "@shared/schema";
 import {
   users,
@@ -42,6 +44,7 @@ import {
   foodCatalogEntries,
   photos,
   idempotencyKeys,
+  auditLog,
 } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates } from "@shared/dates";
 import {
@@ -418,6 +421,17 @@ export interface IStorage {
   getPhotosByUser(userId: number): Photo[];
   deletePhoto(photoId: string): void;
   countUserPhotos(userId: number): number;
+
+  // Phase 24 — Audit Log
+  addAuditLog(data: Omit<NewAuditLogEntry, "id" | "createdAt">): Promise<void>;
+  getAuditLog(filters: {
+    actorId?: number;
+    targetId?: number;
+    action?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  }): Promise<AuditLogEntry[]>;
 }
 
 export interface AdminSession {
@@ -1463,6 +1477,47 @@ class SqliteStorage implements IStorage {
     db.delete(idempotencyKeys)
       .where(sql`${idempotencyKeys.expiresAt} < datetime('now')`)
       .run();
+  }
+
+  // ── Phase 24 — Audit Log ───────────────────────────────────────────────────
+  async addAuditLog(data: Omit<NewAuditLogEntry, "id" | "createdAt">): Promise<void> {
+    db.insert(auditLog)
+      .values({
+        actorId: data.actorId,
+        actorRole: data.actorRole,
+        action: data.action,
+        targetId: data.targetId ?? null,
+        detail: data.detail ?? null,
+        ip: data.ip ?? null,
+        userAgent: data.userAgent ?? null,
+      })
+      .run();
+  }
+
+  async getAuditLog(filters: {
+    actorId?: number;
+    targetId?: number;
+    action?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  }): Promise<AuditLogEntry[]> {
+    const conditions: SQL[] = [];
+    if (filters.actorId !== undefined) conditions.push(eq(auditLog.actorId, filters.actorId));
+    if (filters.targetId !== undefined) conditions.push(eq(auditLog.targetId, filters.targetId));
+    if (filters.action !== undefined) conditions.push(eq(auditLog.action, filters.action));
+    if (filters.from !== undefined) conditions.push(gte(auditLog.createdAt, filters.from));
+    if (filters.to !== undefined) conditions.push(lte(auditLog.createdAt, filters.to));
+
+    const limit = filters.limit ?? 100;
+    const query = db
+      .select()
+      .from(auditLog)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(auditLog.createdAt))
+      .limit(limit);
+
+    return query.all();
   }
 }
 

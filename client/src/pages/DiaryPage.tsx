@@ -11,6 +11,8 @@ import { GoalCard } from "@/components/GoalCard";
 import { FoodCatalogModal } from "@/components/FoodCatalogModal";
 import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { PwaInstallBanner } from "@/components/PwaInstallBanner";
+import { MealEditSheet } from "@/components/MealEditSheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +57,8 @@ import {
   Star,
   Stethoscope,
   UserCircle,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
@@ -202,6 +206,7 @@ export default function DiaryPage() {
   const [location] = useLocation();
   const pwa = usePwaInstall();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [activeDate, setActiveDate] = useState<string>(mskToday());
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<AddMealFormData>(defaultForm());
@@ -234,6 +239,10 @@ export default function DiaryPage() {
   const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
   const [kbjuLoading, setKbjuLoading] = useState(false);
   const [deepseekAvailable, setDeepseekAvailable] = useState(false);
+
+  // UX-12: batch КБЖУ calculation for the whole day
+  const [batchCalculating, setBatchCalculating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 });
 
   const handleIdleWarning = useCallback(() => {
     toast({
@@ -508,7 +517,8 @@ export default function DiaryPage() {
     setEditingMealId(meal.id);
     setEditingOriginalDate(activeDate);
     setKbjuResult(null);
-    setShowAddForm(true);
+    // UX-10: на мобиле редактирование открывается в bottom sheet, инлайн-форма не показывается
+    if (!isMobile) setShowAddForm(true);
   }
 
   function closeMealForm() {
@@ -578,6 +588,54 @@ export default function DiaryPage() {
   // Total kcal for stats bar (only meals with calories)
   const totalKcal = meals.reduce((s, m) => s + (m.calories ?? 0), 0);
   const hasKcal = meals.some((m) => m.calories != null);
+
+  // UX-12: meals without calculated КБЖУ
+  const uncalculatedMeals = meals.filter((m) => m.calories == null);
+  const hasMealsToCalculate = uncalculatedMeals.length > 0;
+
+  /** UX-12: последовательно рассчитывает КБЖУ для всех нерассчитанных приёмов за день.
+   * Вызывает существующий эндпоинт POST /api/analyze последовательно для каждого приёма
+   * (бережём rate limit DeepSeek), затем сохраняет результат через PATCH /api/meals/:id. */
+  async function calculateAllKbzhu() {
+    if (!hasMealsToCalculate || batchCalculating) return;
+    const targets = uncalculatedMeals;
+    setBatchCalculating(true);
+    setBatchProgress({ done: 0, total: targets.length });
+
+    let succeeded = 0;
+    for (const meal of targets) {
+      try {
+        if (!meal.foodText && !meal.drinkText) {
+          continue;
+        }
+        const analyzeRes = await apiRequest("POST", "/api/analyze", {
+          foodText: meal.foodText ?? "",
+          drinkText: meal.drinkText ?? "",
+        });
+        if (analyzeRes.ok) {
+          const nutrition: NutritionResult = await analyzeRes.json();
+          const patchRes = await apiRequest("PATCH", `/api/meals/${meal.id}`, {
+            calories: nutrition.calories,
+            protein: nutrition.protein,
+            fat: nutrition.fat,
+            carbs: nutrition.carbs,
+          });
+          if (patchRes.ok) succeeded += 1;
+        }
+      } catch {
+        // пропускаем ошибку и продолжаем с остальными приёмами
+      }
+      setBatchProgress((prev) => ({ ...prev, done: prev.done + 1 }));
+    }
+
+    setBatchCalculating(false);
+    await queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
+    toast({
+      title:
+        succeeded > 0 ? `КБЖУ рассчитано для ${succeeded} из ${targets.length} приёмов` : "Не удалось рассчитать КБЖУ",
+      variant: succeeded > 0 ? undefined : "destructive",
+    });
+  }
 
   const isToday = activeDate === mskToday();
 
@@ -822,6 +880,32 @@ export default function DiaryPage() {
                 <span className="font-medium">{Math.round(totalKcal)}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* UX-12: кнопка батч-расчёта КБЖУ за весь день — активна, если есть нерассчитанные приёмы */}
+        {deepseekAvailable && hasMealsToCalculate && (
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={calculateAllKbzhu}
+              disabled={batchCalculating}
+              className="gap-1"
+              data-testid="btn-calculate-all-kbzhu"
+            >
+              {batchCalculating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {batchProgress.done}/{batchProgress.total}
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Рассчитать КБЖУ за день
+                </>
+              )}
+            </Button>
           </div>
         )}
 
@@ -1310,6 +1394,28 @@ export default function DiaryPage() {
           </Card>
         )}
       </main>
+
+      {/* UX-10: bottom sheet для редактирования приёма на мобиле (< md). На десктопе редактирование остаётся инлайновым выше. */}
+      <MealEditSheet
+        open={isEditingMeal && isMobile}
+        onClose={closeMealForm}
+        onSave={() => {
+          if (editingMealId && editingOriginalDate) {
+            updateMealMutation.mutate({ id: editingMealId, data: form, originalDate: editingOriginalDate });
+          }
+        }}
+        isSaving={updateMealMutation.isPending}
+        form={form}
+        setForm={setForm}
+        todayDate={mskToday()}
+        hungerLabel={hungerLabel}
+        hungerColor={hungerColor}
+        deepseekAvailable={deepseekAvailable}
+        kbjuResult={kbjuResult}
+        kbjuLoading={kbjuLoading}
+        onAnalyzeKbju={analyzeKbju}
+        editingOriginalDate={editingOriginalDate}
+      />
 
       {/* ── Day Summary Dialog ──────────────────────────────────────────────── */}
       <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>

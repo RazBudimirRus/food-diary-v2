@@ -29,6 +29,13 @@
       "when": 1782774428312,
       "tag": "0003_add_pd_consent_at",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1782774428313,
+      "tag": "0004_add_audit_log",
+      "breakpoints": true
     }
   ]
 }
