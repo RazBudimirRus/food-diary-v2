@@ -1073,7 +1073,7 @@ class SqliteStorage implements IStorage {
     return db
       .select()
       .from(meals)
-      .where(eq(meals.dayId, dayId))
+      .where(and(eq(meals.dayId, dayId), sql`${meals.deletedAt} IS NULL`))
       .all()
       .sort((a, b) => a.tsStart.localeCompare(b.tsStart));
   }
@@ -1091,7 +1091,19 @@ class SqliteStorage implements IStorage {
   }
 
   deleteMeal(id: number) {
-    db.delete(meals).where(eq(meals.id, id)).run();
+    // Soft-delete: mark with timestamp instead of physical removal
+    db.update(meals).set({ deletedAt: new Date().toISOString() }).where(eq(meals.id, id)).run();
+  }
+
+  restoreMeal(id: number) {
+    db.update(meals).set({ deletedAt: null }).where(eq(meals.id, id)).run();
+  }
+
+  hardDeleteExpiredMeals(olderThanDays = 30) {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+    db.delete(meals)
+      .where(and(sql`${meals.deletedAt} IS NOT NULL`, sql`${meals.deletedAt} < ${cutoff}`))
+      .run();
   }
 
   getMeal(id: number) {

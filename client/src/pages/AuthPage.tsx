@@ -1,4 +1,21 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { z } from "zod";
+
+const registerSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3, "Мин. 3 символа")
+      .max(32, "Макс. 32 символа")
+      .regex(/^[\w]+$/, "Только буквы, цифры, _"),
+    email: z.string().email("Некорректный email"),
+    password: z.string().min(8, "Мин. 8 символов"),
+    password2: z.string(),
+  })
+  .refine((d) => d.password === d.password2, {
+    message: "Пароли не совпадают",
+    path: ["password2"],
+  });
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,15 +32,19 @@ function PasswordInput({
   id,
   value,
   onChange,
+  onBlur,
   autoComplete,
   placeholder,
+  className,
   "data-testid": testId,
 }: {
   id: string;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onBlur?: () => void;
   autoComplete: string;
   placeholder?: string;
+  className?: string;
   "data-testid"?: string;
 }) {
   const [show, setShow] = useState(false);
@@ -36,8 +57,9 @@ function PasswordInput({
         placeholder={placeholder}
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         data-testid={testId}
-        className="pr-10"
+        className={`pr-10${className ? ` ${className}` : ""}`}
       />
       <button
         type="button"
@@ -68,6 +90,22 @@ export default function AuthPage() {
   const [rPassword2, setRPassword2] = useState("");
   const [rDisplayName, setRDisplayName] = useState("");
   const [rPdConsent, setRPdConsent] = useState(false);
+  const [rTouched, setRTouched] = useState<Record<string, boolean>>({});
+
+  const rErrors = useMemo(() => {
+    const result = registerSchema.safeParse({
+      username: rUsername,
+      email: rEmail,
+      password: rPassword,
+      password2: rPassword2,
+    });
+    if (result.success) return {} as Record<string, string>;
+    return Object.fromEntries(result.error.errors.map((e) => [e.path[0] as string, e.message]));
+  }, [rUsername, rEmail, rPassword, rPassword2]);
+
+  function rBlur(field: string) {
+    setRTouched((t) => ({ ...t, [field]: true }));
+  }
 
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [fEmail, setFEmail] = useState("");
@@ -281,8 +319,13 @@ export default function AuthPage() {
                     placeholder="ваш_логин"
                     value={rUsername}
                     onChange={(e) => setRUsername(e.target.value)}
+                    onBlur={() => rBlur("username")}
+                    className={rTouched.username && rErrors.username ? "border-destructive" : ""}
                     data-testid="input-reg-username"
                   />
+                  {rTouched.username && rErrors.username && (
+                    <p className="text-xs text-destructive">{rErrors.username}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="r-displayname" className="text-xs">
@@ -310,8 +353,11 @@ export default function AuthPage() {
                     placeholder="вы@пример.рф"
                     value={rEmail}
                     onChange={(e) => setREmail(e.target.value)}
+                    onBlur={() => rBlur("email")}
+                    className={rTouched.email && rErrors.email ? "border-destructive" : ""}
                     data-testid="input-reg-email"
                   />
+                  {rTouched.email && rErrors.email && <p className="text-xs text-destructive">{rErrors.email}</p>}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="r-password" className="text-xs">
@@ -322,8 +368,13 @@ export default function AuthPage() {
                     autoComplete="new-password"
                     value={rPassword}
                     onChange={(e) => setRPassword(e.target.value)}
+                    onBlur={() => rBlur("password")}
+                    className={rTouched.password && rErrors.password ? "border-destructive" : ""}
                     data-testid="input-reg-password"
                   />
+                  {rTouched.password && rErrors.password && (
+                    <p className="text-xs text-destructive">{rErrors.password}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="r-password2" className="text-xs">
@@ -334,8 +385,13 @@ export default function AuthPage() {
                     autoComplete="new-password"
                     value={rPassword2}
                     onChange={(e) => setRPassword2(e.target.value)}
+                    onBlur={() => rBlur("password2")}
+                    className={rTouched.password2 && rErrors.password2 ? "border-destructive" : ""}
                     data-testid="input-reg-password2"
                   />
+                  {rTouched.password2 && rErrors.password2 && (
+                    <p className="text-xs text-destructive">{rErrors.password2}</p>
+                  )}
                 </div>
                 {/* 152-ФЗ consent */}
                 <div className="flex items-start gap-2">

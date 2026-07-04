@@ -92,9 +92,10 @@ export const meals = sqliteTable("meals", {
   fat: real("fat"),
   carbs: real("carbs"),
   createdAt: text("created_at").notNull().default(""),
+  deletedAt: text("deleted_at"),
 });
 
-export const insertMealSchema = createInsertSchema(meals).omit({ id: true, createdAt: true });
+export const insertMealSchema = createInsertSchema(meals).omit({ id: true, createdAt: true, deletedAt: true });
 
 // ─── API Usage (DeepSeek monitoring) ──────────────────────────────────────────
 export const apiUsage = sqliteTable("api_usage", {

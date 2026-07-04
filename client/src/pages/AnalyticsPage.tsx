@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
 import { useAppTheme } from "@/App";
 import { BottomNav } from "@/components/BottomNav";
@@ -337,7 +338,28 @@ export default function AnalyticsPage() {
           </Button>
         </div>
 
-        {isLoading && <p className="text-sm text-muted-foreground">Загрузка аналитики...</p>}
+        {isLoading && (
+          <div className="space-y-3">
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="rounded-lg border bg-card p-4 space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-7 w-14" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              ))}
+            </div>
+            <div className="rounded-lg border bg-card p-4 space-y-3">
+              <Skeleton className="h-4 w-32" />
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {error && <p className="text-sm text-destructive">Не удалось загрузить аналитику</p>}
 
         {data && insights && (

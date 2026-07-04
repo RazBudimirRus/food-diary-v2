@@ -181,6 +181,15 @@ app.get("/metrics", async (_req, res) => {
     60 * 60 * 1000,
   );
 
+  // Phase 31.1: hard-delete meals soft-deleted more than 60s ago, runs every 5 minutes
+  storage.hardDeleteExpiredMeals();
+  setInterval(
+    () => {
+      storage.hardDeleteExpiredMeals();
+    },
+    5 * 60 * 1000,
+  );
+
   await registerRoutes(httpServer, app);
 
   // Phase 27.5: prod error handler — no stack leak

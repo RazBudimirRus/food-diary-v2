@@ -96,6 +96,25 @@ export function registerMealsRoutes(app: Express) {
     }
   });
 
+  // Phase 31.1: Restore soft-deleted meal within undo window
+  app.post("/api/meals/:id/restore", requireAuth, (req: AuthRequest, res) => {
+    try {
+      const meal = storage.getMeal(Number(req.params.id));
+      if (!meal) return res.status(404).json({ error: "Not found" });
+      if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
+      if (!meal.deletedAt) return res.status(400).json({ error: "Запись не удалена" });
+      // Allow restore only within 60 seconds
+      const deletedMs = new Date(meal.deletedAt).getTime();
+      if (Date.now() - deletedMs > 60_000) {
+        return res.status(410).json({ error: "Окно восстановления истекло" });
+      }
+      storage.restoreMeal(meal.id);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   app.patch("/api/meals/:id", requireAuth, (req: AuthRequest, res) => {
     try {
       const meal = storage.getMeal(Number(req.params.id));

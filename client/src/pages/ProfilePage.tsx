@@ -9,7 +9,19 @@
  */
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { User, Lock, Clock, ClipboardList, Stethoscope, ArrowLeft, Save, ChevronRight, LogOut } from "lucide-react";
+import {
+  User,
+  Lock,
+  Clock,
+  ClipboardList,
+  Stethoscope,
+  ArrowLeft,
+  Save,
+  ChevronRight,
+  LogOut,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +36,7 @@ async function api(method: string, path: string, body?: unknown) {
   return json;
 }
 import { useAuth } from "@/lib/auth";
+import { useAppTheme } from "@/App";
 import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { BottomNav } from "@/components/BottomNav";
 import { useLocation } from "wouter";
@@ -61,6 +74,7 @@ interface Doctor {
 export default function ProfilePage() {
   const { user, logout } = useAuth();
   const { toast } = useToast();
+  const { isDark, toggle: toggleTheme } = useAppTheme();
   const [location] = useLocation();
 
   const [showQuestionnaire, setShowQuestionnaire] = useState(false);
@@ -143,9 +157,21 @@ export default function ProfilePage() {
             <User className="h-4 w-4 text-primary" />
             <h1 className="font-semibold text-base">Профиль</h1>
           </div>
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти">
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={toggleTheme}
+              title={isDark ? "Светлая тема" : "Тёмная тема"}
+              aria-label={isDark ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+            >
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8" onClick={logout} title="Выйти" aria-label="Выйти">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 

@@ -78,6 +78,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
               className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
               onClick={() => onEdit(meal)}
               title="Редактировать"
+              aria-label="Редактировать запись"
               data-testid={`btn-edit-meal-${meal.id}`}
             >
               <Pencil className="h-4 w-4" />
@@ -88,6 +89,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
               className="h-9 w-9 shrink-0 text-muted-foreground hover:text-amber-500"
               onClick={() => saveToCatalogMutation.mutate(meal.id)}
               title="Сохранить в каталог"
+              aria-label="Сохранить в каталог шаблонов"
               disabled={saveToCatalogMutation.isPending}
             >
               <Star className="h-4 w-4" />
@@ -95,6 +97,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
             <label
               className="h-9 w-9 shrink-0 flex items-center justify-center text-muted-foreground hover:text-blue-500 cursor-pointer rounded-md hover:bg-accent transition-colors"
               title="Прикрепить фото"
+              aria-label="Прикрепить фото к записи"
             >
               <Camera className="h-4 w-4" />
               <input
@@ -112,7 +115,8 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
               size="icon"
               className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
               onClick={() => onDelete(meal.id)}
-              title="удалить"
+              title="Удалить"
+              aria-label="Удалить запись"
               data-testid={`btn-delete-meal-${meal.id}`}
             >
               <Trash2 className="h-4 w-4" />

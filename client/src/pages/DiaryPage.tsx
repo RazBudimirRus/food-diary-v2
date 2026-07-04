@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useIdleTimer } from "@/hooks/useIdleTimer";
 import { Button } from "@/components/ui/button";
 import { Plus, Utensils, Loader2, Sparkles } from "lucide-react";
+import { ToastAction } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
 import { getCalendarWeekRange } from "@shared/dates";
@@ -105,15 +106,33 @@ export default function DiaryPage() {
       .catch(() => setDeepseekAvailable(false));
   }, []);
 
+  const restoreMealMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/meals/${id}/restore`);
+      if (!res.ok) throw new Error(await res.text());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
+      toast({ title: "Запись восстановлена" });
+    },
+  });
+
   const deleteMealMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `/api/meals/${id}`);
       if (!res.ok) throw new Error(await res.text());
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: [`/api/days/${activeDate}`] });
       setDeleteConfirmId(null);
-      toast({ title: "Запись удалена" });
+      toast({
+        title: "Запись удалена",
+        action: (
+          <ToastAction altText="Отменить удаление" onClick={() => restoreMealMutation.mutate(id)}>
+            Отменить
+          </ToastAction>
+        ),
+      });
     },
   });
 
