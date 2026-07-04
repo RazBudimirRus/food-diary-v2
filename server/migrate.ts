@@ -10,6 +10,23 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import path from "path";
 
+/**
+ * Guard: run SQL only if the column/index doesn't exist yet.
+ * Handles the edge-case where drizzle recorded the migration hash
+ * in __drizzle_migrations but crashed before the DDL executed.
+ */
+function applyGuardedDDL(sqlite: InstanceType<typeof Database>): void {
+  // 0005: deleted_at column on meals
+  const cols = sqlite.pragma("table_info(meals)") as { name: string }[];
+  if (!cols.some((c) => c.name === "deleted_at")) {
+    console.info("[migrate] Applying guarded DDL: meals.deleted_at");
+    sqlite.exec(
+      "ALTER TABLE meals ADD COLUMN deleted_at text;" +
+        "CREATE INDEX IF NOT EXISTS idx_meals_deleted_at ON meals(deleted_at) WHERE deleted_at IS NOT NULL;",
+    );
+  }
+}
+
 export function runMigrations(dbPath: string): void {
   const sqlite = new Database(dbPath);
   const db = drizzle(sqlite);
@@ -22,6 +39,15 @@ export function runMigrations(dbPath: string): void {
     console.info("[migrate] All migrations applied successfully");
   } catch (err) {
     console.error("[migrate] Migration failed:", err);
+    throw err;
+  }
+
+  // Guarded DDL pass — repairs any migration whose hash was recorded
+  // but whose DDL statements did not execute (e.g. crash mid-migration).
+  try {
+    applyGuardedDDL(sqlite);
+  } catch (err) {
+    console.error("[migrate] Guarded DDL failed:", err);
     throw err;
   } finally {
     sqlite.close();
