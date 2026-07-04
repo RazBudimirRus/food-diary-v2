@@ -2579,7 +2579,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
 ## Фаза 30 — Тестирование: Расширение покрытия
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.13.0)
 > **Приоритет:** Высокий
 > **Сложность:** Высокая
 > **Источник:** Аудит: «покрытие ~921 строка на ~10 000+ строк кода»
@@ -2589,40 +2589,91 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
 Текущее покрытие ~9% по строкам. CI уже есть, но порог покрытия не задан — можно сломать логику и не узнать.
 
+### Результат (v2.13.0)
+
+- 99 тестов: 26 integration + 73 unit
+- Coverage 40.1% lines — порог 40% записан в `vitest.config.ts`, CI шаг обновлён на `--coverage`
+- `server/__mocks__/deepseek.ts` — мок DeepSeek API без реальных вызовов
+- E2E: TC-02 (login/logout), TC-03 (add meal), TC-05 (edit), TC-11 (health)
+- Исправлен баг: `migrations/0000_baseline.sql` содержал `pd_consent_at`, который migration 0003 добавлял повторно
+
+---
+
+## Фаза 35 — Тестирование: Следующий шаг (после v2.13.0)
+
+> **Статус:** 📋 Запланировано
+> **Приоритет:** Высокий
+> **Сложность:** Средняя
+
+### Анализ текущих пробелов
+
+По данным v2.13.0 coverage, основные зоны с нулевым/низким покрытием:
+
+| Файл                       | Lines% | Что не покрыто                                                                                              |
+| -------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `server/repositories/*`    | 0%     | Все 9 репозиториев (user, meal, day, session, doctor, catalog, photo, audit, session) — нет ни одного теста |
+| `server/routes/doctor.ts`  | 14%    | 13 эндпойнтов: привязка пациентов, планы, заметки к приёмам                                                 |
+| `server/routes/reports.ts` | 6%     | Excel-экспорт дневника — полностью без тестов                                                               |
+| `server/routes/catalog.ts` | 20%    | CRUD пищевого каталога                                                                                      |
+| `server/routes/photos.ts`  | 8%     | S3 upload, EXIF strip, MIME-валидация                                                                       |
+| `server/deepseek.ts`       | 11%    | КБЖУ-анализ: запросы, парсинг, лимиты                                                                       |
+| `server/storage.ts`        | 44%    | ~50% методов SqliteStorage не проверяются                                                                   |
+| `server/mail.ts`           | 12%    | SMTP-отправка — нет тестов с моком                                                                          |
+| `server/csrf.ts`           | 43%    | Double-submit cookie — половина ветвей не проверяется                                                       |
+
 ### Подзадачи
 
-#### 30.1 Порог покрытия в CI
+#### 35.1 Тесты repositories (0% → 60%+)
 
-- Добавить в `vitest.config.ts`: `coverage: { thresholds: { lines: 40 } }` (стартовая цель)
-- Добавить шаг `vitest --coverage` в GitHub Actions
-- Поднимать порог на 10% с каждой новой фазой
+Хранилище вынесено в `server/repositories/` в Wave 3 — теперь у него 0% покрытия. Каждый репозиторий — тонкая SQL-логика, которая заслуживает прямых unit-тестов с in-memory SQLite:
 
-#### 30.2 Unit-тесты: бэкенд
+- `user.ts`: createUser, getUserById, updateLastLogin, bootstrapAdmin
+- `meal.ts`: createMeal, getMealsByDay, deleteMeal
+- `session.ts`: createRefreshToken, revokeToken, pruneExpired
+- `day.ts`: getOrCreateDay, updateSummary
+- `doctor.ts`: assignPatient, unassignPatient, getPatients
 
-- Доктор-роуты: назначение пациента, поиск пользователей, добавление в каталог
-- Фото-роуты: валидация MIME, EXIF strip, лимит размера
-- Push-уведомления: подписка/отписка, отправка
-- Профиль и анкета: обновление полей, валидация Zod
-- Reset-password: генерация токена, проверка срока, сброс
+#### 35.2 Тесты doctor-routes (14% → 60%+)
 
-#### 30.3 Unit-тесты: фронт
+Доктор-роуты — самый большой непокрытый блок (13 эндпойнтов). Нужны интеграционные тесты `test/integration/doctor-routes.test.ts`:
 
-- `MealCard`, `MealForm`, `DaySummary` — рендер и взаимодействие
-- `useAuth` hook — состояния login/logout/refresh
-- `apiRequest` — обработка 401, retry логика
-- Форма регистрации — клиентская валидация, toggle пароля
+- Регистрация + назначение роли doctor
+- Привязка/отвязка пациента
+- Чтение дневника пациента, добавление заметок
+- Создание/удаление планов питания
+- Запрет просмотра чужого пациента
 
-#### 30.4 E2E: расширение Playwright
+#### 35.3 Тесты catalog + reports (0-20% → 50%+)
 
-- Сценарий «Доктор привязывает пациента и читает дневник»
-- Сценарий «Загрузка фото + расчёт КБЖУ через AI»
-- Сценарий «Сброс пароля через email-ссылку»
-- Сценарий «Аналитика: range-отчёт за период»
+- `catalog-routes.test.ts`: CRUD позиций каталога, save-from-meal, изоляция по пользователю
+- `reports-routes.test.ts`: проверка структуры Excel-отчёта (Content-Type, filename header, наличие листов)
+- Мок `server/__mocks__/excel.ts` для обхода тяжёлой библиотеки ExcelJS
 
-#### 30.5 DeepSeek mock в тестах
+#### 35.4 Мок для mail.ts + csrf.ts
 
-- Создать `server/__mocks__/deepseek.ts` с фиксированными ответами
-- Избегать реальных API-вызовов в CI (деньги + нестабильность)
+- `server/__mocks__/mail.ts`: перехват nodemailer/SMTP — письма сохраняются в память, не отправляются
+- Тест `forgot-password` с моком SMTP: проверка тела письма, срока токена, idempotency
+- Unit-тесты `csrf.ts`: double-submit cookie, X-CSRF-Token header, whitelist маршрутов
+
+#### 35.5 Повышение порога coverage
+
+- Цель: 40% (v2.13.0) → **55%** (v2.14.0)
+- Обновить `vitest.config.ts`: `thresholds.lines: 55`
+- Дополнительно: `thresholds.functions: 50` — функции сейчас 39%
+
+#### 35.6 Инфраструктура тестов
+
+- Отдельный `vitest.config.integration.ts` для интеграционных тестов (они медленно, ~12с, чтобы не сползать unit-проход при разработке)
+- `npm run test:unit` vs `npm run test:integration` в `package.json`
+- Snapshot-тесты для OpenAPI-спецификации (ломается при добавлении роутов без обновления дока)
+- `test/fixtures/` — фикстуры: набор тестовых пользователей, приёмов, дней для повторного использования в тестах
+
+#### 35.7 E2E: дополнительные сценарии
+
+- TC-06 — Доктор привязывает пациента и читает его дневник
+- TC-08 — Аналитика: range-отчёт за период (диапазон дат, наличие данных)
+- TC-09 — Excel-экспорт: загрузка файла, проверка MIME-типа ответа
+- TC-12 — Сброс пароля: форма запроса, получение письма (с мок СМТП), сам reset-flow
 
 ---
 
@@ -2875,7 +2926,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 | 32    | Продуктовые фичи: лендинг, PDF, digest         | Средний     | Высокая   | 📋 Запланировано                                                                       |
 | 33    | DR и производительность: backup, k6, Postgres  | Средний     | Средняя   | 📋 Запланировано                                                                       |
 | 34    | API-документация: OpenAPI, ADR, README v2      | Средний     | Низкая    | 📋 Запланировано                                                                       |
-| 35    | Интеграции: Apple Health, Google Fit           | Низкий      | Высокая   | 📋 Запланировано                                                                       |
+| 35    | Тестирование: расширение покрытия v2           | Высокий     | Высокая   | 📋 Запланировано: repositories, doctor, catalog, reports, coverage 55%                 |
 | UX-1  | Редактирование приёма пищи                     | Высокий     | Низкая    | ✅ Реализовано в v1.6.0                                                                |
 | UX-2  | Логин пользователя в админке                   | Высокий     | Низкая    | ✅ Реализовано в v1.13.0                                                               |
 | UX-3  | Перенос приёма между днями                     | Высокий     | Средняя   | ✅ Реализовано в v1.13.0                                                               |
