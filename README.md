@@ -3,8 +3,8 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.21.0-blue)
-![Tests](https://img.shields.io/badge/tests-291%20passed-brightgreen)
+![Version](https://img.shields.io/badge/version-2.22.0-blue)
+![Tests](https://img.shields.io/badge/tests-305%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Возможности
@@ -18,7 +18,8 @@
 | Расчёт КБЖУ через DeepSeek API                                               | ✅     |
 | Пакетный расчёт КБЖУ по всему дню (UX-12)                                    | ✅     |
 | Ручной приоритет целевых КБЖУ — не перезаписывать вручную (UX-20)            | ✅     |
-| Excel-отчёт за день / произвольный период                                    | ✅     |
+| Excel-отчёт за день / неделю / месяц / произвольный период (Фаза 21)         | ✅     |
+| PDF-аналитика за период: обложка, KPI, бар-чарт, таблица по дням (UX-22)     | ✅     |
 | Аналитика питания (графики, статистика, периоды до 12 мес.)                  | ✅     |
 | Каталог продуктов пользователя с inline-bookmark                             | ✅     |
 | Фото приёмов пищи (до 5 на приём, UX-17) в VK Object Storage (S3)            | ✅     |
@@ -53,7 +54,7 @@
 | AI             | DeepSeek API (анализ КБЖУ)                                               |
 | Хранилище      | SQLite (данные) · VK Object Storage / S3 (фото)                          |
 | Мониторинг     | Prometheus · Grafana · Sentry · Pino                                     |
-| Тесты          | Vitest · Supertest · 291 тест                                            |
+| Тесты          | Vitest · Supertest · Playwright E2E · 305 тестов                         |
 
 ## Архитектура
 
@@ -163,16 +164,17 @@ Prometheus metrics: `https://fooddiary.razbudimir.com/metrics`
 
 ## Changelog
 
-| Версия  | Дата       | Что вошло                                                                |
-| ------- | ---------- | ------------------------------------------------------------------------ |
-| v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0008, 291 тест                |
-| v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест  |
-| v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                               |
-| v2.18.0 | 2026-07-05 | UX-14/15/16 (defaultDate, порядок формы, фото при создании)              |
-| v2.17.0 | 2026-07-05 | UX-7/10/11/12/13 (каталог, bottom sheet, bookmark, batch КБЖУ)           |
-| v2.12.0 | 2026-06-30 | Рефакторинг монолитов, repositories, OpenAPI, ADR                        |
-| v2.11.0 | 2026-07-01 | Audit log, CSRF, EXIF, bottom sheet UX, E2E тест-кейсы                   |
-| v2.10.0 | 2026-06-30 | Drizzle-kit migrations, pino, Sentry, /health, /metrics, nginx hardening |
+| Версия  | Дата       | Что вошло                                                                    |
+| ------- | ---------- | ---------------------------------------------------------------------------- |
+| v2.22.0 | 2026-07-05 | Фаза 21 (Excel за неделю/месяц), UX-22 (PDF аналитика), E2E фикс, 305 тестов |
+| v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0008, 291 тест                    |
+| v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест      |
+| v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                                   |
+| v2.18.0 | 2026-07-05 | UX-14/15/16 (defaultDate, порядок формы, фото при создании)                  |
+| v2.17.0 | 2026-07-05 | UX-7/10/11/12/13 (каталог, bottom sheet, bookmark, batch КБЖУ)               |
+| v2.12.0 | 2026-06-30 | Рефакторинг монолитов, repositories, OpenAPI, ADR                            |
+| v2.11.0 | 2026-07-01 | Audit log, CSRF, EXIF, bottom sheet UX, E2E тест-кейсы                       |
+| v2.10.0 | 2026-06-30 | Drizzle-kit migrations, pino, Sentry, /health, /metrics, nginx hardening     |
 
 Полная история: [ROADMAP.md](ROADMAP.md)
 

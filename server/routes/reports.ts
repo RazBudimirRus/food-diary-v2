@@ -1,14 +1,80 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { generateDayReport, generateRangeReport } from "../excel";
+import { generateAnalyticsPdf } from "../analytics-pdf";
 import { requireAuth, type AuthRequest } from "../auth";
 import { ANALYTICS_MAX_DAYS } from "../config";
 import { paramValue, isDateString, daysBetween } from "./helpers";
+import { getCalendarWeekRange, getCalendarMonthRange, mskToday } from "../../shared/dates";
 
 export function registerReportsRoutes(app: Express) {
   // ── Phase 21: Расширенные отчёты ────────────────────────────────────────────
-  // IMPORTANT: /range must be registered BEFORE /:date to prevent Express
-  // from matching "range" as a :date parameter (BUG-01).
+  // IMPORTANT: /range and /week and /month must be registered BEFORE /:date
+  // to prevent Express matching them as :date params (BUG-01).
+
+  /**
+   * GET /api/report/week?date=YYYY-MM-DD
+   * Excel report for the ISO calendar week containing `date`.
+   * If `date` is omitted, uses today (MSK).
+   */
+  app.get("/api/report/week", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const anchor = paramValue(req.query.date as string) || mskToday();
+      if (!isDateString(anchor)) {
+        return res.status(400).json({ error: "Некорректная дата. Формат: YYYY-MM-DD" });
+      }
+      const { from, to } = getCalendarWeekRange(anchor);
+      const days = storage.getDaysInRange(req.user!.id, from, to);
+      if (!days.length) return res.status(404).json({ error: "За указанную неделю записей нет" });
+
+      const mealsByDayId = new Map<number, import("@shared/schema").Meal[]>();
+      for (const day of days) {
+        mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
+      }
+
+      const buf = await generateRangeReport(days, mealsByDayId);
+      const filename = `Дневник_питания_неделя_${from}_${to}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.send(buf);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  /**
+   * GET /api/report/month?date=YYYY-MM-DD
+   * Excel report for the calendar month containing `date`.
+   * If `date` is omitted, uses today (MSK).
+   */
+  app.get("/api/report/month", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const anchor = paramValue(req.query.date as string) || mskToday();
+      if (!isDateString(anchor)) {
+        return res.status(400).json({ error: "Некорректная дата. Формат: YYYY-MM-DD" });
+      }
+      const { from, to } = getCalendarMonthRange(anchor);
+      const days = storage.getDaysInRange(req.user!.id, from, to);
+      if (!days.length) return res.status(404).json({ error: "За указанный месяц записей нет" });
+
+      if (daysBetween(from, to) > ANALYTICS_MAX_DAYS) {
+        return res.status(400).json({ error: `Максимальный период — ${ANALYTICS_MAX_DAYS} дней` });
+      }
+
+      const mealsByDayId = new Map<number, import("@shared/schema").Meal[]>();
+      for (const day of days) {
+        mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
+      }
+
+      const buf = await generateRangeReport(days, mealsByDayId);
+      const filename = `Дневник_питания_${anchor.slice(0, 7)}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.send(buf);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   /**
    * GET /api/report/range?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -45,8 +111,45 @@ export function registerReportsRoutes(app: Express) {
     }
   });
 
+  // ── UX-22: Analytics PDF export ─────────────────────────────────────────────
+
+  /**
+   * GET /api/report/analytics-pdf?from=YYYY-MM-DD&to=YYYY-MM-DD
+   * PDF analytics report for the given date range.
+   */
+  app.get("/api/report/analytics-pdf", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const from = paramValue(req.query.from as string);
+      const to = paramValue(req.query.to as string);
+      if (!isDateString(from) || !isDateString(to)) {
+        return res.status(400).json({ error: "Некорректные даты. Формат: YYYY-MM-DD" });
+      }
+      if (from > to) return res.status(400).json({ error: "Дата начала позже даты окончания" });
+      if (daysBetween(from, to) > ANALYTICS_MAX_DAYS) {
+        return res.status(400).json({ error: `Максимальный период — ${ANALYTICS_MAX_DAYS} дней` });
+      }
+
+      const userId = req.user!.id;
+      const days = storage.getDaysInRange(userId, from, to);
+      if (!days.length) return res.status(404).json({ error: "За указанный период записей нет" });
+
+      const mealsByDayId = new Map<number, import("@shared/schema").Meal[]>();
+      for (const day of days) {
+        mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
+      }
+
+      const buf = await generateAnalyticsPdf(days, mealsByDayId, from, to);
+      const filename = `Аналитика_питания_${from}_${to}.pdf`;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.send(buf);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Report ─────────────────────────────────────────────────────────────────
-  // NOTE: /:date must be registered AFTER /range (see BUG-01)
+  // NOTE: /:date must be registered AFTER all named routes (see BUG-01)
 
   app.get("/api/report/:date", requireAuth, async (req: AuthRequest, res) => {
     try {

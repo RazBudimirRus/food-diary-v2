@@ -39,6 +39,7 @@ interface DiaryHeaderProps {
   onNextDay: () => void;
   onDownloadDay: () => void;
   onDownloadWeek: () => void;
+  onDownloadMonth: () => void;
   onOpenRangeDialog: () => void;
 }
 
@@ -56,6 +57,7 @@ export function DiaryHeader({
   onNextDay,
   onDownloadDay,
   onDownloadWeek,
+  onDownloadMonth,
   onOpenRangeDialog,
 }: DiaryHeaderProps) {
   return (
@@ -136,6 +138,7 @@ export function DiaryHeader({
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={onDownloadDay}>За день ({formatDate(activeDate)})</DropdownMenuItem>
                 <DropdownMenuItem onClick={onDownloadWeek}>За текущую неделю</DropdownMenuItem>
+                <DropdownMenuItem onClick={onDownloadMonth}>За текущий месяц</DropdownMenuItem>
                 <DropdownMenuItem onClick={onOpenRangeDialog}>За период…</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

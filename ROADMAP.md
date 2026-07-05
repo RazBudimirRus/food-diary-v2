@@ -1,7 +1,7 @@
 # 🗺 Food Diary V2 — RoadMap
 
 **Версия:** 2.6.0  
-**Дата обновления:** 5 июля 2026 (v2.21.0)  
+**Дата обновления:** 5 июля 2026 (v2.22.0)  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
 **Стек:** React 18 + Vite · Node.js 20 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
@@ -63,6 +63,7 @@
 | v2.19.0 · 2026-07-05 | Волна 10 (UX-6/8/9) | ✅ Реализовано | UX-6/8/9 подтверждены реализованными: день недели в карусели (formatDateWithWeekday), автовысота комментаႈия в Excel (excel.ts:275), футер + PrivacyPage + AboutPage |
 | v2.20.0 · 2026-07-05 | Фазы 26+27+UX-17/19/20 + BUG-01 + S3 health | ✅ Реализовано | Drizzle-kit baseline, pino+request_id, /api/health S3 round-trip, /metrics Prometheus, prod error handler, AuthPage UX, idempotency key, UX-17 мультифото, UX-19 фото в карточках+Excel, UX-20 kbju_manual, nginx server_tokens off, POST /api/admin/s3-test, кнопка S3 в AdminPage, BUG-01 исправлен, ROADMAP BUG-01/BUG-02, 257 тестов |
 | v2.21.0 · 2026-07-05 | BUG-02 счётчик воды | ✅ Реализовано | parseLiquidMl + mealWaterMl утилиты, migration 0008 (water_ml в meals), обновлён DiaryPage/excel/storage для нового поля, фазы 26/27 в ROADMAP → ✅, 291 тест |
+| v2.22.0 · 2026-07-05 | Фаза 21 + UX-22 + E2E fix | ✅ Реализовано | Фаза 21: GET /api/report/week + /month (Excel за неделю/месяц), кнопка «За месяц» в DiaryHeader. UX-22: GET /api/report/analytics-pdf + кнопка PDF в AnalyticsPage (многостраничный отчёт: обложка KPI, бар-чарт, таблица по дням). E2E: playwright.config.ts timeout 30s→60s + retries:1, waitForLoadState(«networkidle»), timeout 15s на expect. 15 новых тестов, 305 всего |
 
 ---
 
@@ -2201,7 +2202,7 @@ EXCEL_PHOTO_SIZE_PX=80            # размер миниатюры в Excel (px
 
 ## UX-22 — PDF-экспорт аналитики (красивый отчёт вместо Ctrl+P)
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.22.0)
 > **Приоритет:** Высокий
 > **Сложность:** Средняя
 > **Зависимость:** Фаза 11 (аналитика реализована)
@@ -2547,7 +2548,7 @@ bash preflight-check.sh
 
 ## Фаза 21 — Расширенные отчёты Excel
 
-> **Статус:** ✅ Реализовано (v2.8.0)
+> **Статус:** ✅ Реализовано (v2.22.0)
 > **Приоритет:** Высокий
 > **Сложность:** Средняя
 > **Зависимость:** exceljs уже используется в проекте

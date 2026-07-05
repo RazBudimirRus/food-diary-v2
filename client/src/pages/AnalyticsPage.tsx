@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  FileText,
   LogOut,
   Moon,
   MoreVertical,
@@ -212,6 +213,28 @@ export default function AnalyticsPage() {
     setAnchorDate(shiftAnalyticsAnchor(anchorDate, periodType, delta));
   }
 
+  async function downloadPdf() {
+    if (!data) return;
+    try {
+      const { apiRequest } = await import("@/lib/queryClient");
+      const res = await apiRequest("GET", `/api/report/analytics-pdf?from=${range.from}&to=${range.to}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Ошибка генерации PDF");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Аналитика_питания_${range.from}_${range.to}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Ошибка соединения с сервером");
+    }
+  }
+
   function downloadCsv() {
     if (!data) return;
     exportCsv(`analytics-${range.from}-${range.to}.csv`, [
@@ -260,10 +283,16 @@ export default function AnalyticsPage() {
               </a>
             </Button>
             {data && (
-              <Button size="sm" variant="outline" onClick={downloadCsv} data-testid="btn-analytics-csv">
-                <Download className="h-4 w-4 mr-1" />
-                CSV
-              </Button>
+              <>
+                <Button size="sm" variant="outline" onClick={downloadCsv} data-testid="btn-analytics-csv">
+                  <Download className="h-4 w-4 mr-1" />
+                  CSV
+                </Button>
+                <Button size="sm" variant="outline" onClick={downloadPdf} data-testid="btn-analytics-pdf">
+                  <FileText className="h-4 w-4 mr-1" />
+                  PDF
+                </Button>
+              </>
             )}
             <span className="text-xs text-muted-foreground hidden sm:block">{user?.username}</span>
             <Button

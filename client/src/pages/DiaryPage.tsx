@@ -20,7 +20,7 @@ import { Plus, Utensils, Loader2, Sparkles } from "lucide-react";
 import { ToastAction } from "@/components/ui/toast";
 import { useAuth } from "@/lib/auth";
 import type { Day, Meal } from "@shared/schema";
-import { getCalendarWeekRange } from "@shared/dates";
+import { getCalendarWeekRange, getCalendarMonthRange } from "@shared/dates";
 import { formatDate, mskToday, prevDay, nextDay } from "@/lib/diary-utils";
 import { MealCard } from "@/components/diary/MealCard";
 import { MealForm } from "@/components/diary/MealForm";
@@ -196,6 +196,12 @@ export default function DiaryPage() {
     downloadRangeReport(from, to > today ? today : to);
   }
 
+  function downloadMonthReport() {
+    const { from, to } = getCalendarMonthRange(activeDate);
+    const today = mskToday();
+    downloadRangeReport(from, to > today ? today : to);
+  }
+
   // UX-12: batch КБЖУ for meals without calculated nutrition
   const uncalculatedMeals = meals.filter((m) => m.calories == null);
   const hasMealsToCalculate = uncalculatedMeals.length > 0;
@@ -262,6 +268,7 @@ export default function DiaryPage() {
         onNextDay={() => setActiveDate(nextDay(activeDate))}
         onDownloadDay={() => downloadReport(activeDate)}
         onDownloadWeek={downloadWeekReport}
+        onDownloadMonth={downloadMonthReport}
         onOpenRangeDialog={() => {
           setRangeFrom(activeDate);
           setRangeTo(activeDate);

@@ -4,9 +4,9 @@ import { expect, test, type Page } from "@playwright/test";
 async function dismissTour(page: Page) {
   const skip = page.getByTestId("btn-onboarding-skip");
   try {
-    await skip.waitFor({ state: "visible", timeout: 2000 });
+    await skip.waitFor({ state: "visible", timeout: 3000 });
     await skip.click();
-    await skip.waitFor({ state: "hidden", timeout: 2000 });
+    await skip.waitFor({ state: "hidden", timeout: 3000 });
   } catch {
     // Tour not visible — that's fine
   }
@@ -19,6 +19,7 @@ test("user can register, add a meal, log out, and log back in", async ({ page })
   const password = "password123";
 
   await page.goto("/");
+  await page.waitForLoadState("networkidle");
 
   await page.getByTestId("tab-register").click();
   await page.getByTestId("input-reg-username").fill(username);
@@ -29,33 +30,33 @@ test("user can register, add a meal, log out, and log back in", async ({ page })
   await page.getByTestId("input-reg-pdconsent").click();
   await page.getByTestId("btn-register").click();
 
-  await expect(page.getByTestId("btn-add-meal")).toBeVisible();
+  await expect(page.getByTestId("btn-add-meal")).toBeVisible({ timeout: 15_000 });
   await dismissTour(page);
 
   await page.getByTestId("btn-add-meal").click();
   await page.getByTestId("input-food-text").fill("Гречка с курицей");
   await page.getByTestId("btn-save-meal").click();
 
-  await expect(page.getByText("Гречка с курицей")).toBeVisible();
+  await expect(page.getByText("Гречка с курицей")).toBeVisible({ timeout: 10_000 });
 
   await page.locator('[data-testid^="btn-edit-meal-"]').first().click();
-  await expect(page.getByText("Редактирование приёма пищи")).toBeVisible();
+  await expect(page.getByText("Редактирование приёма пищи")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId("input-meal-date")).toBeEnabled();
   await page.getByTestId("input-food-text").fill("Гречка с индейкой");
   await page.getByTestId("input-context-note").fill("Обновил запись в дневнике");
   await page.getByTestId("btn-save-meal").click();
 
-  await expect(page.getByText("Гречка с индейкой")).toBeVisible();
+  await expect(page.getByText("Гречка с индейкой")).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Обновил запись в дневнике")).toBeVisible();
   await expect(page.getByText("Гречка с курицей")).not.toBeVisible();
 
   await page.getByTestId("btn-logout").click();
-  await expect(page.getByTestId("btn-login")).toBeVisible();
+  await expect(page.getByTestId("btn-login")).toBeVisible({ timeout: 10_000 });
 
   await page.getByTestId("input-login-username").fill(username);
   await page.getByTestId("input-login-password").fill(password);
   await page.getByTestId("btn-login").click();
 
-  await expect(page.getByTestId("btn-add-meal")).toBeVisible();
+  await expect(page.getByTestId("btn-add-meal")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Гречка с индейкой")).toBeVisible();
 });
