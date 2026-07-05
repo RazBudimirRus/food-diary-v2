@@ -29,9 +29,15 @@ function sortMeals(meals: Meal[]): Meal[] {
   });
 }
 
-/** Calculate total water in litres from all meals */
+/** Calculate total water in litres from all meals.
+ * BUG-02: uses pre-computed waterMl (waterUnits + parsed drinkText).
+ * Falls back to waterUnits * 0.5 for legacy rows that have no waterMl yet.
+ */
 function totalWater(meals: Meal[]): number {
-  return meals.reduce((sum, m) => sum + (m.waterUnits ?? 0) * 0.5, 0);
+  return meals.reduce((sum, m) => {
+    const ml = m.waterMl ?? (m.waterUnits ?? 0) * 500;
+    return sum + ml / 1000;
+  }, 0);
 }
 
 /** Average of a numeric array, rounded to 1 decimal */

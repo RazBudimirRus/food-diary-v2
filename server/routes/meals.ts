@@ -5,6 +5,7 @@ import { requireAuth, type AuthRequest } from "../auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "../deepseek";
 import { mealCreateLimiter } from "./limiters";
 import { paramValue, isDateString, daysBetween, deepseekDailyLimitStatus } from "./helpers";
+import { mealWaterMl } from "../utils/liquid";
 
 export function registerMealsRoutes(app: Express) {
   // ── Days ───────────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ export function registerMealsRoutes(app: Express) {
       const date = data.date ?? getMskDate();
       const day = storage.getOrCreateDay(req.user!.id, date);
 
+      const waterUnits = data.waterUnits ? Number(data.waterUnits) : null;
       const meal = storage.addMeal({
         dayId: day.id,
         userId: req.user!.id,
@@ -62,7 +64,8 @@ export function registerMealsRoutes(app: Express) {
         mealType: data.mealType,
         foodText: data.foodText || null,
         drinkText: data.drinkText || null,
-        waterUnits: data.waterUnits ? Number(data.waterUnits) : null,
+        waterUnits,
+        waterMl: mealWaterMl(waterUnits, data.drinkText),
         hungerBefore: data.hungerBefore != null ? Number(data.hungerBefore) : null,
         satietyAfter: data.satietyAfter != null ? Number(data.satietyAfter) : null,
         contextNote: data.contextNote || null,
@@ -131,6 +134,12 @@ export function registerMealsRoutes(app: Express) {
       if (data.foodText !== undefined) update.foodText = data.foodText || null;
       if (data.drinkText !== undefined) update.drinkText = data.drinkText || null;
       if (data.waterUnits !== undefined) update.waterUnits = data.waterUnits === "" ? null : Number(data.waterUnits);
+      // BUG-02: recompute waterMl whenever drinkText or waterUnits changes
+      if (data.drinkText !== undefined || data.waterUnits !== undefined) {
+        const effectiveWaterUnits = update.waterUnits ?? meal.waterUnits ?? null;
+        const effectiveDrinkText = update.drinkText ?? meal.drinkText ?? null;
+        update.waterMl = mealWaterMl(effectiveWaterUnits, effectiveDrinkText);
+      }
       if (data.hungerBefore !== undefined) update.hungerBefore = Number(data.hungerBefore);
       if (data.satietyAfter !== undefined) update.satietyAfter = Number(data.satietyAfter);
       if (data.contextNote !== undefined) update.contextNote = data.contextNote || null;

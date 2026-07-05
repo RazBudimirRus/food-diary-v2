@@ -93,6 +93,8 @@ export const meals = sqliteTable("meals", {
   protein: real("protein"),
   fat: real("fat"),
   carbs: real("carbs"),
+  // BUG-02: total liquid in ml = waterUnits*500 + parsed drinkText
+  waterMl: real("water_ml"),
   createdAt: text("created_at").notNull().default(""),
   deletedAt: text("deleted_at"),
 });

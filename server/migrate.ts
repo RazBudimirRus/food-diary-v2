@@ -53,6 +53,13 @@ function applyGuardedDDL(sqlite: InstanceType<typeof Database>): void {
     console.info("[migrate] Applying guarded DDL: user_profiles.kbju_manual");
     sqlite.exec("ALTER TABLE user_profiles ADD COLUMN kbju_manual integer NOT NULL DEFAULT 0;");
   }
+
+  // 0008: water_ml — computed water intake in ml per meal (BUG-02)
+  const mealColsV2 = sqlite.pragma("table_info(meals)") as { name: string }[];
+  if (!mealColsV2.some((c) => c.name === "water_ml")) {
+    console.info("[migrate] Applying guarded DDL: meals.water_ml");
+    sqlite.exec("ALTER TABLE meals ADD COLUMN water_ml real;");
+  }
 }
 
 export function runMigrations(dbPath: string): void {

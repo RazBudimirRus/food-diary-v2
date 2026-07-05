@@ -772,7 +772,7 @@ class SqliteStorage implements IStorage {
         COALESCE(SUM(meals.protein), 0) AS protein,
         COALESCE(SUM(meals.fat), 0) AS fat,
         COALESCE(SUM(meals.carbs), 0) AS carbs,
-        COALESCE(SUM(meals.water_units), 0) AS waterUnits,
+        COALESCE(SUM(meals.water_ml), 0) AS waterMlTotal,
         AVG(meals.hunger_before) AS avgHunger,
         AVG(meals.satiety_after) AS avgSatiety
       FROM days
@@ -797,7 +797,7 @@ class SqliteStorage implements IStorage {
       protein: number;
       fat: number;
       carbs: number;
-      waterUnits: number;
+      waterMlTotal: number;
       avgHunger: number | null;
       avgSatiety: number | null;
     }>;
@@ -860,7 +860,7 @@ class SqliteStorage implements IStorage {
         protein: round1(row.protein),
         fat: round1(row.fat),
         carbs: round1(row.carbs),
-        waterLitres: round1(Number(row.waterUnits) * 0.5),
+        waterLitres: round1(Number(row.waterMlTotal) / 1000),
         avgHunger: row.avgHunger == null ? null : round1(row.avgHunger),
         avgSatiety: row.avgSatiety == null ? null : round1(row.avgSatiety),
         wakeTime: row.wakeTime,

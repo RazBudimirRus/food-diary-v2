@@ -240,7 +240,8 @@ export default function DiaryPage() {
   }
 
   const isToday = activeDate === mskToday();
-  const totalWater = meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0);
+  // BUG-02: use pre-computed waterMl (includes both waterUnits and parsed drinkText)
+  const totalWater = meals.reduce((s, m) => s + (m.waterMl ?? (m.waterUnits ?? 0) * 500), 0) / 1000;
   const totalKcal = meals.reduce((s, m) => s + (m.calories ?? 0), 0);
   const hasKcal = meals.some((m) => m.calories != null);
 
@@ -349,7 +350,7 @@ export default function DiaryPage() {
           todayProtein={meals.reduce((s, m) => s + (m.protein ?? 0), 0)}
           todayFat={meals.reduce((s, m) => s + (m.fat ?? 0), 0)}
           todayCarbs={meals.reduce((s, m) => s + (m.carbs ?? 0), 0)}
-          todayWaterL={meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0)}
+          todayWaterL={meals.reduce((s, m) => s + (m.waterMl ?? (m.waterUnits ?? 0) * 500), 0) / 1000}
         />
 
         {/* UX-15: форма добавления/кнопка всегда под GoalCard, выше списка приёмов */}

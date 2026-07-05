@@ -57,6 +57,13 @@
       "when": 1782774700000,
       "tag": "0007_kbju_manual",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783267800000,
+      "tag": "0008_add_water_ml_to_meals",
+      "breakpoints": true
     }
   ]
 }
