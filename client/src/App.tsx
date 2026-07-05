@@ -1,4 +1,4 @@
-import { lazy, Suspense, createContext, useContext } from "react";
+import { lazy, Suspense } from "react";
 import { Switch, Route, Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -14,19 +14,7 @@ import NotFound from "@/pages/not-found";
 import { Footer } from "@/components/Footer";
 
 // ── Theme context ─────────────────────────────────────────────────────────────
-interface ThemeContextValue {
-  theme: "light" | "dark";
-  toggle: () => void;
-  toggleTheme: () => void;
-  isDark: boolean;
-}
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "light",
-  toggle: () => {},
-  toggleTheme: () => {},
-  isDark: false,
-});
-export const useAppTheme = () => useContext(ThemeContext);
+import { ThemeContext } from "@/lib/theme-context";
 
 // ── Lazy pages ────────────────────────────────────────────────────────────────
 const AdminPage = lazy(() => import("@/pages/AdminPage"));

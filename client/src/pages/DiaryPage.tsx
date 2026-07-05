@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useAppTheme } from "@/App";
+import { useAppTheme } from "@/lib/theme-context";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useOnboardingTour } from "@/hooks/useOnboardingTour";
 import { usePwaInstall } from "@/hooks/usePwaInstall";

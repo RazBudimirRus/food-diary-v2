@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLocation } from "wouter";
-import { useAppTheme } from "@/App";
+import { useAppTheme } from "@/lib/theme-context";
 import { BottomNav } from "@/components/BottomNav";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";

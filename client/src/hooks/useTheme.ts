@@ -16,7 +16,9 @@ export function useTheme() {
     setThemeState(next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
-    } catch {}
+    } catch {
+      // localStorage недоступен (например, private mode) — игнорируем
+    }
     if (next === "dark") {
       document.documentElement.classList.add("dark");
     } else {

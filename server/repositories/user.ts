@@ -1,6 +1,4 @@
 import { storage } from "../storage";
-import type { User, UserProfile, InsertUser } from "@shared/schema";
-
 export class UserRepository {
   getUserById(id: number) {
     return storage.getUserById(id);

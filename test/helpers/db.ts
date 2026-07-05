@@ -49,7 +49,7 @@ export async function createTestApp(suffix = ""): Promise<TestEnv> {
 export async function registerUser(
   app: express.Express,
   username: string,
-  role: "user" | "doctor" | "admin" = "user",
+  _role: "user" | "doctor" | "admin" = "user",
 ): Promise<AuthResponse> {
   const res = await request(app)
     .post("/api/auth/register")

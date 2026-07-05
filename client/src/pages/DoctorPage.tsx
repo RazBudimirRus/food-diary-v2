@@ -36,13 +36,6 @@ interface Patient {
   assignedAt: string;
 }
 
-interface Doctor {
-  id: number;
-  fullName: string;
-  phone?: string;
-  telegramUrl?: string;
-}
-
 interface AuditLogEntry {
   id: number;
   actorId: number;

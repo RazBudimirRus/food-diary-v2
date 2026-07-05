@@ -11,7 +11,7 @@ interface DaySummaryProps {
   date: string;
 }
 
-export function DaySummary({ day, meals, date }: DaySummaryProps) {
+export function DaySummary({ day, meals, date: _date }: DaySummaryProps) {
   const totalWater = meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0);
   const avgSatiety = meals.filter((m) => m.satietyAfter != null).length
     ? (

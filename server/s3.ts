@@ -104,7 +104,7 @@ export async function scanForViruses(buffer: Buffer, label = "upload"): Promise<
  * Конвертирует буфер в WebP и загружает в S3.
  * Возвращает размер итогового файла в байтах.
  */
-export async function uploadPhoto(s3Key: string, buffer: Buffer, mimeType: string): Promise<number> {
+export async function uploadPhoto(s3Key: string, buffer: Buffer, _mimeType: string): Promise<number> {
   // Phase 28.4: antivirus scan of raw upload buffer before any processing
   await scanForViruses(buffer, s3Key);
 

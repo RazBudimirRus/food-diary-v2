@@ -8,7 +8,7 @@
  *   5. Профиль врача (только для роли doctor/admin)
  */
 import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   User,
   Lock,
@@ -38,7 +38,7 @@ async function api(method: string, path: string, body?: unknown) {
   return json;
 }
 import { useAuth } from "@/lib/auth";
-import { useAppTheme } from "@/App";
+import { useAppTheme } from "@/lib/theme-context";
 import { ProfileQuestionnaire } from "@/components/ProfileQuestionnaire";
 import { BottomNav } from "@/components/BottomNav";
 import { useLocation } from "wouter";
