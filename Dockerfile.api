@@ -12,6 +12,8 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/migrations ./migrations
+# Inter TTF fonts for Cyrillic PDF support
+COPY --from=builder /app/server/fonts ./server/fonts
 # SQLite db will be in /app/data mounted from host
 RUN mkdir -p /app/data
 # Keep WORKDIR as /app so process.cwd() == /app at runtime

@@ -3,7 +3,7 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.22.0-blue)
+![Version](https://img.shields.io/badge/version-2.22.1-blue)
 ![Tests](https://img.shields.io/badge/tests-305%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -167,6 +167,7 @@ Prometheus metrics: `https://fooddiary.razbudimir.com/metrics`
 | Версия  | Дата       | Что вошло                                                                    |
 | ------- | ---------- | ---------------------------------------------------------------------------- |
 | v2.22.0 | 2026-07-05 | Фаза 21 (Excel за неделю/месяц), UX-22 (PDF аналитика), E2E фикс, 305 тестов |
+| v2.22.1 | 2026-07-05 | Hotfix: кириллица в PDF — Inter TTF встроен в Docker-образ, 305 тестов       |
 | v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0008, 291 тест                    |
 | v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест      |
 | v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                                   |
