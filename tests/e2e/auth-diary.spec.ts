@@ -1,4 +1,16 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/** Dismiss the onboarding tour if it appears (fires on first login). */
+async function dismissTour(page: Page) {
+  const skip = page.getByTestId("btn-onboarding-skip");
+  try {
+    await skip.waitFor({ state: "visible", timeout: 2000 });
+    await skip.click();
+    await skip.waitFor({ state: "hidden", timeout: 2000 });
+  } catch {
+    // Tour not visible — that's fine
+  }
+}
 
 test("user can register, add a meal, log out, and log back in", async ({ page }) => {
   const suffix = Date.now();
@@ -18,6 +30,7 @@ test("user can register, add a meal, log out, and log back in", async ({ page })
   await page.getByTestId("btn-register").click();
 
   await expect(page.getByTestId("btn-add-meal")).toBeVisible();
+  await dismissTour(page);
 
   await page.getByTestId("btn-add-meal").click();
   await page.getByTestId("input-food-text").fill("Гречка с курицей");

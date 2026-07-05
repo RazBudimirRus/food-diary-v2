@@ -26,8 +26,18 @@ function applyGuardedDDL(sqlite: InstanceType<typeof Database>): void {
     );
   }
 
-  // 0006: mfa_enabled + mfa_secret columns on users
+  // last_login_at: added in baseline but missing from pre-baseline DBs
   const userCols = sqlite.pragma("table_info(users)") as { name: string }[];
+  if (!userCols.some((c) => c.name === "last_login_at")) {
+    console.info("[migrate] Applying guarded DDL: users.last_login_at");
+    sqlite.exec("ALTER TABLE users ADD COLUMN last_login_at text;");
+  }
+  // pd_consent_at: added in 0003 but may be missing if migration ran partially
+  if (!userCols.some((c) => c.name === "pd_consent_at")) {
+    console.info("[migrate] Applying guarded DDL: users.pd_consent_at");
+    sqlite.exec("ALTER TABLE users ADD COLUMN pd_consent_at text;");
+  }
+  // 0006: mfa_enabled + mfa_secret columns on users
   if (!userCols.some((c) => c.name === "mfa_enabled")) {
     console.info("[migrate] Applying guarded DDL: users.mfa_enabled");
     sqlite.exec("ALTER TABLE users ADD COLUMN mfa_enabled integer NOT NULL DEFAULT 0;");

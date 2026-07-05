@@ -6,7 +6,19 @@
  * TC-05: Edit a meal via bottom sheet
  * TC-11: Health check endpoint returns ok
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+/** Dismiss the onboarding tour if it appears (fires on first login). */
+async function dismissTour(page: Page) {
+  const skip = page.getByTestId("btn-onboarding-skip");
+  try {
+    await skip.waitFor({ state: "visible", timeout: 2000 });
+    await skip.click();
+    await skip.waitFor({ state: "hidden", timeout: 2000 });
+  } catch {
+    // Tour not visible — that's fine
+  }
+}
 
 // Shared user registration helper
 async function registerAndLogin(
@@ -27,6 +39,7 @@ async function registerAndLogin(
   await page.getByTestId("input-reg-pdconsent").click();
   await page.getByTestId("btn-register").click();
   await expect(page.getByTestId("btn-add-meal")).toBeVisible();
+  await dismissTour(page);
 
   return { username, email, password };
 }

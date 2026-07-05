@@ -77,6 +77,7 @@ export function OnboardingTour({ step, active, onNext, onSkip }: Props) {
               onClick={onSkip}
               className="absolute top-3 right-3 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               aria-label="Закрыть подсказку"
+              data-testid="btn-onboarding-skip"
             >
               <X className="h-4 w-4" />
             </button>

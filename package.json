@@ -14,7 +14,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
+    "test:e2e": "npm run build && rimraf e2e-test.db && playwright test",
     "e2e:server": "cross-env NODE_ENV=production HOST=127.0.0.1 PORT=5174 SQLITE_DB_PATH=e2e-test.db JWT_SECRET=e2e-test-jwt-secret-change-me-32 ENCRYPTION_KEY=e2e-test-encryption-key-change-me-32 node dist/index.cjs",
     "db:push": "drizzle-kit push",
     "prepare": "husky"
