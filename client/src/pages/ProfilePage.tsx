@@ -23,6 +23,7 @@ import {
   Sun,
   ShieldCheck,
   ShieldOff,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -329,6 +330,31 @@ export default function ProfilePage() {
             >
               <ClipboardList className="h-4 w-4" />
               Открыть анкету
+              <ChevronRight className="h-4 w-4 ml-auto" />
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* ── Food Catalog ── */}
+        <Card>
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <BookOpen className="h-4 w-4" /> Каталог блюд
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4">
+            <p className="text-xs text-muted-foreground mb-3">
+              База ваших продуктов и шаблонов блюд. Добавляйте еду вручную с расчётом КБЖУ, чтобы быстро выбирать при
+              записи приёма.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex items-center gap-2"
+              onClick={() => window.location.assign("#/catalog")}
+            >
+              <BookOpen className="h-4 w-4" />
+              Открыть каталог
               <ChevronRight className="h-4 w-4 ml-auto" />
             </Button>
           </CardContent>
