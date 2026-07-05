@@ -9,7 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/lib/auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut, Shield, ArrowLeft, Ban, KeyRound, BarChart3, Users, ScrollText, Download } from "lucide-react";
+import {
+  LogOut,
+  Shield,
+  ArrowLeft,
+  Ban,
+  KeyRound,
+  BarChart3,
+  Users,
+  ScrollText,
+  Download,
+  HardDrive,
+  CheckCircle,
+  XCircle,
+  Loader2,
+} from "lucide-react";
 
 interface AdminUser {
   id: number;
@@ -39,6 +53,22 @@ interface DeepSeekUsageDay {
   tokensOut: number;
   costEstimate: number;
   requests: number;
+}
+
+interface S3TestStep {
+  ok: boolean;
+  durationMs: number;
+  detail: string;
+}
+
+interface S3TestResult {
+  ok: boolean;
+  steps: {
+    put: S3TestStep;
+    get: S3TestStep;
+    delete: S3TestStep;
+  };
+  error?: string;
 }
 
 interface DeepSeekUsageSummary {
@@ -287,6 +317,8 @@ export default function AdminPage() {
   const [location] = useLocation();
   const [tab, setTab] = useState<AdminTab>("users");
   const [resetResult, setResetResult] = useState<{ username: string; temporaryPassword: string } | null>(null);
+  const [s3TestResult, setS3TestResult] = useState<S3TestResult | null>(null);
+  const [s3TestLoading, setS3TestLoading] = useState(false);
   const {
     data: usersData,
     isLoading: usersLoading,
@@ -497,6 +529,117 @@ export default function AdminPage() {
                         </TableBody>
                       </Table>
                     )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <HardDrive className="h-5 w-5 text-primary" />
+                  S3 хранилище
+                </CardTitle>
+                <CardDescription>
+                  Проверка доступности VK Object Storage: запись, чтение и удаление тестового файла.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={s3TestLoading}
+                  onClick={async () => {
+                    setS3TestLoading(true);
+                    setS3TestResult(null);
+                    try {
+                      const res = await apiRequest("POST", "/api/admin/s3-test");
+                      const json = await res.json();
+                      setS3TestResult(json);
+                    } catch (err) {
+                      setS3TestResult({
+                        ok: false,
+                        steps: {
+                          put: { ok: false, durationMs: 0, detail: "" },
+                          get: { ok: false, durationMs: 0, detail: "" },
+                          delete: { ok: false, durationMs: 0, detail: "" },
+                        },
+                        error: String(err),
+                      });
+                    } finally {
+                      setS3TestLoading(false);
+                    }
+                  }}
+                  data-testid="btn-s3-test"
+                >
+                  {s3TestLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Проверка...
+                    </>
+                  ) : (
+                    <>
+                      <HardDrive className="h-4 w-4 mr-2" />
+                      Проверить S3
+                    </>
+                  )}
+                </Button>
+                {s3TestResult && (
+                  <div className="space-y-2">
+                    <div
+                      className={`flex items-center gap-2 text-sm font-medium ${
+                        s3TestResult.ok ? "text-green-700 dark:text-green-400" : "text-destructive"
+                      }`}
+                    >
+                      {s3TestResult.ok ? (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          S3 доступен и работает
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-4 w-4" />
+                          S3 недоступен
+                        </>
+                      )}
+                    </div>
+                    {s3TestResult.error && <p className="text-xs text-destructive font-mono">{s3TestResult.error}</p>}
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {(
+                        [
+                          { key: "put", label: "PutObject" },
+                          { key: "get", label: "GetObject" },
+                          { key: "delete", label: "DeleteObject" },
+                        ] as const
+                      ).map(({ key, label }) => {
+                        const step = s3TestResult.steps[key];
+                        return (
+                          <div
+                            key={key}
+                            className={`rounded-lg border px-3 py-2 ${
+                              step.ok
+                                ? "border-green-300 bg-green-50 dark:border-green-900 dark:bg-green-950/30"
+                                : "border-destructive bg-destructive/10"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 text-xs font-semibold">
+                              {step.ok ? (
+                                <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
+                              ) : (
+                                <XCircle className="h-3 w-3 text-destructive" />
+                              )}
+                              {label}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">{step.durationMs}ms</div>
+                            {step.detail && (
+                              <div className="text-xs text-muted-foreground truncate" title={step.detail}>
+                                {step.detail}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </CardContent>

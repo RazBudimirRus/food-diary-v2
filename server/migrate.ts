@@ -46,6 +46,13 @@ function applyGuardedDDL(sqlite: InstanceType<typeof Database>): void {
     console.info("[migrate] Applying guarded DDL: users.mfa_secret");
     sqlite.exec("ALTER TABLE users ADD COLUMN mfa_secret text;");
   }
+
+  // 0007: kbju_manual — manual КБЖУ priority flag
+  const profileCols = sqlite.pragma("table_info(user_profiles)") as { name: string }[];
+  if (!profileCols.some((c) => c.name === "kbju_manual")) {
+    console.info("[migrate] Applying guarded DDL: user_profiles.kbju_manual");
+    sqlite.exec("ALTER TABLE user_profiles ADD COLUMN kbju_manual integer NOT NULL DEFAULT 0;");
+  }
 }
 
 export function runMigrations(dbPath: string): void {

@@ -70,6 +70,7 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
   const [targetProtein, setTargetProtein] = useState("");
   const [targetFat, setTargetFat] = useState("");
   const [targetCarbs, setTargetCarbs] = useState("");
+  const [kbjuManual, setKbjuManual] = useState(false);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<string[]>([]);
 
   // Загружаем существующий профиль при каждом открытии
@@ -89,6 +90,7 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
         setTargetProtein(p.targetProtein != null ? String(p.targetProtein) : "");
         setTargetFat(p.targetFat != null ? String(p.targetFat) : "");
         setTargetCarbs(p.targetCarbs != null ? String(p.targetCarbs) : "");
+        setKbjuManual(p.kbjuManual ?? false);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -96,6 +98,7 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
 
   // Автопересчёт КБЖУ при изменении пола/роста/веса/активности
   useEffect(() => {
+    if (kbjuManual) return; // manual override — don't touch КБЖУ
     const h = parseFloat(height);
     const w = parseFloat(weight);
     if (!h || !w) return;
@@ -105,7 +108,7 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
     setTargetProtein(String(result.protein));
     setTargetFat(String(result.fat));
     setTargetCarbs(String(result.carbs));
-  }, [gender, height, weight, activity]);
+  }, [gender, height, weight, activity, kbjuManual]);
 
   async function handleSave() {
     setPending(true);
@@ -121,6 +124,7 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
       if (targetProtein) body.targetProtein = Number(targetProtein);
       if (targetFat) body.targetFat = Number(targetFat);
       if (targetCarbs) body.targetCarbs = Number(targetCarbs);
+      body.kbjuManual = kbjuManual;
 
       const res = await apiRequest("PUT", "/api/user/profile", body);
       if (!res.ok) {
@@ -244,7 +248,43 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
 
             {/* Целевые КБЖУ */}
             <div>
-              <Label className="text-xs mb-2 block">Целевые КБЖУ (автозаполнение или вручную)</Label>
+              {/* UX-20: mode badge */}
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-xs mb-0 block">Целевые КБЖУ</Label>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full border ${kbjuManual ? "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800" : "bg-muted text-muted-foreground border-border"}`}
+                    title={
+                      kbjuManual
+                        ? "Нажмите «Рассчитать по формуле» для обновления автоматически"
+                        : "Значения рассчитаны автоматически по формуле Миффлина"
+                    }
+                  >
+                    {kbjuManual ? "✏️ Задано вручную" : "🔢 Авторасчёт"}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs px-2"
+                    disabled={!height || !weight || gender === "unspecified"}
+                    onClick={() => {
+                      const h = parseFloat(height);
+                      const w = parseFloat(weight);
+                      if (!h || !w) return;
+                      const result = calcKbzhu(gender, h, w, activity);
+                      if (!result) return;
+                      setTargetKcal(String(result.kcal));
+                      setTargetProtein(String(result.protein));
+                      setTargetFat(String(result.fat));
+                      setTargetCarbs(String(result.carbs));
+                      setKbjuManual(false);
+                    }}
+                  >
+                    Рассчитать по формуле
+                  </Button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Ккал</Label>
@@ -253,7 +293,10 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
                     min={0}
                     placeholder="2000"
                     value={targetKcal}
-                    onChange={(e) => setTargetKcal(e.target.value)}
+                    onChange={(e) => {
+                      setTargetKcal(e.target.value);
+                      setKbjuManual(true);
+                    }}
                   />
                 </div>
                 <div className="space-y-1">
@@ -263,7 +306,10 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
                     min={0}
                     placeholder="120"
                     value={targetProtein}
-                    onChange={(e) => setTargetProtein(e.target.value)}
+                    onChange={(e) => {
+                      setTargetProtein(e.target.value);
+                      setKbjuManual(true);
+                    }}
                   />
                 </div>
                 <div className="space-y-1">
@@ -273,7 +319,10 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
                     min={0}
                     placeholder="70"
                     value={targetFat}
-                    onChange={(e) => setTargetFat(e.target.value)}
+                    onChange={(e) => {
+                      setTargetFat(e.target.value);
+                      setKbjuManual(true);
+                    }}
                   />
                 </div>
                 <div className="space-y-1">
@@ -283,7 +332,10 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
                     min={0}
                     placeholder="200"
                     value={targetCarbs}
-                    onChange={(e) => setTargetCarbs(e.target.value)}
+                    onChange={(e) => {
+                      setTargetCarbs(e.target.value);
+                      setKbjuManual(true);
+                    }}
                   />
                 </div>
               </div>

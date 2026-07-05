@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
 import { openApiSpec } from "../openapi";
 import { getMskDate, getMskTime } from "../storage";
-import { isS3Configured } from "../s3";
+import { isS3Configured, uploadPhoto, deleteFromS3, buildPhotoKey } from "../s3";
 import { isDeepSeekAvailable } from "../deepseek";
 import { registerAuthRoutes } from "./auth";
 import { registerMealsRoutes } from "./meals";
@@ -49,21 +49,19 @@ export function registerRoutes(httpServer: Server, app: Express) {
       checks.db = { ok: false, detail: e.message };
     }
 
-    // S3 check
+    // S3 check — real PutObject + DeleteObject round-trip (not just HeadBucket)
     try {
       if (isS3Configured()) {
-        const { S3Client, HeadBucketCommand } = await import("@aws-sdk/client-s3");
-        const s3 = new S3Client({
-          endpoint: process.env.VK_S3_ENDPOINT,
-          region: process.env.VK_S3_REGION ?? "ru-msk",
-          credentials: {
-            accessKeyId: process.env.VK_S3_ACCESS_KEY ?? "",
-            secretAccessKey: process.env.VK_S3_SECRET_KEY ?? "",
-          },
-          forcePathStyle: true,
-        });
-        await s3.send(new HeadBucketCommand({ Bucket: process.env.VK_S3_BUCKET ?? "" }));
-        checks.s3 = { ok: true };
+        const testKey = buildPhotoKey(0, `health-check-${Date.now()}`);
+        // Minimal 1×1 white JPEG
+        const testBuf = Buffer.from(
+          "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=",
+          "base64",
+        );
+        const t = Date.now();
+        await uploadPhoto(testKey, testBuf, "image/jpeg");
+        await deleteFromS3(testKey);
+        checks.s3 = { ok: true, detail: `rw ok ${Date.now() - t}ms` };
       } else {
         checks.s3 = { ok: true, detail: "not configured" };
       }

@@ -36,6 +36,27 @@
       "when": 1782774428313,
       "tag": "0004_add_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782774500000,
+      "tag": "0005_soft_delete_meals",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782774600000,
+      "tag": "0006_mfa_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782774700000,
+      "tag": "0007_kbju_manual",
+      "breakpoints": true
     }
   ]
 }

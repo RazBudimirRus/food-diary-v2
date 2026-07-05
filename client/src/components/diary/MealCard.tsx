@@ -2,7 +2,7 @@
 // hunger/fullness, КБЖУ data, photo upload, and action buttons (edit, delete, save
 // to catalog). Extracted verbatim from DiaryPage.tsx (29.4 refactor).
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,14 @@ interface MealCardProps {
 
 export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCardProps) {
   const { toast } = useToast();
+
+  // UX-19: fetch photos attached to this meal
+  const { data: photosData } = useQuery<{ photos: { id: string }[] }>({
+    queryKey: [`/api/meals/${meal.id}/photos`],
+    staleTime: 30_000,
+  });
+  const mealPhotos = photosData?.photos ?? [];
+  const [lightboxId, setLightboxId] = useState<string | null>(null);
 
   const saveToCatalogMutation = useMutation({
     mutationFn: (mealId: number) =>
@@ -80,6 +88,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
     },
     onSuccess: () => {
       toast({ title: "Фото загружено" });
+      queryClient.invalidateQueries({ queryKey: [`/api/meals/${meal.id}/photos`] });
     },
     onError: (e: Error) => toast({ title: "Ошибка фото", description: e.message, variant: "destructive" }),
   });
@@ -139,10 +148,11 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) uploadPhotoMutation.mutate({ mealId: meal.id, file });
+                  const files = Array.from(e.target.files ?? []);
+                  files.forEach((file) => uploadPhotoMutation.mutate({ mealId: meal.id, file }));
                 }}
               />
             </label>
@@ -292,6 +302,50 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
             {meal.protein != null && <span>· Б {meal.protein.toFixed(1)}</span>}
             {meal.fat != null && <span>· Ж {meal.fat.toFixed(1)}</span>}
             {meal.carbs != null && <span>· У {meal.carbs.toFixed(1)}</span>}
+          </div>
+        )}
+
+        {/* UX-19: photo thumbnails */}
+        {mealPhotos.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {mealPhotos.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="w-14 h-14 rounded-md border overflow-hidden hover:opacity-80 transition-opacity"
+                onClick={() => setLightboxId(p.id)}
+                title="Открыть фото"
+              >
+                <img
+                  src={`/api/photos/${p.id}`}
+                  alt="Фото блюда"
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* UX-19: lightbox */}
+        {lightboxId && (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+            onClick={() => setLightboxId(null)}
+          >
+            <img
+              src={`/api/photos/${lightboxId}`}
+              alt="Фото"
+              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              className="absolute top-4 right-4 text-white text-2xl font-bold leading-none"
+              onClick={() => setLightboxId(null)}
+              aria-label="Закрыть"
+            >
+              ×
+            </button>
           </div>
         )}
       </CardContent>

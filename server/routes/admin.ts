@@ -84,6 +84,57 @@ export function registerAdminRoutes(app: Express) {
     res.json({ entries });
   });
 
+  /**
+   * POST /api/admin/s3-test (admin only)
+   * Performs a real round-trip: PutObject → GetObject → DeleteObject.
+   * Returns { ok, detail, durationMs } for each step.
+   */
+  app.post("/api/admin/s3-test", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    const { isS3Configured, uploadPhoto, downloadPhoto, deleteFromS3, buildPhotoKey } = await import("../s3");
+    if (!isS3Configured()) {
+      return res.status(503).json({ ok: false, detail: "S3 не настроен (нет VK_S3_ACCESS_KEY / VK_S3_SECRET_KEY)" });
+    }
+
+    const steps: Record<string, { ok: boolean; durationMs: number; detail?: string }> = {};
+    const testKey = buildPhotoKey(0, `s3-test-${Date.now()}`);
+    // Minimal 1×1 white JPEG
+    const testBuf = Buffer.from(
+      "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=",
+      "base64",
+    );
+
+    // Step 1: upload (PutObject via uploadPhoto which wraps sharp + S3)
+    const t0 = Date.now();
+    try {
+      await uploadPhoto(testKey, testBuf, "image/jpeg");
+      steps.put = { ok: true, durationMs: Date.now() - t0 };
+    } catch (e: any) {
+      steps.put = { ok: false, durationMs: Date.now() - t0, detail: e.message };
+      return res.status(500).json({ ok: false, steps });
+    }
+
+    // Step 2: download (GetObject)
+    const t1 = Date.now();
+    try {
+      const buf = await downloadPhoto(testKey);
+      steps.get = { ok: buf.length > 0, durationMs: Date.now() - t1, detail: `${buf.length} bytes` };
+    } catch (e: any) {
+      steps.get = { ok: false, durationMs: Date.now() - t1, detail: e.message };
+    }
+
+    // Step 3: delete
+    const t2 = Date.now();
+    try {
+      await deleteFromS3(testKey);
+      steps.delete = { ok: true, durationMs: Date.now() - t2 };
+    } catch (e: any) {
+      steps.delete = { ok: false, durationMs: Date.now() - t2, detail: e.message };
+    }
+
+    const allOk = Object.values(steps).every((s) => s.ok);
+    res.status(allOk ? 200 : 500).json({ ok: allOk, steps });
+  });
+
   /** POST /api/admin/users/:id/set-role (admin only) */
   app.post("/api/admin/users/:id/set-role", requireAuth, requireAdmin, (req: AuthRequest, res) => {
     const userId = parseInt(paramValue(req.params.id), 10);

@@ -122,6 +122,7 @@ export const userProfiles = sqliteTable("user_profiles", {
   targetProtein: real("target_protein"),
   targetFat: real("target_fat"),
   targetCarbs: real("target_carbs"),
+  kbjuManual: integer("kbju_manual", { mode: "boolean" }).notNull().default(false),
   onboardingSkipped: integer("onboarding_skipped", { mode: "boolean" }).default(false),
   dietaryRestrictions: text("dietary_restrictions"),
   updatedAt: text("updated_at").notNull().default(""),

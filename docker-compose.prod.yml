@@ -1,6 +1,9 @@
 # Production docker-compose для сервера с внешним nginx (95.163.213.45)
 # Запуск: docker compose -f docker-compose.prod.yml up -d --build
 # Nginx проксирует на 127.0.0.1:5000
+# Phase 26.3: см. nginx.conf в корне репозитория — эталонный конфиг внешнего
+# nginx (server_tokens off, TLS, проксирование на 127.0.0.1:5000). Файл нужно
+# скопировать на хост (/etc/nginx/sites-available/) — он не собирается в образ.
 
 version: "3.9"
 

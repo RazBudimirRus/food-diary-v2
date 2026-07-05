@@ -4,7 +4,7 @@
 // handleAnalyze), and mutations. Extracted verbatim from DiaryPage.tsx
 // (29.4 refactor).
 import { useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Calculator, Flame, BookOpen, Camera, X } from "lucide-react";
+import { Calculator, Flame, BookOpen, Camera } from "lucide-react";
 import { FoodCatalogModal } from "@/components/FoodCatalogModal";
 import { MealEditSheet } from "@/components/MealEditSheet";
 import type { Meal } from "@shared/schema";
@@ -38,6 +38,42 @@ interface MealFormProps {
   onSaved: () => void;
 }
 
+// UX-19.2: show existing photos attached to a meal in edit mode, with delete
+function ExistingPhotosEdit({ mealId }: { mealId: number }) {
+  const { data } = useQuery<{ photos: { id: string }[] }>({
+    queryKey: [`/api/meals/${mealId}/photos`],
+  });
+  const photos = data?.photos ?? [];
+  const { toast } = useToast();
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (photoId: string) => {
+      const r = await apiRequest("DELETE", `/api/photos/${photoId}`);
+      if (!r.ok) throw new Error("Ошибка удаления");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/meals/${mealId}/photos`] });
+      toast({ title: "Фото удалено" });
+    },
+  });
+  if (photos.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mt-1">
+      {photos.map((p) => (
+        <div key={p.id} className="relative">
+          <img src={`/api/photos/${p.id}`} alt="Фото" className="w-16 h-16 object-cover rounded-md border" />
+          <button
+            type="button"
+            className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full text-xs flex items-center justify-center"
+            onClick={() => deletePhotoMutation.mutate(p.id)}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, onSaved }: MealFormProps) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -48,9 +84,13 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
   );
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
 
-  // UX-16: pending photo before meal is saved
-  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
-  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
+  // Phase 26.7: idempotency key — сгенерирован один раз при монтировании формы,
+  // чтобы повторная отправка (двойной клик / повтор сети) не создавала дубликат.
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+
+  // UX-17: pending photos before meal is saved (up to 5)
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [pendingPhotoPreviews, setPendingPhotoPreviews] = useState<string[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // КБЖУ analysis state
@@ -63,8 +103,10 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
     if (open) {
       setForm(editingMeal ? formFromMeal(editingMeal, date) : defaultForm(defaultDate));
       setKbjuResult(null);
-      setPendingPhoto(null);
-      setPendingPhotoPreview(null);
+      setPendingPhotos([]);
+      setPendingPhotoPreviews([]);
+      // Phase 26.7: новый ключ идемпотентности на каждое открытие формы для нового приёма
+      if (!editingMeal) idempotencyKeyRef.current = crypto.randomUUID();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingMeal]);
@@ -120,18 +162,24 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
         payload.fat = kbjuResult.fat;
         payload.carbs = kbjuResult.carbs;
       }
-      const res = await apiRequest("POST", "/api/meals", payload);
+      const res = await apiRequest("POST", "/api/meals", payload, {
+        "Idempotency-Key": idempotencyKeyRef.current,
+      });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     onSuccess: async (_result, variables) => {
-      // UX-16: upload pending photo after meal is created
-      if (pendingPhoto && _result?.id) {
+      // UX-17: upload all pending photos after meal is created
+      if (pendingPhotos.length > 0 && _result?.id) {
         try {
-          const fd = new FormData();
-          fd.append("photo", pendingPhoto);
-          fd.append("mealId", String(_result.id));
-          await fetch("/api/photos/upload", { method: "POST", body: fd });
+          await Promise.all(
+            pendingPhotos.map(async (photo) => {
+              const fd = new FormData();
+              fd.append("photo", photo);
+              fd.append("mealId", String(_result.id));
+              await fetch("/api/photos/upload", { method: "POST", body: fd });
+            }),
+          );
         } catch {
           // фото не критично — не отменяем сохранение приёма
         }
@@ -141,7 +189,9 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
         queryClient.invalidateQueries({ queryKey: [`/api/days/${date}`] });
       }
       handleClose();
-      toast({ title: pendingPhoto ? "Приём добавлен с фото" : "Приём добавлен" });
+      toast({ title: pendingPhotos.length > 0 ? "Приём добавлен с фото" : "Приём добавлен" });
+      setPendingPhotos([]);
+      setPendingPhotoPreviews([]);
       onSaved();
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
@@ -470,54 +520,66 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
             />
           </div>
 
-          {/* UX-16: photo attachment in new-meal form */}
+          {/* UX-17: multi-photo — up to 5 photos, new-meal form only */}
           {!isEditingMeal && (
             <div className="space-y-2">
               <Label className="text-xs">
-                Фото приёма <span className="text-muted-foreground">(необязательно)</span>
+                Фото приёма <span className="text-muted-foreground">(необязательно, до 5)</span>
               </Label>
-              {pendingPhotoPreview ? (
-                <div className="relative w-full">
-                  <img
-                    src={pendingPhotoPreview}
-                    alt="Превью"
-                    className="w-full max-h-40 object-cover rounded-lg border"
-                  />
-                  <button
-                    type="button"
-                    className="absolute top-1.5 right-1.5 bg-background/80 rounded-full p-0.5 hover:bg-destructive hover:text-white transition-colors"
-                    onClick={() => {
-                      setPendingPhoto(null);
-                      setPendingPhotoPreview(null);
-                      if (photoInputRef.current) photoInputRef.current.value = "";
-                    }}
-                    aria-label="Удалить фото"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <label className="flex items-center gap-2 w-full border-2 border-dashed border-border rounded-lg px-3 py-2.5 cursor-pointer hover:border-primary/50 hover:bg-secondary/50 transition-colors">
-                  <Camera className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Нажмите, чтобы добавить фото</span>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+                  <Camera className="h-4 w-4" />
+                  <span>Добавить фото</span>
                   <input
                     ref={photoInputRef}
                     type="file"
                     accept="image/*"
+                    multiple
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      setPendingPhoto(file);
-                      const reader = new FileReader();
-                      reader.onload = (ev) => setPendingPhotoPreview(ev.target?.result as string);
-                      reader.readAsDataURL(file);
+                      const files = Array.from(e.target.files ?? []);
+                      const remaining = 5 - pendingPhotos.length;
+                      const toAdd = files.slice(0, remaining);
+                      toAdd.forEach((file) => {
+                        const reader = new FileReader();
+                        reader.readAsDataURL(file);
+                        reader.onload = (ev) =>
+                          setPendingPhotoPreviews((prev) => [...prev, ev.target?.result as string]);
+                      });
+                      setPendingPhotos((prev) => [...prev, ...toAdd]);
+                      if (photoInputRef.current) photoInputRef.current.value = "";
                     }}
+                    disabled={pendingPhotos.length >= 5}
                   />
                 </label>
+                {pendingPhotos.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{pendingPhotos.length}/5</span>
+                )}
+              </div>
+              {pendingPhotoPreviews.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {pendingPhotoPreviews.map((preview, i) => (
+                    <div key={i} className="relative">
+                      <img src={preview} alt={`Фото ${i + 1}`} className="w-16 h-16 object-cover rounded-md border" />
+                      <button
+                        type="button"
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full text-xs flex items-center justify-center leading-none"
+                        onClick={() => {
+                          setPendingPhotos((prev) => prev.filter((_, j) => j !== i));
+                          setPendingPhotoPreviews((prev) => prev.filter((_, j) => j !== i));
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
+
+          {/* UX-19.2: show existing photos in edit mode */}
+          {editingMeal && <ExistingPhotosEdit mealId={editingMeal.id} />}
 
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <Button

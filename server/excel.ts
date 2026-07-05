@@ -3,12 +3,23 @@
  * Spec: doc 07_Формат_отчёта_Excel.md
  */
 import ExcelJS from "exceljs";
+import sharp from "sharp";
+import { downloadPhoto, isS3Configured } from "./s3";
+import { storage } from "./storage";
 import type { Day, Meal } from "@shared/schema";
 import { formatDateTimeRu, resolveSleepDate, resolveWakeDate } from "@shared/dates";
 
 const MEAL_TYPES_ORDER = ["завтрак", "обед", "перекус", "ужин"];
 
-const TOTAL_COLS = 8;
+// UX-19: Excel photo thumbnails
+const EXCEL_PHOTO_ENABLED = process.env.EXCEL_PHOTO_ENABLED !== "false"; // true by default
+const EXCEL_PHOTO_MAX = parseInt(process.env.EXCEL_PHOTO_MAX_PER_REPORT ?? "50", 10);
+const EXCEL_PHOTO_SIZE_PX = parseInt(process.env.EXCEL_PHOTO_SIZE_PX ?? "80", 10);
+
+// Количество встроенных фото в текущем отчёте — общий счётчик между всеми листами отчёта.
+let photoCount = 0;
+
+const TOTAL_COLS = 9; // UX-19: +1 столбец для фото
 
 function sortMeals(meals: Meal[]): Meal[] {
   return [...meals].sort((a, b) => {
@@ -77,7 +88,7 @@ const HUNGER_SCALE = [
   },
 ];
 
-function populateDaySheet(ws: ExcelJS.Worksheet, day: Day, meals: Meal[]): void {
+async function populateDaySheet(wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet, day: Day, meals: Meal[]): Promise<void> {
   const sorted = sortMeals(meals);
 
   // ── Column widths ─────────────────────────────────────────────────────────
@@ -90,6 +101,7 @@ function populateDaySheet(ws: ExcelJS.Worksheet, day: Day, meals: Meal[]): void 
     { key: "F", width: 16 }, // F: насыщение
     { key: "G", width: 40 }, // G: контекст
     { key: "H", width: 34 }, // H: КБЖУ
+    { key: "I", width: 14 }, // I: Фото (UX-19)
   ];
 
   let rowNum = 1;
@@ -113,6 +125,7 @@ function populateDaySheet(ws: ExcelJS.Worksheet, day: Day, meals: Meal[]): void 
     "Насыщение после (0–10)",
     "Контекст приёма",
     "КБЖУ (DeepSeek)\nккал / Б / Ж / У",
+    "Фото",
   ];
   const hRow = ws.getRow(rowNum);
   headers.forEach((h, i) => {
@@ -132,6 +145,9 @@ function populateDaySheet(ws: ExcelJS.Worksheet, day: Day, meals: Meal[]): void 
   rowNum++;
 
   // ── Meal rows ─────────────────────────────────────────────────────────────
+  const photoColIndex = TOTAL_COLS; // UX-19: фото — последний столбец в строке
+  const photosEnabled = isS3Configured() && EXCEL_PHOTO_ENABLED;
+
   for (const m of sorted) {
     const interval = m.tsEnd && m.tsEnd !== m.tsStart ? `${m.tsStart}–${m.tsEnd}` : m.tsStart;
     const drinkDisplay = m.drinkText ?? (m.waterUnits ? `вода ${m.waterUnits}` : "");
@@ -166,7 +182,50 @@ function populateDaySheet(ws: ExcelJS.Worksheet, day: Day, meals: Meal[]): void 
         right: { style: "thin" },
       };
     });
-    mRow.height = 20;
+
+    // UX-19: photo thumbnail + HYPERLINK in the last column
+    const photoCell = mRow.getCell(photoColIndex);
+    photoCell.border = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" },
+    };
+
+    if (photosEnabled && photoCount < EXCEL_PHOTO_MAX) {
+      try {
+        const mealPhotos = storage.getPhotosByMeal(m.id);
+        const photo = mealPhotos[0];
+        if (photo) {
+          try {
+            const photoBuffer = await downloadPhoto(photo.s3Key);
+            const thumbBuffer = await sharp(photoBuffer)
+              .resize(EXCEL_PHOTO_SIZE_PX, EXCEL_PHOTO_SIZE_PX, { fit: "cover" })
+              .jpeg()
+              .toBuffer();
+            const imageId = wb.addImage({ buffer: thumbBuffer as any, extension: "jpeg" });
+            ws.addImage(imageId, {
+              tl: { col: photoColIndex - 1, row: rowNum - 1 },
+              ext: { width: EXCEL_PHOTO_SIZE_PX, height: EXCEL_PHOTO_SIZE_PX },
+              editAs: "oneCell",
+            });
+            mRow.height = Math.max(mRow.height ?? 20, EXCEL_PHOTO_SIZE_PX * 0.75);
+
+            const publicUrl = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
+            const photoUrl = publicUrl ? `${publicUrl}/api/photos/${photo.id}` : `/api/photos/${photo.id}`;
+            photoCell.value = { formula: `HYPERLINK("${photoUrl}", "Фото")`, result: "Фото" };
+
+            photoCount++;
+          } catch {
+            // Download or thumbnail generation failed — leave the cell empty and continue
+          }
+        }
+      } catch {
+        // storage.getPhotosByMeal must not break report generation
+      }
+    }
+
+    if (!mRow.height) mRow.height = 20;
     rowNum++;
   }
 
@@ -427,7 +486,8 @@ export async function generateDayReport(day: Day, meals: Meal[]): Promise<Buffer
   const wb = new ExcelJS.Workbook();
   wb.creator = "FoodDiary Bot";
   const ws = wb.addWorksheet("Дневник питания");
-  populateDaySheet(ws, day, meals);
+  photoCount = 0; // UX-19: сброс счётчика фото для каждого нового отчёта
+  await populateDaySheet(wb, ws, day, meals);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
@@ -456,6 +516,7 @@ function sumField(meals: Meal[], field: "calories" | "protein" | "fat" | "carbs"
 export async function generateRangeReport(daysList: Day[], mealsByDay: Map<number, Meal[]>): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "FoodDiary Bot";
+  photoCount = 0; // UX-19: сброс счётчика фото для каждого нового отчёта
 
   const sortedDays = [...daysList].sort((a, b) => a.date.localeCompare(b.date));
   const startDate = sortedDays.length ? sortedDays[0].date : "";
@@ -599,7 +660,7 @@ export async function generateRangeReport(daysList: Day[], mealsByDay: Map<numbe
     }
     usedNames.add(name);
     const ws = wb.addWorksheet(name.slice(0, 31));
-    populateDaySheet(ws, day, mealsByDay.get(day.id) ?? []);
+    await populateDaySheet(wb, ws, day, mealsByDay.get(day.id) ?? []);
   }
 
   return Buffer.from(await wb.xlsx.writeBuffer());

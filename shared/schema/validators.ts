@@ -99,6 +99,7 @@ export const upsertUserProfileSchema = z.object({
   targetProtein: z.coerce.number().min(0).optional().nullable(),
   targetFat: z.coerce.number().min(0).optional().nullable(),
   targetCarbs: z.coerce.number().min(0).optional().nullable(),
+  kbjuManual: z.boolean().optional(),
   onboardingSkipped: z.boolean().optional(),
 });
 

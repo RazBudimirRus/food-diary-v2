@@ -66,7 +66,12 @@ export async function refreshAccessToken(notifyOnFailure = true): Promise<AuthRe
   return refreshPromise;
 }
 
-export async function apiRequest(method: string, path: string, body?: unknown): Promise<Response> {
+export async function apiRequest(
+  method: string,
+  path: string,
+  body?: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<Response> {
   const url = `${API_BASE}${path}`;
   const headers: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
   if (accessToken) {
@@ -76,6 +81,7 @@ export async function apiRequest(method: string, path: string, body?: unknown): 
     const csrfToken = getCsrfToken();
     if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
   }
+  if (extraHeaders) Object.assign(headers, extraHeaders);
 
   const res = await fetch(url, {
     method,
@@ -95,6 +101,7 @@ export async function apiRequest(method: string, path: string, body?: unknown): 
     const csrfToken = getCsrfToken();
     if (csrfToken) retryHeaders["X-CSRF-Token"] = csrfToken;
   }
+  if (extraHeaders) Object.assign(retryHeaders, extraHeaders);
   return fetch(url, {
     method,
     headers: retryHeaders,
