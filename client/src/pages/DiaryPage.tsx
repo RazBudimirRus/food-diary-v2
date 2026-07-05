@@ -352,18 +352,7 @@ export default function DiaryPage() {
           todayWaterL={meals.reduce((s, m) => s + (m.waterUnits ?? 0) * 0.5, 0)}
         />
 
-        <div className="space-y-2">
-          {meals.map((meal) => (
-            <MealCard
-              key={meal.id}
-              meal={meal}
-              onEdit={openEditMealForm}
-              onDelete={(id) => setDeleteConfirmId(id)}
-              isMobile={isMobile}
-            />
-          ))}
-        </div>
-
+        {/* UX-15: форма добавления/кнопка всегда под GoalCard, выше списка приёмов */}
         {!showAddForm && (
           <Button className="w-full" variant="outline" onClick={openAddMealForm} data-testid="btn-add-meal">
             <Plus className="h-4 w-4 mr-2" />
@@ -378,10 +367,23 @@ export default function DiaryPage() {
             open={showAddForm}
             onOpenChange={setShowAddForm}
             date={activeDate}
+            defaultDate={activeDate}
             editingMeal={editingMeal}
             onSaved={closeMealForm}
           />
         )}
+
+        <div className="space-y-2">
+          {meals.map((meal) => (
+            <MealCard
+              key={meal.id}
+              meal={meal}
+              onEdit={openEditMealForm}
+              onDelete={(id) => setDeleteConfirmId(id)}
+              isMobile={isMobile}
+            />
+          ))}
+        </div>
       </main>
 
       <DeleteMealDialog

@@ -103,9 +103,9 @@ export interface AddMealFormData {
   contextNote: string;
 }
 
-export function defaultForm(): AddMealFormData {
+export function defaultForm(date?: string): AddMealFormData {
   return {
-    date: mskToday(),
+    date: date ?? mskToday(),
     tsStart: mskNow(),
     tsEnd: "",
     mealType: "перекус",

@@ -1,7 +1,7 @@
 # 🗺 Food Diary V2 — RoadMap
 
 **Версия:** 2.6.0  
-**Дата обновления:** 5 июля 2026 (v2.17.0, UX-14/15/16 добавлены)  
+**Дата обновления:** 5 июля 2026 (v2.19.0)  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
 **Стек:** React 18 + Vite · Node.js 20 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
@@ -58,6 +58,9 @@
 | v2.15.0 · 2026-07-04 | Волна 6 (UX-полировка, Phase 31) | ✅ Реализовано | Soft-delete meals + undo toast (5 сек), skeleton loaders в AnalyticsPage, real-time zod валидация в AuthPage, aria-labels на иконочных кнопках, dark mode toggle в ProfilePage, migration 0005 |
 | v2.16.0 · 2026-07-05 | Волна 7 (Phase 28 остаток) | ✅ Реализовано | MFA TOTP для doctor/admin (otpauth, QR-код, login 2nd step), ClamAV antivirus (docker-compose сервис + scan middleware), scrypt KDF для ENCRYPTION_KEY (заменён SHA-256), migration 0006 (mfa_enabled, mfa_secret) |
 | v2.17.0 · 2026-07-05 | Волна 8 (UX-7/10/11/12/13) | ✅ Реализовано | CatalogPage /#/catalog + PUT rename, BottomNav «Каталог», UX-11 inline bookmark на foodText/drinkText (Popover), UX-7/10/12/13 подтверждены реализованными |
+| v2.17.1 · 2026-07-05 | CI lint fix | ✅ Реализовано | Устранена единственная ошибка CI (no-empty в useTheme.ts), 11 ESLint warnings, useAppTheme вынесен в lib/theme-context.ts |
+| v2.18.0 · 2026-07-05 | Волна 9 (UX-14/15/16) | ✅ Реализовано | UX-14: defaultDate в MealForm = выбранный день; UX-15: форма добавления выше списка приёмов; UX-16: фото в форме создания приёма (превью + пост-загрузка после сохранения) |
+| v2.19.0 · 2026-07-05 | Волна 10 (UX-6/8/9) | ✅ Реализовано | UX-6/8/9 подтверждены реализованными: день недели в карусели (formatDateWithWeekday), автовысота комментария в Excel (excel.ts:275), футер + PrivacyPage + AboutPage |
 
 ---
 
@@ -1788,7 +1791,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-14 — Дата нового приёма пищи по умолчанию = выбранный день
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.18.0)
 > **Приоритет:** Высокий
 > **Сложность:** Низкая
 > **Затрагивает:** MealForm / DiaryPage
@@ -1825,7 +1828,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-15 — Форма добавления приёма в начале страницы (не внизу списка)
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.18.0)
 > **Приоритет:** Высокий
 > **Сложность:** Средняя
 > **Затрагивает:** DiaryPage
@@ -1857,7 +1860,7 @@ GET    /api/doctor/patients/:id/catalog — врач просматривает 
 
 ## UX-16 — Кнопка «Добавить фото» в форме создания приёма
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.18.0)
 > **Приоритет:** Высокий
 > **Сложность:** Низкая
 > **Затрагивает:** MealForm

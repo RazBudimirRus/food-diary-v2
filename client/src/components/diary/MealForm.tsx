@@ -3,7 +3,7 @@
 // editing on mobile. Owns all form state, handlers (handleSubmit /
 // handleAnalyze), and mutations. Extracted verbatim from DiaryPage.tsx
 // (29.4 refactor).
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Calculator, Flame, BookOpen } from "lucide-react";
+import { Calculator, Flame, BookOpen, Camera, X } from "lucide-react";
 import { FoodCatalogModal } from "@/components/FoodCatalogModal";
 import { MealEditSheet } from "@/components/MealEditSheet";
 import type { Meal } from "@shared/schema";
@@ -33,19 +33,25 @@ interface MealFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   date: string;
+  defaultDate?: string; // UX-14: дата выбранного дня как дефолт для нового приёма
   editingMeal: Meal | null;
   onSaved: () => void;
 }
 
-export function MealForm({ open, onOpenChange, date, editingMeal, onSaved }: MealFormProps) {
+export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, onSaved }: MealFormProps) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const isEditingMeal = editingMeal !== null;
 
   const [form, setForm] = useState<AddMealFormData>(() =>
-    editingMeal ? formFromMeal(editingMeal, date) : defaultForm(),
+    editingMeal ? formFromMeal(editingMeal, date) : defaultForm(defaultDate),
   );
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+
+  // UX-16: pending photo before meal is saved
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   // КБЖУ analysis state
   const [kbjuResult, setKbjuResult] = useState<NutritionResult | null>(null);
@@ -55,8 +61,10 @@ export function MealForm({ open, onOpenChange, date, editingMeal, onSaved }: Mea
   // Re-sync form whenever the dialog is (re)opened for a different meal/date
   useEffect(() => {
     if (open) {
-      setForm(editingMeal ? formFromMeal(editingMeal, date) : defaultForm());
+      setForm(editingMeal ? formFromMeal(editingMeal, date) : defaultForm(defaultDate));
       setKbjuResult(null);
+      setPendingPhoto(null);
+      setPendingPhotoPreview(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editingMeal]);
@@ -116,13 +124,24 @@ export function MealForm({ open, onOpenChange, date, editingMeal, onSaved }: Mea
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    onSuccess: (_result, variables) => {
+    onSuccess: async (_result, variables) => {
+      // UX-16: upload pending photo after meal is created
+      if (pendingPhoto && _result?.id) {
+        try {
+          const fd = new FormData();
+          fd.append("photo", pendingPhoto);
+          fd.append("mealId", String(_result.id));
+          await fetch("/api/photos/upload", { method: "POST", body: fd });
+        } catch {
+          // фото не критично — не отменяем сохранение приёма
+        }
+      }
       queryClient.invalidateQueries({ queryKey: [`/api/days/${variables.date}`] });
       if (variables.date !== date) {
         queryClient.invalidateQueries({ queryKey: [`/api/days/${date}`] });
       }
       handleClose();
-      toast({ title: "Приём добавлен" });
+      toast({ title: pendingPhoto ? "Приём добавлен с фото" : "Приём добавлен" });
       onSaved();
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
@@ -450,6 +469,55 @@ export function MealForm({ open, onOpenChange, date, editingMeal, onSaved }: Mea
               data-testid="input-context-note"
             />
           </div>
+
+          {/* UX-16: photo attachment in new-meal form */}
+          {!isEditingMeal && (
+            <div className="space-y-2">
+              <Label className="text-xs">
+                Фото приёма <span className="text-muted-foreground">(необязательно)</span>
+              </Label>
+              {pendingPhotoPreview ? (
+                <div className="relative w-full">
+                  <img
+                    src={pendingPhotoPreview}
+                    alt="Превью"
+                    className="w-full max-h-40 object-cover rounded-lg border"
+                  />
+                  <button
+                    type="button"
+                    className="absolute top-1.5 right-1.5 bg-background/80 rounded-full p-0.5 hover:bg-destructive hover:text-white transition-colors"
+                    onClick={() => {
+                      setPendingPhoto(null);
+                      setPendingPhotoPreview(null);
+                      if (photoInputRef.current) photoInputRef.current.value = "";
+                    }}
+                    aria-label="Удалить фото"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-2 w-full border-2 border-dashed border-border rounded-lg px-3 py-2.5 cursor-pointer hover:border-primary/50 hover:bg-secondary/50 transition-colors">
+                  <Camera className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Нажмите, чтобы добавить фото</span>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setPendingPhoto(file);
+                      const reader = new FileReader();
+                      reader.onload = (ev) => setPendingPhotoPreview(ev.target?.result as string);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <Button
