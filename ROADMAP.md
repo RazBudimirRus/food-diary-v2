@@ -3624,3 +3624,29 @@ INSERT INTO __drizzle_migrations (hash, created_at) VALUES
 В `server/migrate.ts` guarded DDL выполняется **после** `migrate()`, то есть уже применённые вручную DDL не мешают drizzle. Но если в `__drizzle_migrations` нет записи — drizzle попытается применить SQL снова.
 
 **TODO (Фаза 29 / рефакторинг):** заменить guarded DDL в `migrate.ts` на корректные drizzle-kit миграции, чтобы хэши записывались автоматически. Guarded DDL оставить только как аварийный fallback для реально сломанных БД.
+
+---
+
+## BUG-04 — ClamAV сокет недоступен в production
+
+**Проявление:** В логах при каждом health-check и загрузке фото — `[clamav] scan error: connect ENOENT /var/run/clamav/clamd.sock`. Сканирование вирусов не работает, загрузка файлов при этом не блокируется (fail-open).
+
+**Версия обнаружения:** v2.22.1 (2026-07-05)
+
+**Вероятная причина:** Контейнер `food_diary_clamav` запущен, но Unix-сокет `/var/run/clamav/clamd.sock` не пробрасывается в контейнер `api` через volume mount, либо ClamAV внутри контейнера не успевает запуститься до первого scan-запроса.
+
+**Приоритет:** Средний (безопасность — antivirus не работает, но функциональность не нарушена)
+
+**TODO:** Проверить `docker-compose.prod.yml` — volume с сокетом ClamAV должен быть примонтирован в оба контейнера. Добавить health-check для `food_diary_clamav` с `depends_on` в `api`.
+
+---
+
+## BUG-05 — Node.js 20 EOL для AWS SDK после января 2027
+
+**Проявление:** При старте контейнера — `NodeVersionSupportWarning: AWS SDK v3 будет требовать node >=22 после первой недели января 2027`.
+
+**Версия обнаружения:** v2.22.1 (2026-07-05)
+
+**Приоритет:** Низкий (срок — январь 2027, не срочно)
+
+**TODO (до января 2027):** Обновить `Dockerfile.api` с `node:20-slim` на `node:22-slim`. Проверить совместимость всех зависимостей с Node 22 через `npm audit` + тесты.
