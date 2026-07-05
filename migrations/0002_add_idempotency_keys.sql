@@ -1,4 +1,4 @@
-CREATE TABLE `idempotency_keys` (
+CREATE TABLE IF NOT EXISTS `idempotency_keys` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`key` text NOT NULL,
 	`user_id` integer NOT NULL,
@@ -8,4 +8,4 @@ CREATE TABLE `idempotency_keys` (
 	`expires_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `idempotency_keys_key_unique` ON `idempotency_keys` (`key`);
+CREATE UNIQUE INDEX IF NOT EXISTS `idempotency_keys_key_unique` ON `idempotency_keys` (`key`);

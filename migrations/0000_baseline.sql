@@ -1,4 +1,4 @@
-CREATE TABLE `api_usage` (
+CREATE TABLE IF NOT EXISTS `api_usage` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`timestamp` text DEFAULT '' NOT NULL,
@@ -8,7 +8,7 @@ CREATE TABLE `api_usage` (
 	`cost_estimate` real DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `days` (
+CREATE TABLE IF NOT EXISTS `days` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`date` text NOT NULL,
@@ -22,7 +22,7 @@ CREATE TABLE `days` (
 	`summary_filled` integer DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `doctor_meal_notes` (
+CREATE TABLE IF NOT EXISTS `doctor_meal_notes` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`doctor_id` integer NOT NULL,
 	`meal_id` integer NOT NULL,
@@ -31,14 +31,14 @@ CREATE TABLE `doctor_meal_notes` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `doctor_patients` (
+CREATE TABLE IF NOT EXISTS `doctor_patients` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`doctor_id` integer NOT NULL,
 	`patient_id` integer NOT NULL,
 	`assigned_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `doctor_plans` (
+CREATE TABLE IF NOT EXISTS `doctor_plans` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`doctor_id` integer NOT NULL,
 	`patient_id` integer NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE `doctor_plans` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `doctors` (
+CREATE TABLE IF NOT EXISTS `doctors` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`full_name` text NOT NULL,
@@ -62,8 +62,8 @@ CREATE TABLE `doctors` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `doctors_user_id_unique` ON `doctors` (`user_id`);--> statement-breakpoint
-CREATE TABLE `food_catalog_entries` (
+CREATE UNIQUE INDEX IF NOT EXISTS `doctors_user_id_unique` ON `doctors` (`user_id`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `food_catalog_entries` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`catalog_item_id` integer NOT NULL,
 	`meal_name` text NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE `food_catalog_entries` (
 	`carbs` real
 );
 --> statement-breakpoint
-CREATE TABLE `food_catalog_items` (
+CREATE TABLE IF NOT EXISTS `food_catalog_items` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`name` text NOT NULL,
@@ -83,7 +83,7 @@ CREATE TABLE `food_catalog_items` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `meals` (
+CREATE TABLE IF NOT EXISTS `meals` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`day_id` integer NOT NULL,
 	`user_id` integer NOT NULL,
@@ -105,7 +105,7 @@ CREATE TABLE `meals` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `password_reset_tokens` (
+CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`token` text NOT NULL,
 	`user_id` integer NOT NULL,
@@ -114,8 +114,8 @@ CREATE TABLE `password_reset_tokens` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `password_reset_tokens_token_unique` ON `password_reset_tokens` (`token`);--> statement-breakpoint
-CREATE TABLE `photos` (
+CREATE UNIQUE INDEX IF NOT EXISTS `password_reset_tokens_token_unique` ON `password_reset_tokens` (`token`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `photos` (
 	`id` text PRIMARY KEY NOT NULL,
 	`user_id` integer NOT NULL,
 	`meal_id` integer,
@@ -124,7 +124,7 @@ CREATE TABLE `photos` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `push_subscriptions` (
+CREATE TABLE IF NOT EXISTS `push_subscriptions` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`endpoint` text NOT NULL,
@@ -133,8 +133,8 @@ CREATE TABLE `push_subscriptions` (
 	`created_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `push_subscriptions_endpoint_unique` ON `push_subscriptions` (`endpoint`);--> statement-breakpoint
-CREATE TABLE `refresh_tokens` (
+CREATE UNIQUE INDEX IF NOT EXISTS `push_subscriptions_endpoint_unique` ON `push_subscriptions` (`endpoint`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `refresh_tokens` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`token` text NOT NULL,
 	`user_id` integer NOT NULL,
@@ -145,8 +145,8 @@ CREATE TABLE `refresh_tokens` (
 	`ip` text
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `refresh_tokens_token_unique` ON `refresh_tokens` (`token`);--> statement-breakpoint
-CREATE TABLE `secrets` (
+CREATE UNIQUE INDEX IF NOT EXISTS `refresh_tokens_token_unique` ON `refresh_tokens` (`token`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `secrets` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`key` text NOT NULL,
@@ -155,7 +155,7 @@ CREATE TABLE `secrets` (
 	`updated_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `user_profiles` (
+CREATE TABLE IF NOT EXISTS `user_profiles` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`user_id` integer NOT NULL,
 	`gender` text DEFAULT 'unspecified',
@@ -170,8 +170,8 @@ CREATE TABLE `user_profiles` (
 	`updated_at` text DEFAULT '' NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `user_profiles_user_id_unique` ON `user_profiles` (`user_id`);--> statement-breakpoint
-CREATE TABLE `users` (
+CREATE UNIQUE INDEX IF NOT EXISTS `user_profiles_user_id_unique` ON `user_profiles` (`user_id`);--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS `users` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`username` text NOT NULL,
 	`email` text NOT NULL,
@@ -182,5 +182,5 @@ CREATE TABLE `users` (
 	`last_login_at` text
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_username_unique` ON `users` (`username`);--> statement-breakpoint
-CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);
+CREATE UNIQUE INDEX IF NOT EXISTS `users_username_unique` ON `users` (`username`);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS `users_email_unique` ON `users` (`email`);
