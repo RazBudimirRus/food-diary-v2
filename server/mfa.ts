@@ -41,7 +41,7 @@ export async function generateMfaSetup(username: string): Promise<{
     algorithm: "SHA1",
     digits: DIGITS,
     period: PERIOD,
-    secret: OTPAuth.Secret.fromRandom(20),
+    secret: new OTPAuth.Secret({ size: 20 }),
   });
 
   const uri = totp.toString();

@@ -36,7 +36,8 @@ export function registerPhotosRoutes(app: Express) {
         // Write audit log entry for virus detection
         storage
           .addAuditLog({
-            userId: req.user!.id,
+            actorId: req.user!.id,
+            actorRole: req.user!.role,
             action: "photo_virus_detected",
             detail: `s3Key=${s3Key} filename=${req.file.originalname ?? "unknown"} reason=${e.message}`,
             ip: req.ip ?? null,
