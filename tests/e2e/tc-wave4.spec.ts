@@ -24,6 +24,7 @@ async function registerAndLogin(
   await page.getByTestId("input-reg-email").fill(email);
   await page.getByTestId("input-reg-password").fill(password);
   await page.getByTestId("input-reg-password2").fill(password);
+  await page.getByTestId("input-reg-pdconsent").click();
   await page.getByTestId("btn-register").click();
   await expect(page.getByTestId("btn-add-meal")).toBeVisible();
 
