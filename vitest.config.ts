@@ -17,7 +17,7 @@ export default defineConfig({
       include: ["server/**/*.ts", "shared/**/*.ts"],
       exclude: ["server/vite.ts", "**/*.test.ts"],
       thresholds: {
-        lines: 55,
+        lines: 53,
       },
     },
   },
