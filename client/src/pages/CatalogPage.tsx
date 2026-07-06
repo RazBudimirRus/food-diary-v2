@@ -26,7 +26,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { BookOpen, Search, Pencil, Trash2, ArrowLeft, Flame, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import {
+  BookOpen,
+  Search,
+  Pencil,
+  Trash2,
+  ArrowLeft,
+  Flame,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 
 interface CatalogEntry {
   id: number;
@@ -153,6 +164,25 @@ export default function CatalogPage() {
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
 
+  // UX-21: AI-calculate КБЖУ for a catalog item
+  const [calcKbjuId, setCalcKbjuId] = useState<number | null>(null);
+  const calcKbjuMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("POST", `/api/catalog/${id}/calculate-kbju`).then((r) => r.json()),
+    onSuccess: (data, _id) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalog"] });
+      setCalcKbjuId(null);
+      const r = data.result;
+      toast({
+        title: "КБЖУ рассчитаны",
+        description: `${Math.round(r.calories)} ккал · Б${r.protein} · Ж${r.fat} · У${r.carbs}`,
+      });
+    },
+    onError: (e: Error) => {
+      setCalcKbjuId(null);
+      toast({ title: "Ошибка AI", description: e.message, variant: "destructive" });
+    },
+  });
+
   function openEdit(item: CatalogItem) {
     setEditItem(item);
     setEditName(item.name);
@@ -272,6 +302,23 @@ export default function CatalogPage() {
                       title={isExpanded ? "Свернуть" : "Развернуть"}
                     >
                       {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+                    {/* UX-21: AI КБЖУ */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-violet-500"
+                      onClick={() => {
+                        setCalcKbjuId(item.id);
+                        calcKbjuMutation.mutate(item.id);
+                      }}
+                      disabled={calcKbjuMutation.isPending && calcKbjuId === item.id}
+                      title="Рассчитать КБЖУ через AI"
+                      aria-label="Рассчитать КБЖУ"
+                    >
+                      <Sparkles
+                        className={`h-4 w-4 ${calcKbjuMutation.isPending && calcKbjuId === item.id ? "animate-pulse" : ""}`}
+                      />
                     </Button>
                     <Button
                       variant="ghost"

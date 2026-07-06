@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { createCatalogItemSchema } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth";
 import { paramValue } from "./helpers";
+import { analyzeNutrition, isDeepSeekAvailable } from "../deepseek";
 
 export function registerCatalogRoutes(app: Express) {
   // ════════════════════════════════════════════════════════════════════
@@ -40,6 +41,42 @@ export function registerCatalogRoutes(app: Express) {
     res.json({ ok: true });
   });
 
+  // ── UX-21: calculate КБЖУ for catalog item via AI ─────────────────────────
+
+  /** POST /api/catalog/:id/calculate-kbju */
+  app.post("/api/catalog/:id/calculate-kbju", requireAuth, async (req: AuthRequest, res) => {
+    if (!isDeepSeekAvailable()) {
+      return res.status(503).json({ error: "AI-расчёт недоступен: DEEPSEEK_API_KEY не настроен" });
+    }
+    const itemId = parseInt(paramValue(req.params.id), 10);
+    const items = storage.getCatalogItems(req.user!.id);
+    const item = items.find((it) => it.id === itemId);
+    if (!item) return res.status(404).json({ error: "Позиция каталога не найдена" });
+
+    // Build text from entries mealName fields
+    const foodText = item.entries.map((e) => e.mealName).join(", ");
+    if (!foodText.trim()) {
+      return res.status(400).json({ error: "Нет текста для анализа" });
+    }
+
+    try {
+      const result = await analyzeNutrition(foodText);
+      // Persist to the first entry
+      const firstEntry = item.entries[0];
+      if (firstEntry) {
+        storage.updateCatalogEntryKbju(req.user!.id, firstEntry.id, {
+          kcal: result.calories,
+          protein: result.protein,
+          fat: result.fat,
+          carbs: result.carbs,
+        });
+      }
+      res.json({ result, note: result.note });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   /** POST /api/catalog/from-meal/:mealId */
   app.post("/api/catalog/from-meal/:mealId", requireAuth, (req: AuthRequest, res) => {
     const mealId = parseInt(paramValue(req.params.mealId), 10);
@@ -51,3 +88,4 @@ export function registerCatalogRoutes(app: Express) {
     res.json({ item });
   });
 }
+// UX-21 — Calculate КБЖУ for catalog entry via AI

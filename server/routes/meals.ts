@@ -210,6 +210,65 @@ export function registerMealsRoutes(app: Express) {
     }
   });
 
+  /**
+   * POST /api/meals/:id/analyze-kbju
+   * UX-18: AI-анализ КБЖУ для приёма пищи с фото.
+   * Использует DeepSeek для расчёта КБЖУ по тексту записи (foodText/drinkText).
+   * Если у записи нет текста, возвращает 400.
+   * Сохраняет результат в meal.calories/protein/fat/carbs.
+   */
+  app.post("/api/meals/:id/analyze-kbju", requireAuth, async (req: AuthRequest, res) => {
+    try {
+      if (!isDeepSeekAvailable()) {
+        return res.status(503).json({ error: "DeepSeek API не настроен" });
+      }
+      const mealId = parseInt(paramValue(req.params.id), 10);
+      if (isNaN(mealId)) return res.status(400).json({ error: "Некорректный id" });
+
+      const meal = storage.getMeal(mealId);
+      if (!meal) return res.status(404).json({ error: "Запись не найдена" });
+      if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
+
+      if (!meal.foodText && !meal.drinkText) {
+        return res.status(400).json({ error: "Нет описания блюда для анализа. Добавьте текст к записи." });
+      }
+
+      const limitStatus = deepseekDailyLimitStatus();
+      if (limitStatus.dailyLimitExceeded) {
+        return res.status(429).json({ error: "Превышен дневной лимит DeepSeek", ...limitStatus });
+      }
+
+      const userProfile = storage.getUserProfile(req.user!.id);
+      const dietaryRestrictions = userProfile?.dietaryRestrictions ?? null;
+      const result = await analyzeNutrition(
+        meal.foodText ?? undefined,
+        meal.drinkText ?? undefined,
+        dietaryRestrictions,
+      );
+
+      if (result.usage) {
+        storage.recordApiUsage({
+          userId: req.user!.id,
+          endpoint: "deepseek",
+          tokensIn: result.usage.tokensIn,
+          tokensOut: result.usage.tokensOut,
+          costEstimate: result.usage.costEstimate,
+        });
+      }
+
+      const updated = storage.updateMeal(mealId, {
+        calories: result.calories,
+        protein: result.protein,
+        fat: result.fat,
+        carbs: result.carbs,
+      });
+
+      res.json({ meal: updated, note: result.note });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Analytics ───────────────────────────────────────────────────────────────
 
   app.get("/api/analytics/summary", requireAuth, (req: AuthRequest, res) => {

@@ -3,58 +3,61 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.22.1-blue)
-![Tests](https://img.shields.io/badge/tests-305%20passed-brightgreen)
+![Version](https://img.shields.io/badge/version-2.23.0-blue)
+![Tests](https://img.shields.io/badge/tests-313%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Возможности
 
-| Функция                                                                      | Статус |
-| ---------------------------------------------------------------------------- | ------ |
-| Дневник питания (завтрак / обед / перекус / ужин)                            | ✅     |
-| Авторизация: bcrypt + JWT (30 мин) + refresh token (7 дней, httpOnly cookie) | ✅     |
-| Шифрование секретов AES-256-GCM                                              | ✅     |
-| Запись задним числом с date-picker (дефолт — сегодня МСК)                    | ✅     |
-| Расчёт КБЖУ через DeepSeek API                                               | ✅     |
-| Пакетный расчёт КБЖУ по всему дню (UX-12)                                    | ✅     |
-| Ручной приоритет целевых КБЖУ — не перезаписывать вручную (UX-20)            | ✅     |
-| Excel-отчёт за день / неделю / месяц / произвольный период (Фаза 21)         | ✅     |
-| PDF-аналитика за период: обложка, KPI, бар-чарт, таблица по дням (UX-22)     | ✅     |
-| Аналитика питания (графики, статистика, периоды до 12 мес.)                  | ✅     |
-| Каталог продуктов пользователя с inline-bookmark                             | ✅     |
-| Фото приёмов пищи (до 5 на приём, UX-17) в VK Object Storage (S3)            | ✅     |
-| Фото в карточках дневника и Excel-отчёте (UX-19)                             | ✅     |
-| Кабинет врача: пациенты, дневники, планы питания                             | ✅     |
-| Аудит-лог действий врача и администратора                                    | ✅     |
-| Административная панель                                                      | ✅     |
-| Тест S3 round-trip из AdminPage (PutObject → GetObject → DeleteObject)       | ✅     |
-| Push-уведомления (Web Push / VAPID)                                          | ✅     |
-| CSRF-защита (double-submit cookie)                                           | ✅     |
-| EXIF strip при загрузке фото                                                 | ✅     |
-| 152-ФЗ: экспорт и удаление данных пользователя                               | ✅     |
-| Счётчик воды с учётом напитков из поля «Что пил» (BUG-02)                    | ✅     |
-| Idempotency-Key для создания приёмов (UX-17)                                 | ✅     |
-| Редактирование приёма — bottom sheet на мобиле (UX-10)                       | ✅     |
-| Версия приложения в футере и «О приложении» (UX-13)                          | ✅     |
-| Preflight-check скрипт                                                       | ✅     |
-| API-документация (Swagger UI) `/api/docs`                                    | ✅     |
-| Docker Compose (production + dev)                                            | ✅     |
-| Prometheus metrics `/metrics` + `/api/health` с S3 round-trip                | ✅     |
-| Pino structured logging + Sentry error tracking                              | ✅     |
-| Drizzle-kit versioned migrations (0000–0008)                                 | ✅     |
+| Функция                                                                             | Статус |
+| ----------------------------------------------------------------------------------- | ------ |
+| Дневник питания (завтрак / обед / перекус / ужин)                                   | ✅     |
+| Авторизация: bcrypt + JWT (30 мин) + refresh token (7 дней, httpOnly cookie)        | ✅     |
+| Шифрование секретов AES-256-GCM                                                     | ✅     |
+| Запись задним числом с date-picker (дефолт — сегодня МСК)                           | ✅     |
+| Расчёт КБЖУ через DeepSeek API                                                      | ✅     |
+| Пакетный расчёт КБЖУ по всему дню (UX-12)                                           | ✅     |
+| Ручной приоритет целевых КБЖУ — не перезаписывать вручную (UX-20)                   | ✅     |
+| Excel-отчёт за день / неделю / месяц / произвольный период (Фаза 21)                | ✅     |
+| PDF-аналитика за период: обложка, KPI, бар-чарт, таблица по дням (UX-22)            | ✅     |
+| PDF-аналитика с реальными графиками: сон, калории, КБЖУ, голод, активность (UX-22b) | ✅     |
+| AI-анализ КБЖУ для записи приёма пищи (UX-18)                                       | ✅     |
+| AI-расчёт КБЖУ для позиций каталога (UX-21)                                         | ✅     |
+| Аналитика питания (графики, статистика, периоды до 12 мес.)                         | ✅     |
+| Каталог продуктов пользователя с inline-bookmark                                    | ✅     |
+| Фото приёмов пищи (до 5 на приём, UX-17) в VK Object Storage (S3)                   | ✅     |
+| Фото в карточках дневника и Excel-отчёте (UX-19)                                    | ✅     |
+| Кабинет врача: пациенты, дневники, планы питания                                    | ✅     |
+| Аудит-лог действий врача и администратора                                           | ✅     |
+| Административная панель                                                             | ✅     |
+| Тест S3 round-trip из AdminPage (PutObject → GetObject → DeleteObject)              | ✅     |
+| Push-уведомления (Web Push / VAPID)                                                 | ✅     |
+| CSRF-защита (double-submit cookie)                                                  | ✅     |
+| EXIF strip при загрузке фото                                                        | ✅     |
+| 152-ФЗ: экспорт и удаление данных пользователя                                      | ✅     |
+| Счётчик воды с учётом напитков из поля «Что пил» (BUG-02)                           | ✅     |
+| Idempotency-Key для создания приёмов (UX-17)                                        | ✅     |
+| Редактирование приёма — bottom sheet на мобиле (UX-10)                              | ✅     |
+| Версия приложения в футере и «О приложении» (UX-13)                                 | ✅     |
+| Preflight-check скрипт                                                              | ✅     |
+| API-документация (Swagger UI) `/api/docs`                                           | ✅     |
+| Docker Compose (production + dev)                                                   | ✅     |
+| Prometheus metrics `/metrics` + `/api/health` с S3 round-trip                       | ✅     |
+| Pino structured logging + Sentry error tracking                                     | ✅     |
+| Drizzle-kit versioned migrations (0000–0008)                                        | ✅     |
 
 ## Стек
 
 | Слой           | Технологии                                                               |
 | -------------- | ------------------------------------------------------------------------ |
 | Frontend       | React 18 · Vite · TypeScript · Tailwind CSS · shadcn/ui · TanStack Query |
-| Backend        | Node.js 20 · Express · TypeScript · Drizzle ORM · better-sqlite3         |
+| Backend        | Node.js 22 · Express · TypeScript · Drizzle ORM · better-sqlite3         |
 | Инфраструктура | Docker Compose · nginx · Ubuntu 24.04                                    |
 | Безопасность   | bcryptjs · JWT · AES-256-GCM · CSRF · EXIF strip · ClamAV                |
-| AI             | DeepSeek API (анализ КБЖУ)                                               |
+| AI             | DeepSeek API (анализ КБЖУ) · chartjs-node-canvas (PDF графики)           |
 | Хранилище      | SQLite (данные) · VK Object Storage / S3 (фото)                          |
 | Мониторинг     | Prometheus · Grafana · Sentry · Pino                                     |
-| Тесты          | Vitest · Supertest · Playwright E2E · 305 тестов                         |
+| Тесты          | Vitest · Supertest · Playwright E2E · 313 тестов                         |
 
 ## Архитектура
 
@@ -143,7 +146,7 @@ npx vitest run --reporter=verbose # с детальным выводом
 npx tsc --noEmit                  # typecheck
 ```
 
-Текущее покрытие: **291 тест**, все проходят.
+Текущее покрытие: **313 тестов**, все проходят.
 
 ## API документация
 
@@ -164,31 +167,29 @@ Prometheus metrics: `https://fooddiary.razbudimir.com/metrics`
 
 ## Changelog
 
-| Версия  | Дата       | Что вошло                                                                    |
-| ------- | ---------- | ---------------------------------------------------------------------------- |
-| v2.22.0 | 2026-07-05 | Фаза 21 (Excel за неделю/месяц), UX-22 (PDF аналитика), E2E фикс, 305 тестов |
-| v2.22.1 | 2026-07-05 | Hotfix: кириллица в PDF — Inter TTF встроен в Docker-образ, 305 тестов       |
-| v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0008, 291 тест                    |
-| v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест      |
-| v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                                   |
-| v2.18.0 | 2026-07-05 | UX-14/15/16 (defaultDate, порядок формы, фото при создании)                  |
-| v2.17.0 | 2026-07-05 | UX-7/10/11/12/13 (каталог, bottom sheet, bookmark, batch КБЖУ)               |
-| v2.12.0 | 2026-06-30 | Рефакторинг монолитов, repositories, OpenAPI, ADR                            |
-| v2.11.0 | 2026-07-01 | Audit log, CSRF, EXIF, bottom sheet UX, E2E тест-кейсы                       |
-| v2.10.0 | 2026-06-30 | Drizzle-kit migrations, pino, Sentry, /health, /metrics, nginx hardening     |
+| Версия  | Дата       | Что вошло                                                                                                                      |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| v2.23.0 | 2026-07-06 | UX-18 (AI КБЖУ по приёму), UX-21 (AI КБЖУ каталог), UX-22b (PDF с графиками), BUG-04/05 (Node 22, service_healthy), 313 тестов |
+| v2.22.1 | 2026-07-05 | Hotfix: кириллица в PDF — Inter TTF встроен в Docker-образ, 305 тестов                                                         |
+| v2.22.0 | 2026-07-05 | Фаза 21 (Excel за неделю/месяц), UX-22 (PDF аналитика), E2E фикс, 305 тестов                                                   |
+| v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0008, 291 тест                                                                      |
+| v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест                                                        |
+| v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                                                                                     |
+| v2.18.0 | 2026-07-05 | UX-14/15/16 (defaultDate, порядок формы, фото при создании)                                                                    |
+| v2.17.0 | 2026-07-05 | UX-7/10/11/12/13 (каталог, bottom sheet, bookmark, batch КБЖУ)                                                                 |
+| v2.12.0 | 2026-06-30 | Рефакторинг монолитов, repositories, OpenAPI, ADR                                                                              |
+| v2.11.0 | 2026-07-01 | Audit log, CSRF, EXIF, bottom sheet UX, E2E тест-кейсы                                                                         |
+| v2.10.0 | 2026-06-30 | Drizzle-kit migrations, pino, Sentry, /health, /metrics, nginx hardening                                                       |
 
 Полная история: [ROADMAP.md](ROADMAP.md)
 
 ## Roadmap (краткий)
 
-| Приоритет | Задача  | Описание                                  |
-| --------- | ------- | ----------------------------------------- |
-| Высокий   | Фаза 25 | GigaChat как резерв DeepSeek              |
-| Высокий   | UX-18   | AI-анализ КБЖУ по фото блюда              |
-| Высокий   | UX-22   | PDF-экспорт аналитики (вместо Ctrl+P)     |
-| Средний   | UX-21   | Расчёт КБЖУ для позиций каталога через AI |
-| Средний   | Фаза 19 | AI-советник «Как добрать КБЖУ?»           |
-| Средний   | Фаза 22 | FatSecret API — база продуктов            |
+| Приоритет | Задача  | Описание                        |
+| --------- | ------- | ------------------------------- |
+| Высокий   | Фаза 25 | GigaChat как резерв DeepSeek    |
+| Средний   | Фаза 19 | AI-советник «Как добрать КБЖУ?» |
+| Средний   | Фаза 22 | FatSecret API — база продуктов  |
 
 Подробный roadmap со всеми фазами и UX-задачами: [ROADMAP.md](ROADMAP.md)
 

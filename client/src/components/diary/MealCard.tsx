@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Trash2, Clock, Pencil, Camera, Star, Flame, BookmarkPlus } from "lucide-react";
+import { Trash2, Clock, Pencil, Camera, Star, Flame, BookmarkPlus, Sparkles } from "lucide-react";
 import type { Meal } from "@shared/schema";
 import { MEAL_TYPE_COLORS, hungerColor } from "@/lib/diary-utils";
 
@@ -30,6 +30,22 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
   });
   const mealPhotos = photosData?.photos ?? [];
   const [lightboxId, setLightboxId] = useState<string | null>(null);
+
+  // UX-18: AI КБЖУ анализ по записи (доступен при наличии DeepSeek)
+  const [analyzeKbjuId, setAnalyzeKbjuId] = useState<number | null>(null);
+  const analyzeKbjuMutation = useMutation({
+    mutationFn: (mealId: number) => apiRequest("POST", `/api/meals/${mealId}/analyze-kbju`).then((r) => r.json()),
+    onSuccess: (data) => {
+      setAnalyzeKbjuId(null);
+      toast({ title: "КБЖУ рассчитан", description: data.note ?? undefined });
+      // Invalidate all day queries so MealCard re-renders with updated KBJU
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/days/") });
+    },
+    onError: (e: Error) => {
+      setAnalyzeKbjuId(null);
+      toast({ title: "Ошибка анализа", description: e.message, variant: "destructive" });
+    },
+  });
 
   const saveToCatalogMutation = useMutation({
     mutationFn: (mealId: number) =>
@@ -156,6 +172,28 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
                 }}
               />
             </label>
+            {/* UX-18: AI КБЖУ по записи — показывается если есть фото или нет КБЖУ */}
+            {(mealPhotos.length > 0 || meal.calories == null) && (meal.foodText || meal.drinkText) && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-violet-500"
+                onClick={() => {
+                  setAnalyzeKbjuId(meal.id);
+                  analyzeKbjuMutation.mutate(meal.id);
+                }}
+                disabled={analyzeKbjuMutation.isPending && analyzeKbjuId === meal.id}
+                title="Рассчитать КБЖУ через AI"
+                aria-label="Рассчитать КБЖУ через AI"
+                data-testid={`btn-analyze-kbju-${meal.id}`}
+              >
+                <Sparkles
+                  className={`h-4 w-4 ${
+                    analyzeKbjuMutation.isPending && analyzeKbjuId === meal.id ? "animate-pulse" : ""
+                  }`}
+                />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

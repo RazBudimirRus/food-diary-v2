@@ -1,9 +1,9 @@
 # 🗺 Food Diary V2 — RoadMap
 
 **Версия:** 2.6.0  
-**Дата обновления:** 5 июля 2026 (v2.22.1)  
+**Дата обновления:** 6 июля 2026 (v2.23.0)  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
-**Стек:** React 18 + Vite · Node.js 20 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
+**Стек:** React 18 + Vite · Node.js 22 + Express + TypeScript + SQLite · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
 
 ---
@@ -65,6 +65,7 @@
 | v2.21.0 · 2026-07-05 | BUG-02 счётчик воды | ✅ Реализовано | parseLiquidMl + mealWaterMl утилиты, migration 0008 (water_ml в meals), обновлён DiaryPage/excel/storage для нового поля, фазы 26/27 в ROADMAP → ✅, 291 тест |
 | v2.22.0 · 2026-07-05 | Фаза 21 + UX-22 + E2E fix | ✅ Реализовано | Фаза 21: GET /api/report/week + /month (Excel за неделю/месяц), кнопка «За месяц» в DiaryHeader. UX-22: GET /api/report/analytics-pdf + кнопка PDF в AnalyticsPage (многостраничный отчёт: обложка KPI, бар-чарт, таблица по дням). E2E: playwright.config.ts timeout 30s→60s + retries:1, waitForLoadState(«networkidle»), timeout 15s на expect. 15 новых тестов, 305 всего |
 | v2.22.1 · 2026-07-05 | Hotfix: кириллица в PDF | ✅ Реализовано | Встраивание Inter TTF (Regular + Bold, 398K + 406K) в Docker-образ через Dockerfile.api. Шрифты копируются из server/fonts/ → /app/server/fonts/ в production-образе. Fallback: runtime-загрузка с GitHub + Helvetica при отсутствии интернета. 305 тестов |
+| v2.23.0 · 2026-07-06 | UX-17/18/19/21/22b + BUG-04/05 | ✅ Реализовано | **UX-21**: AI-расчёт КБЖУ для позиций каталога (POST /api/catalog/:id/calculate-kbju, кнопка Sparkles в CatalogPage). **UX-17**: мультифото до 5 шт + превью в MealForm (уже было). **UX-18**: AI-расчёт КБЖУ по записи с фото (POST /api/meals/:id/analyze-kbju, кнопка Sparkles в MealCard). **UX-19**: фото-thumbnails в карточках + лайтбокс + Excel-экспорт (уже было). **UX-22b**: полноценный PDF-отчёт с 7 страницами и реальными графиками через chartjs-node-canvas (сон, КБЖУ, перерывы, голод/насыщение, активность, доп. метрики + таблица по дням). **BUG-04**: ClamAV depends_on condition: service_healthy. **BUG-05**: Node.js 20 → 22 в Dockerfile.api + Cairo/Pango зависимости. 8 новых тестов (UX-18 + UX-21), 313 всего |
 
 ---
 
@@ -2286,7 +2287,7 @@ GET /api/report/analytics-pdf?mode=range&start=2026-06-01&end=2026-06-28
 
 ## UX-22b — PDF аналитики с полноценными графиками (как в приложении)
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.23.0)
 > **Приоритет:** Средний
 > **Сложность:** Высокая
 > **Зависимость:** UX-22 (базовая PDF реализована v2.22.1)
@@ -3565,7 +3566,7 @@ app.get("/api/report/:date", ...)   // параметрический — вто
 
 ## Фаза 34 — API и Документация
 
-> **Статус:** 📋 Запланировано
+> **Статус:** ✅ Реализовано (v2.23.0)
 > **Приоритет:** Средний
 > **Сложность:** Низкая
 > **Источник:** Аудит: «API без документации»

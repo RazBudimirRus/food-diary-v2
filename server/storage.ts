@@ -421,6 +421,12 @@ export interface IStorage {
   ): (FoodCatalogItem & { entries: FoodCatalogEntry[] }) | null;
   deleteCatalogItem(userId: number, itemId: number): void;
   saveMealToCatalog(userId: number, mealId: number, name: string): FoodCatalogItem & { entries: FoodCatalogEntry[] };
+  // UX-21: update КБЖУ for a specific entry row
+  updateCatalogEntryKbju(
+    userId: number,
+    entryId: number,
+    data: { kcal: number; protein: number; fat: number; carbs: number },
+  ): void;
 
   // Phase 23 — Photos
   savePhoto(data: { id: string; userId: number; mealId?: number | null; s3Key: string; sizeBytes: number }): Photo;
@@ -1417,6 +1423,31 @@ class SqliteStorage implements IStorage {
     // entries cascade via FK
     db.delete(foodCatalogItems)
       .where(and(eq(foodCatalogItems.id, itemId), eq(foodCatalogItems.userId, userId)))
+      .run();
+  }
+
+  // UX-21: persist AI-calculated КБЖУ to a catalog entry
+  updateCatalogEntryKbju(
+    userId: number,
+    entryId: number,
+    data: { kcal: number; protein: number; fat: number; carbs: number },
+  ): void {
+    // Verify ownership via join
+    const entry = db
+      .select({ id: foodCatalogEntries.id, catalogItemId: foodCatalogEntries.catalogItemId })
+      .from(foodCatalogEntries)
+      .where(eq(foodCatalogEntries.id, entryId))
+      .get();
+    if (!entry) return;
+    const item = db
+      .select({ userId: foodCatalogItems.userId })
+      .from(foodCatalogItems)
+      .where(and(eq(foodCatalogItems.id, entry.catalogItemId), eq(foodCatalogItems.userId, userId)))
+      .get();
+    if (!item) return;
+    db.update(foodCatalogEntries)
+      .set({ kcal: data.kcal, protein: data.protein, fat: data.fat, carbs: data.carbs })
+      .where(eq(foodCatalogEntries.id, entryId))
       .run();
   }
 
