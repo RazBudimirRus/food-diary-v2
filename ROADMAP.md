@@ -3756,3 +3756,24 @@ INSERT INTO __drizzle_migrations (hash, created_at) VALUES
 **Приоритет:** Низкий (срок — январь 2027, не срочно)
 
 **TODO (до января 2027):** Обновить `Dockerfile.api` с `node:20-slim` на `node:22-slim`. Проверить совместимость всех зависимостей с Node 22 через `npm audit` + тесты.
+
+---
+
+## BUG-06 — idempotency_keys: отсутствуют колонки response_status / response_body
+
+**Проявление:** `POST /api/meals` → 500 `no such column: "response_status"`. Приём пищи не сохраняется.
+
+**Версия обнаружения:** v2.22.1 (2026-07-06)
+
+**Причина:** Таблица `idempotency_keys` на production-сервере была создана более ранней версией кода без колонок `response_status` и `response_body`. Миграция 0002 в Drizzle считалась применённой по hash, поэтому при деплое ALTER TABLE не выполнялся автоматически.
+
+**Решение (применено вручную на сервере 2026-07-06):**
+
+```sql
+ALTER TABLE idempotency_keys ADD COLUMN response_status INTEGER NOT NULL DEFAULT 200;
+ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}';
+```
+
+**Статус:** ✅ Исправлено вручную на production 2026-07-06
+
+**TODO (профилактика):** Рассмотреть добавление startup-проверки схемы критичных таблиц через PRAGMA table_info с алертом в лог при расхождении с ожидаемой схемой.
