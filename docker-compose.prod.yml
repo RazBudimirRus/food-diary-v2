@@ -49,7 +49,10 @@ services:
       - food_net
     depends_on:
       clamav:
-        condition: service_healthy
+        # service_started: API не блокируется на ClamAV healthcheck.
+        # ClamAV при первом запуске скачивает ~300MB баз — это занимает минуты.
+        # Код в s3.ts уже graceful: если сокет недоступен — скан пропускается.
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
