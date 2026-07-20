@@ -3778,3 +3778,34 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 **Статус:** ✅ Исправлено вручную на production 2026-07-06
 
 **TODO (профилактика):** Рассмотреть добавление startup-проверки схемы критичных таблиц через PRAGMA table_info с алертом в лог при расхождении с ожидаемой схемой.
+
+---
+
+## BUG-08: ClamAV — заблокированный IP / unhealthy контейнер
+
+**Статус:** 📋 Запланировано
+**Приоритет:** Низкий
+**Дата обнаружения:** 2026-07-20
+
+### Симптомы
+
+- `food_diary_clamav` показывает `unhealthy` в `docker ps`
+- FreshClam не может обновить вирусные базы: Cisco/Talos CDN блокирует IP VK Cloud (Amsterdam range)
+- Ошибка: `Forbidden; Blocked by CDN`, cf-ray `a1e4b8eabc6d9715-AMS`
+- Clamd при этом **запускается и работает** со старыми базами (`Database status OK`)
+- На работу API не влияет (код graceful: сокет недоступен → скан пропускается)
+
+### Варианты решения
+
+**Вариант А — зеркало FreshClam**
+
+- Прописать альтернативное зеркало баз в конфиге clamav
+- В `docker-compose.prod.yml` добавить env: `FRESHCLAM_DATABASE_MIRROR=database.clamav.net`
+- Или использовать unoffical mirror без гео-блокировки
+
+**Вариант Б — убрать ClamAV полностью**
+
+- Удалить сервис из `docker-compose.prod.yml`
+- Убрать graceful-вызов из `server/s3.ts`
+- Обоснование: приложение личное (1 пользователь), угроза минимальна
+- Вернуть при масштабировании на публичный доступ
