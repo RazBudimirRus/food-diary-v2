@@ -3890,3 +3890,18 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 - **Причина:** `onSelect` в `MealForm.tsx` заполнял `form.calories/protein/fat/carbs`, но payload при сохранении брал КБЖУ только из `kbjuResult` (результат кнопки "Рассчитать"). `kbjuResult` оставался `null` → КБЖУ не сохранялось.
 - **Фикс:** при выборе из каталога с ненулевым КБЖУ вызывается `setKbjuResult(...)` — КБЖУ попадает в payload сохранения и отображается в UI-блоке результата.
 - Файл: `client/src/components/diary/MealForm.tsx`
+
+---
+
+## Pending: S3 Admin расширения
+
+### UX-S3-1: Статистика объектов в бакете
+
+- Endpoint `GET /api/admin/s3-stats` — кол-во объектов в бакете, разбивка по пользователям (userId из ключа `photos/{userId}/...`)
+- В AdminPage: новая секция "S3 статистика" с таблицей userId → кол-во файлов → суммарный размер
+
+### UX-S3-2: Диагностика загрузки фото
+
+- Текущая кнопка "Проверить S3" тестирует PutObject/GetObject/DeleteObject синтетическим JPEG
+- Нужно добавить отдельный тест: реальная загрузка тестового файла и проверка что URL доступен
+- Если фото не загружается — разобраться с причиной (ACL, endpoint, CORS, presigned URL vs прямой URL)
