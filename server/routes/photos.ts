@@ -49,8 +49,27 @@ export function registerPhotosRoutes(app: Express) {
     }
   });
 
-  /** GET /api/photos/:photo_id — proxy, no direct S3 URL */
-  app.get("/api/photos/:photo_id", requireAuth, async (req: AuthRequest, res) => {
+  /** GET /api/photos/:photo_id — proxy, no direct S3 URL.
+   * Поддерживает авторизацию через ?token= query param (для <img src>).
+   */
+  app.get("/api/photos/:photo_id", async (req: AuthRequest, res) => {
+    // Авторизация: Bearer header или ?token= query param (для <img src>)
+    const { verifyToken } = await import("../auth");
+    const header = req.headers.authorization;
+    const bearerToken = header?.startsWith("Bearer ") ? header.slice(7) : null;
+    const queryToken = typeof req.query.token === "string" ? req.query.token : null;
+    const rawToken = bearerToken ?? queryToken;
+    if (!rawToken) return res.status(401).json({ error: "Не авторизован" });
+    let userId: number;
+    try {
+      const payload = verifyToken(rawToken);
+      userId = payload.userId;
+      const user = storage.getUserById(userId);
+      if (!user) return res.status(401).json({ error: "Пользователь не найден" });
+      req.user = user;
+    } catch {
+      return res.status(401).json({ error: "Токен недействителен или истёк" });
+    }
     if (!isS3Configured()) return res.status(503).json({ error: "S3 не настроен" });
     const photo = storage.getPhoto(paramValue(req.params.photo_id));
     if (!photo) return res.status(404).json({ error: "Фото не найдено" });

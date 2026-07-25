@@ -3,7 +3,7 @@
 // to catalog). Extracted verbatim from DiaryPage.tsx (29.4 refactor).
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAccessToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Trash2, Clock, Pencil, Camera, Star, Flame, BookmarkPlus, Sparkles } from "lucide-react";
 import type { Meal } from "@shared/schema";
 import { MEAL_TYPE_COLORS, hungerColor } from "@/lib/diary-utils";
+
+function photoSrc(id: string) {
+  const token = getAccessToken();
+  return token ? `/api/photos/${id}?token=${encodeURIComponent(token)}` : `/api/photos/${id}`;
+}
 
 interface MealCardProps {
   meal: Meal;
@@ -354,12 +359,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
                 onClick={() => setLightboxId(p.id)}
                 title="Открыть фото"
               >
-                <img
-                  src={`/api/photos/${p.id}`}
-                  alt="Фото блюда"
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
+                <img src={photoSrc(p.id)} alt="Фото блюда" className="w-full h-full object-cover" loading="lazy" />
               </button>
             ))}
           </div>
@@ -372,7 +372,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
             onClick={() => setLightboxId(null)}
           >
             <img
-              src={`/api/photos/${lightboxId}`}
+              src={lightboxId ? photoSrc(lightboxId) : ""}
               alt="Фото"
               className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
               onClick={(e) => e.stopPropagation()}
