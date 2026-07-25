@@ -97,7 +97,7 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
       const fd = new FormData();
       fd.append("photo", file);
       fd.append("mealId", String(mealId));
-      const r = await fetch("/api/photos/upload", { method: "POST", body: fd });
+      const r = await apiRequest("POST", "/api/photos/upload", fd);
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Ошибка загрузки");
       return j;

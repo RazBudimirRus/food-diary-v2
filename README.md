@@ -3,7 +3,7 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.24.4-blue)
+![Version](https://img.shields.io/badge/version-2.24.5-blue)
 ![Tests](https://img.shields.io/badge/tests-313%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -169,6 +169,7 @@ Prometheus metrics: `https://fooddiary.razbudimir.com/metrics`
 
 | Версия  | Дата       | Что вошло                                                                                                                      |
 | ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| v2.24.5 | 2026-07-25 | FIX: загрузка фото — CSRF + FormData в apiRequest, 313 тестов                                                                  |
 | v2.24.4 | 2026-07-25 | UX-S3-1 статистика бакета по пользователям, UX-S3-2 реальный upload тест, 313 тестов                                           |
 | v2.24.3 | 2026-07-25 | BUG-09: перенос КБЖУ из каталога — setKbjuResult при onSelect, 313 тестов                                                      |
 | v2.24.2 | 2026-07-25 | HOTFIX: system role prompt, deepseek-raw-test endpoint, fix tests messages[1], 313 тестов                                      |

@@ -177,7 +177,7 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
               const fd = new FormData();
               fd.append("photo", photo);
               fd.append("mealId", String(_result.id));
-              await fetch("/api/photos/upload", { method: "POST", body: fd });
+              await apiRequest("POST", "/api/photos/upload", fd);
             }),
           );
         } catch {

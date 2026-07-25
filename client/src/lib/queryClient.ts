@@ -73,7 +73,8 @@ export async function apiRequest(
   extraHeaders?: Record<string, string>,
 ): Promise<Response> {
   const url = `${API_BASE}${path}`;
-  const headers: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
+  const isFormData = body instanceof FormData;
+  const headers: Record<string, string> = body && !isFormData ? { "Content-Type": "application/json" } : {};
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
@@ -86,7 +87,7 @@ export async function apiRequest(
   const res = await fetch(url, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: isFormData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
     credentials: "include",
   });
 
@@ -95,7 +96,7 @@ export async function apiRequest(
   const refreshed = await refreshAccessToken();
   if (!refreshed) return res;
 
-  const retryHeaders: Record<string, string> = body ? { "Content-Type": "application/json" } : {};
+  const retryHeaders: Record<string, string> = body && !isFormData ? { "Content-Type": "application/json" } : {};
   retryHeaders.Authorization = `Bearer ${refreshed.accessToken}`;
   if (!SAFE_METHODS.has(method.toUpperCase())) {
     const csrfToken = getCsrfToken();
@@ -105,7 +106,7 @@ export async function apiRequest(
   return fetch(url, {
     method,
     headers: retryHeaders,
-    body: body ? JSON.stringify(body) : undefined,
+    body: isFormData ? (body as FormData) : body ? JSON.stringify(body) : undefined,
     credentials: "include",
   });
 }
