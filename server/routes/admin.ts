@@ -135,6 +135,42 @@ export function registerAdminRoutes(app: Express) {
     res.status(allOk ? 200 : 500).json({ ok: allOk, steps });
   });
 
+  /** GET /api/admin/s3-stats — UX-S3-1: статистика объектов в бакете по пользователям */
+  app.get("/api/admin/s3-stats", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    const { isS3Configured, listBucketStats } = await import("../s3");
+    if (!isS3Configured()) {
+      return res.status(503).json({ ok: false, detail: "S3 не настроен" });
+    }
+    try {
+      const stats = await listBucketStats();
+      // Обогащаем userId именами пользователей из БД
+      const users = storage.listUsers();
+      const userMap = new Map(users.map((u) => [u.id, u.username]));
+      const byUser = stats.byUser.map((s) => ({
+        ...s,
+        username: s.userId !== null ? (userMap.get(s.userId) ?? `user#${s.userId}`) : "—",
+      }));
+      res.json({ ...stats, byUser });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, detail: e.message });
+    }
+  });
+
+  /** POST /api/admin/s3-upload-test — UX-S3-2: реальный upload/download/delete тест */
+  app.post("/api/admin/s3-upload-test", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    const { isS3Configured, runUploadTest } = await import("../s3");
+    if (!isS3Configured()) {
+      return res.status(503).json({ ok: false, detail: "S3 не настроен" });
+    }
+    try {
+      const result = await runUploadTest();
+      const allOk = result.put.ok && result.get.ok && result.delete.ok;
+      res.status(allOk ? 200 : 500).json({ ok: allOk, ...result });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, detail: e.message });
+    }
+  });
+
   /** POST /api/admin/deepseek-raw-test — получить raw-ответ DeepSeek для диагностики */
   app.post("/api/admin/deepseek-raw-test", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
     const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";

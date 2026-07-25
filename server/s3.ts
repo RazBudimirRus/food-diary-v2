@@ -3,7 +3,13 @@
  * Сервер всегда проксирует — прямые URL клиенту не отдаются.
  */
 
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
 import sharp from "sharp";
 import { Readable } from "stream";
 import net from "net";
@@ -173,4 +179,132 @@ export function buildPhotoKey(userId: number, photoId: string): string {
   const year = now.getUTCFullYear();
   const month = String(now.getUTCMonth() + 1).padStart(2, "0");
   return `photos/${userId}/${year}/${month}/${photoId}.webp`;
+}
+
+/**
+ * UX-S3-1: Перечисляет все объекты в бакете и возвращает статистику по пользователям.
+ * Ключи имеют формат photos/{userId}/...
+ * Возвращает массив { userId, count, totalBytes } + итого по бакету.
+ */
+export interface S3UserStat {
+  userId: number | null; // null = объекты вне папки photos/
+  count: number;
+  totalBytes: number;
+}
+
+export interface S3BucketStats {
+  totalObjects: number;
+  totalBytes: number;
+  byUser: S3UserStat[];
+  truncated: boolean; // true если объектов > 10 000
+}
+
+export async function listBucketStats(): Promise<S3BucketStats> {
+  const client = getClient();
+  const byUser = new Map<string, { count: number; totalBytes: number }>();
+  let totalObjects = 0;
+  let totalBytes = 0;
+  let truncated = false;
+  let continuationToken: string | undefined;
+
+  do {
+    const resp = await client.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET,
+        ContinuationToken: continuationToken,
+        MaxKeys: 1000,
+      }),
+    );
+
+    for (const obj of resp.Contents ?? []) {
+      const key = obj.Key ?? "";
+      const size = obj.Size ?? 0;
+      totalObjects++;
+      totalBytes += size;
+
+      // Парсим userId из ключа photos/{userId}/...
+      const match = key.match(/^photos\/(\d+)\//);
+      const userKey = match ? match[1] : "__other__";
+
+      const entry = byUser.get(userKey) ?? { count: 0, totalBytes: 0 };
+      entry.count++;
+      entry.totalBytes += size;
+      byUser.set(userKey, entry);
+    }
+
+    truncated = resp.IsTruncated ?? false;
+    continuationToken = resp.NextContinuationToken;
+
+    // Защита: не более 10 страниц (10 000 объектов)
+    if (totalObjects >= 10_000) {
+      truncated = true;
+      break;
+    }
+  } while (truncated && continuationToken);
+
+  const byUserArr: S3UserStat[] = Array.from(byUser.entries())
+    .map(([k, v]) => ({
+      userId: k === "__other__" ? null : Number(k),
+      count: v.count,
+      totalBytes: v.totalBytes,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return { totalObjects, totalBytes, byUser: byUserArr, truncated };
+}
+
+/**
+ * UX-S3-2: Загружает тестовый PNG в бакет, затем пытается скачать его обратно через сервер.
+ * Возвращает результат каждого шага + размер загруженного файла.
+ */
+export interface S3UploadTestResult {
+  put: { ok: boolean; durationMs: number; sizeBytes?: number; detail?: string };
+  get: { ok: boolean; durationMs: number; sizeBytes?: number; detail?: string };
+  delete: { ok: boolean; durationMs: number; detail?: string };
+  key: string;
+}
+
+export async function runUploadTest(): Promise<S3UploadTestResult> {
+  const key = buildPhotoKey(0, `upload-test-${Date.now()}`);
+  const result: S3UploadTestResult = {
+    put: { ok: false, durationMs: 0 },
+    get: { ok: false, durationMs: 0 },
+    delete: { ok: false, durationMs: 0 },
+    key,
+  };
+
+  // PUT — реальный 1×1 white WebP через sharp pipeline
+  const t0 = Date.now();
+  try {
+    const buf = await sharp({
+      create: { width: 1, height: 1, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    })
+      .webp()
+      .toBuffer();
+    const sizeBytes = await uploadPhoto(key, buf, "image/webp");
+    result.put = { ok: true, durationMs: Date.now() - t0, sizeBytes };
+  } catch (e: any) {
+    result.put = { ok: false, durationMs: Date.now() - t0, detail: e.message };
+    return result; // нет смысла продолжать
+  }
+
+  // GET — скачиваем обратно
+  const t1 = Date.now();
+  try {
+    const buf = await downloadPhoto(key);
+    result.get = { ok: true, durationMs: Date.now() - t1, sizeBytes: buf.length };
+  } catch (e: any) {
+    result.get = { ok: false, durationMs: Date.now() - t1, detail: e.message };
+  }
+
+  // DELETE — убираем тестовый объект
+  const t2 = Date.now();
+  try {
+    await deleteFromS3(key);
+    result.delete = { ok: true, durationMs: Date.now() - t2 };
+  } catch (e: any) {
+    result.delete = { ok: false, durationMs: Date.now() - t2, detail: e.message };
+  }
+
+  return result;
 }

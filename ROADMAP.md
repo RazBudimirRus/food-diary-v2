@@ -3905,3 +3905,20 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 - Текущая кнопка "Проверить S3" тестирует PutObject/GetObject/DeleteObject синтетическим JPEG
 - Нужно добавить отдельный тест: реальная загрузка тестового файла и проверка что URL доступен
 - Если фото не загружается — разобраться с причиной (ACL, endpoint, CORS, presigned URL vs прямой URL)
+
+---
+
+## v2.24.4 — 2026-07-25
+
+### UX-S3-1: Статистика S3 бакета по пользователям
+
+- `GET /api/admin/s3-stats` — ListObjectsV2 по всему бакету, разбивка по userId из ключей `photos/{userId}/...`
+- Обогащение username из БД через `storage.listUsers()`
+- AdminPage: новая карточка "S3 статистика бакета" — таблица userId/username/файлов/размер, итого, флаг truncated при >10 000 объектов
+
+### UX-S3-2: Реальный тест загрузки фото
+
+- `POST /api/admin/s3-upload-test` — загружает реальный 1×1 WebP через тот же `uploadPhoto()` pipeline (sharp → PutObject), затем GetObject, DeleteObject
+- Показывает время каждого шага и размер файла
+- AdminPage: новая карточка "S3 загрузка (реальный тест)"
+- Отличие от `/api/admin/s3-test`: использует тот же код что и фото пользователей — выявляет реальные проблемы pipeline
