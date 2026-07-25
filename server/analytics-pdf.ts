@@ -19,7 +19,6 @@ import fs from "node:fs";
 import path from "node:path";
 import https from "node:https";
 import type { Day, Meal } from "@shared/schema";
-// @ts-expect-error - chartjs-node-canvas types may not resolve perfectly in all environments
 import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import { Chart } from "chart.js";
 import type { ChartConfiguration } from "chart.js";

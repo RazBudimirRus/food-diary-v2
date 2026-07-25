@@ -112,7 +112,7 @@ ${userInput}
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "deepseek-chat",
+      model: "deepseek-v4-flash", // deepseek-chat deprecated 2026-07-24 → deepseek-v4-pro or deepseek-v4-flash
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
       max_tokens: 300,

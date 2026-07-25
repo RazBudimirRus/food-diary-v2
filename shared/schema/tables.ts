@@ -240,3 +240,17 @@ export const auditLog = sqliteTable("audit_log", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+// ─── Client Error Log ──────────────────────────────────────────────────────────
+export const clientErrors = sqliteTable("client_errors", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id"), // nullable — может быть до авторизации
+  message: text("message").notNull(),
+  stack: text("stack"),
+  url: text("url"),
+  userAgent: text("user_agent"),
+  extra: text("extra"), // JSON: componentStack, context и пр.
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});

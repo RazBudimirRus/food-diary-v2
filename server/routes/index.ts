@@ -14,6 +14,7 @@ import { registerDoctorRoutes } from "./doctor";
 import { registerPhotosRoutes } from "./photos";
 import { registerCatalogRoutes } from "./catalog";
 import { registerPushRoutes } from "./push";
+import { clientErrorsRouter } from "./client-errors";
 
 export function registerRoutes(httpServer: Server, app: Express) {
   app.use(cookieParser());
@@ -30,6 +31,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
   registerPhotosRoutes(app);
   registerCatalogRoutes(app);
   registerPushRoutes(app);
+  app.use("/api/client-errors", clientErrorsRouter);
 
   // ── Misc ─────────────────────────────────────────────────────────────
 

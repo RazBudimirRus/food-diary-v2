@@ -45,6 +45,7 @@ import {
   photos,
   idempotencyKeys,
   auditLog,
+  clientErrors,
 } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskToday } from "@shared/dates";
 import {
@@ -1602,6 +1603,38 @@ class SqliteStorage implements IStorage {
       .limit(limit);
 
     return query.all();
+  }
+
+  // ── Client Error Log ────────────────────────────────────────────────────────
+
+  addClientError(data: {
+    userId?: number | null;
+    message: string;
+    stack?: string | null;
+    url?: string | null;
+    userAgent?: string | null;
+    extra?: string | null;
+  }): void {
+    // Insert new error
+    db.insert(clientErrors)
+      .values({
+        userId: data.userId ?? null,
+        message: data.message.slice(0, 1000),
+        stack: data.stack ? data.stack.slice(0, 5000) : null,
+        url: data.url ? data.url.slice(0, 500) : null,
+        userAgent: data.userAgent ? data.userAgent.slice(0, 300) : null,
+        extra: data.extra ? data.extra.slice(0, 2000) : null,
+      })
+      .run();
+
+    // Retention: delete records older than 7 days
+    db.delete(clientErrors)
+      .where(sql`${clientErrors.createdAt} < datetime('now', '-7 days')`)
+      .run();
+  }
+
+  getClientErrors(limit = 200): Array<typeof clientErrors.$inferSelect> {
+    return db.select().from(clientErrors).orderBy(desc(clientErrors.createdAt)).limit(limit).all();
   }
 }
 

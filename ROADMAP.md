@@ -3834,3 +3834,22 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 - `client/src/components/diary/MealForm.tsx` — обработчик выбора из каталога
 - `client/src/components/catalog/CatalogPicker.tsx` (или аналог) — что именно передаётся обратно
 - Убедиться, что `onSelect` callback передаёт полный объект каталога, а не только `name`
+
+---
+
+## v2.24.0 — 2026-07-25
+
+### BUG-fix: DeepSeek модель переименована
+
+- `deepseek-chat` → `deepseek-v4-flash` (Cisco устарел с 2026-07-24)
+- Файл: `server/deepseek.ts`
+
+### Клиентский лог ошибок (AdminPage → таб «Ошибки»)
+
+- Migration 0009: таблица `client_errors` (retention 7 дней)
+- `POST /api/client-errors` — публичный endpoint (rate limit 20/мин), пишет ошибку в БД
+- `GET /api/client-errors/admin` — только для admin
+- `client/src/lib/errorReporter.ts` — throttle-отправка ошибок
+- `client/src/components/ErrorBoundary.tsx` — React ErrorBoundary с отправкой
+- `client/src/main.tsx` — `window.onerror` + `window.onunhandledrejection`
+- `AdminPage.tsx` — новый таб «Ошибки» с таблицей и авто-refresh раз в минуту
