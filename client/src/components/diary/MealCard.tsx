@@ -40,7 +40,7 @@ function PhotoThumb({ id, onClick }: { id: string; onClick: () => void }) {
   );
 }
 
-function LightboxPhoto({ id, onClose }: { id: string; onClose: () => void }) {
+function LightboxPhoto({ id, onClose, onDelete }: { id: string; onClose: () => void; onDelete: () => void }) {
   const src = usePhotoUrl(id);
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={onClose}>
@@ -60,6 +60,16 @@ function LightboxPhoto({ id, onClose }: { id: string; onClose: () => void }) {
         aria-label="Закрыть"
       >
         ×
+      </button>
+      <button
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-lg bg-destructive/90 hover:bg-destructive px-4 py-2 text-sm font-medium text-white transition-colors"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        aria-label="Удалить фото"
+      >
+        🗑 Удалить фото
       </button>
     </div>
   );
@@ -135,6 +145,24 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
       toast({ title: "Добавлено в каталог" });
     },
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
+  });
+
+  const deletePhotoMutation = useMutation({
+    mutationFn: async (photoId: string) => {
+      const r = await apiRequest("DELETE", `/api/photos/${photoId}`);
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error((j as { error?: string }).error || "Ошибка удаления");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/meals/${meal.id}/photos`] });
+      setLightboxId(null);
+      toast({ title: "Фото удалено" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Ошибка", description: e.message, variant: "destructive" });
+    },
   });
 
   const uploadPhotoMutation = useMutation({
@@ -398,7 +426,13 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
         )}
 
         {/* UX-19: lightbox */}
-        {lightboxId && <LightboxPhoto id={lightboxId} onClose={() => setLightboxId(null)} />}
+        {lightboxId && (
+          <LightboxPhoto
+            id={lightboxId}
+            onClose={() => setLightboxId(null)}
+            onDelete={() => deletePhotoMutation.mutate(lightboxId)}
+          />
+        )}
       </CardContent>
     </Card>
   );
