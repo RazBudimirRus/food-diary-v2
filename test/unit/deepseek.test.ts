@@ -164,11 +164,11 @@ describe("analyzeNutrition", () => {
     mockSuccessResponse(json);
     const result = await analyzeNutrition("Яблоко", "Чай");
     expect(result.calories).toBe(50);
-    // Verify prompt included both food and drink
+    // Verify prompt included both food and drink (in user message = messages[1])
     const fetchCall = mockFetch.mock.calls[0];
     const body = JSON.parse(fetchCall[1].body as string) as { messages: Array<{ content: string }> };
-    expect(body.messages[0].content).toContain("Еда: Яблоко");
-    expect(body.messages[0].content).toContain("Напитки: Чай");
+    expect(body.messages[1].content).toContain("Еда: Яблоко");
+    expect(body.messages[1].content).toContain("Напитки: Чай");
   });
 
   it("includes dietary restrictions in prompt when provided", async () => {
@@ -177,7 +177,8 @@ describe("analyzeNutrition", () => {
     mockSuccessResponse(json);
     await analyzeNutrition("Курица", undefined, "без лактозы");
     const body = JSON.parse(mockFetch.mock.calls[0][1].body as string) as { messages: Array<{ content: string }> };
-    expect(body.messages[0].content).toContain("без лактозы");
+    // dietary restrictions are in user message = messages[1]
+    expect(body.messages[1].content).toContain("без лактозы");
   });
 
   it("truncates note longer than 300 chars", async () => {

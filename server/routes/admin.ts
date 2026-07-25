@@ -135,6 +135,44 @@ export function registerAdminRoutes(app: Express) {
     res.status(allOk ? 200 : 500).json({ ok: allOk, steps });
   });
 
+  /** POST /api/admin/deepseek-raw-test — получить raw-ответ DeepSeek для диагностики */
+  app.post("/api/admin/deepseek-raw-test", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
+    const { decryptSecret } = await import("../auth");
+    const { storage: st } = await import("../storage");
+    const secret = st.getSecret(0, "__deepseek_api_key__");
+    if (!secret) return res.status(400).json({ error: "DEEPSEEK_API_KEY не настроен" });
+    let apiKey: string;
+    try {
+      apiKey = decryptSecret(secret.encryptedValue, secret.iv);
+    } catch {
+      return res.status(500).json({ error: "Ошибка дешифровки ключа" });
+    }
+    try {
+      const r = await fetch(DEEPSEEK_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: "deepseek-v4-flash",
+          messages: [
+            { role: "system", content: "You are a nutrition analyst. Respond with ONLY valid JSON." },
+            {
+              role: "user",
+              content:
+                'Estimate: Еда: два чизбургера\nRespond: {"calories": <int>, "protein": <float>, "fat": <float>, "carbs": <float>, "note": "<str>"}',
+            },
+          ],
+          temperature: 0.1,
+          max_tokens: 400,
+        }),
+      });
+      const raw = await r.text();
+      res.json({ httpStatus: r.status, raw });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   /** POST /api/admin/users/:id/set-role (admin only) */
   app.post("/api/admin/users/:id/set-role", requireAuth, requireAdmin, (req: AuthRequest, res) => {
     const userId = parseInt(paramValue(req.params.id), 10);

@@ -3868,3 +3868,15 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
   3. Улучшена логика fallback-парсинга (non-greedy regex loop)
   4. Логирование raw content при ошибке парсинга (`console.error`)
 - `max_tokens`: 300 → 400 (запас для JSON ответа в v4-flash)
+
+---
+
+## v2.24.2 — 2026-07-25 (hotfix)
+
+### HOTFIX: deepseek-v4-flash не отдавал JSON — второй подход
+
+- Добавлена `system` роль с жёстким требованием JSON-only ответа
+- Убран `response_format: json_object` (не поддерживается стабильно)
+- Промпт переведён на английский для надёжного следования инструкции
+- Добавлен диагностический endpoint `POST /api/admin/deepseek-raw-test`
+- Обновлены тесты: `messages[0]` = system, `messages[1]` = user

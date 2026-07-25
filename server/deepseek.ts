@@ -89,21 +89,18 @@ export async function analyzeNutrition(
     ? `\nОграничения питания пользователя: ${dietaryRestrictions}\nУчитывай их при анализе и в примечании.\n`
     : "";
 
-  const prompt = `Ты диетолог-аналитик. Оцени калорийность и нутриенты приёма пищи.${restrictionsSection}
+  // system role forces JSON-only output regardless of model thinking mode
+  const systemPrompt = `You are a nutrition analyst. Always respond with ONLY a valid JSON object — no markdown, no explanations, no text outside JSON.`;
 
-Пользователь написал:
+  const userPrompt = `Estimate the calories and macronutrients for this meal.${restrictionsSection}
+
+User input:
 ${userInput}
 
-Ответь СТРОГО в формате JSON (без markdown, без пояснений вне JSON):
-{
-  "calories": <число ккал, целое>,
-  "protein": <белки в граммах, одно десятичное>,
-  "fat": <жиры в граммах, одно десятичное>,
-  "carbs": <углеводы в граммах, одно десятичное>,
-  "note": "<краткое пояснение по оценке, 1-2 предложения>"
-}
+Respond with ONLY this JSON (no markdown fences, no extra text before or after):
+{"calories": <integer kcal>, "protein": <grams one decimal>, "fat": <grams one decimal>, "carbs": <grams one decimal>, "note": "<1-2 sentence explanation in Russian>"}
 
-Если точное количество неизвестно — дай среднюю оценку. Напитки (чай, кофе без добавок) — 0 ккал.`;
+If exact amounts are unknown, provide a reasonable estimate. Plain water and unsweetened tea/coffee = 0 kcal.`;
 
   const response = await fetch(DEEPSEEK_API_URL, {
     method: "POST",
@@ -112,11 +109,13 @@ ${userInput}
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "deepseek-v4-flash", // deepseek-chat deprecated 2026-07-24 → deepseek-v4-pro or deepseek-v4-flash
-      messages: [{ role: "user", content: prompt }],
+      model: "deepseek-v4-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
       temperature: 0.1,
       max_tokens: 400,
-      response_format: { type: "json_object" }, // force JSON output, suppress thinking/markdown
     }),
   });
 
