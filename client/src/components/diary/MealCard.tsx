@@ -2,8 +2,9 @@
 // hunger/fullness, КБЖУ data, photo upload, and action buttons (edit, delete, save
 // to catalog). Extracted verbatim from DiaryPage.tsx (29.4 refactor).
 import { useState } from "react";
+import { usePhotoUrl } from "@/hooks/use-photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest, getAccessToken } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,16 +14,55 @@ import { Trash2, Clock, Pencil, Camera, Star, Flame, BookmarkPlus, Sparkles } fr
 import type { Meal } from "@shared/schema";
 import { MEAL_TYPE_COLORS, hungerColor } from "@/lib/diary-utils";
 
-function photoSrc(id: string) {
-  const token = getAccessToken();
-  return token ? `/api/photos/${id}?token=${encodeURIComponent(token)}` : `/api/photos/${id}`;
-}
-
 interface MealCardProps {
   meal: Meal;
   onEdit: (meal: Meal) => void;
   onDelete: (id: number) => void;
   isMobile: boolean;
+}
+
+/** Загружает фото через apiRequest → blob URL (токен не протухает). */
+function PhotoThumb({ id, onClick }: { id: string; onClick: () => void }) {
+  const src = usePhotoUrl(id);
+  return (
+    <button
+      type="button"
+      className="w-14 h-14 rounded-md border overflow-hidden hover:opacity-80 transition-opacity bg-muted flex items-center justify-center"
+      onClick={onClick}
+      title="Открыть фото"
+    >
+      {src ? (
+        <img src={src} alt="Фото блюда" className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-xs text-muted-foreground">...</span>
+      )}
+    </button>
+  );
+}
+
+function LightboxPhoto({ id, onClose }: { id: string; onClose: () => void }) {
+  const src = usePhotoUrl(id);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={onClose}>
+      {src ? (
+        <img
+          src={src}
+          alt="Фото"
+          className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span className="text-white text-sm">Загрузка...</span>
+      )}
+      <button
+        className="absolute top-4 right-4 text-white text-2xl font-bold leading-none"
+        onClick={onClose}
+        aria-label="Закрыть"
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCardProps) {
@@ -352,40 +392,13 @@ export function MealCard({ meal, onEdit, onDelete, isMobile: _isMobile }: MealCa
         {mealPhotos.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {mealPhotos.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className="w-14 h-14 rounded-md border overflow-hidden hover:opacity-80 transition-opacity"
-                onClick={() => setLightboxId(p.id)}
-                title="Открыть фото"
-              >
-                <img src={photoSrc(p.id)} alt="Фото блюда" className="w-full h-full object-cover" loading="lazy" />
-              </button>
+              <PhotoThumb key={p.id} id={p.id} onClick={() => setLightboxId(p.id)} />
             ))}
           </div>
         )}
 
         {/* UX-19: lightbox */}
-        {lightboxId && (
-          <div
-            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
-            onClick={() => setLightboxId(null)}
-          >
-            <img
-              src={lightboxId ? photoSrc(lightboxId) : ""}
-              alt="Фото"
-              className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
-            <button
-              className="absolute top-4 right-4 text-white text-2xl font-bold leading-none"
-              onClick={() => setLightboxId(null)}
-              aria-label="Закрыть"
-            >
-              ×
-            </button>
-          </div>
-        )}
+        {lightboxId && <LightboxPhoto id={lightboxId} onClose={() => setLightboxId(null)} />}
       </CardContent>
     </Card>
   );
