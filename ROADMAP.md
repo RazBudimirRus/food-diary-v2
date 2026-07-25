@@ -3880,3 +3880,13 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 - Промпт переведён на английский для надёжного следования инструкции
 - Добавлен диагностический endpoint `POST /api/admin/deepseek-raw-test`
 - Обновлены тесты: `messages[0]` = system, `messages[1]` = user
+
+---
+
+## v2.24.3 — 2026-07-25 (bugfix)
+
+### BUG-09: Перенос КБЖУ из каталога в приём пищи
+
+- **Причина:** `onSelect` в `MealForm.tsx` заполнял `form.calories/protein/fat/carbs`, но payload при сохранении брал КБЖУ только из `kbjuResult` (результат кнопки "Рассчитать"). `kbjuResult` оставался `null` → КБЖУ не сохранялось.
+- **Фикс:** при выборе из каталога с ненулевым КБЖУ вызывается `setKbjuResult(...)` — КБЖУ попадает в payload сохранения и отображается в UI-блоке результата.
+- Файл: `client/src/components/diary/MealForm.tsx`

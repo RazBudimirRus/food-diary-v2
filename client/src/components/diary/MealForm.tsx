@@ -623,6 +623,16 @@ export function MealForm({ open, onOpenChange, date, defaultDate, editingMeal, o
             fat: totalFat || undefined,
             carbs: totalCarbs || undefined,
           }));
+          // BUG-09 fix: populate kbjuResult so КБЖУ is included in save payload
+          if (totalKcal || totalProtein || totalFat || totalCarbs) {
+            setKbjuResult({
+              calories: totalKcal,
+              protein: totalProtein,
+              fat: totalFat,
+              carbs: totalCarbs,
+              note: `Перенесено из каталога: ${item.name}`,
+            });
+          }
         }}
       />
     </>
