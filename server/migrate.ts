@@ -60,6 +60,26 @@ function applyGuardedDDL(sqlite: InstanceType<typeof Database>): void {
     console.info("[migrate] Applying guarded DDL: meals.water_ml");
     sqlite.exec("ALTER TABLE meals ADD COLUMN water_ml real;");
   }
+
+  // 0009: client_errors table (retention 7 days)
+  const tables = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[];
+  if (!tables.some((t) => t.name === "client_errors")) {
+    console.info("[migrate] Applying guarded DDL: client_errors table");
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS client_errors (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER,
+        message     TEXT NOT NULL,
+        stack       TEXT,
+        url         TEXT,
+        user_agent  TEXT,
+        extra       TEXT,
+        created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_client_errors_created_at ON client_errors (created_at);
+      CREATE INDEX IF NOT EXISTS idx_client_errors_user_id    ON client_errors (user_id);
+    `);
+  }
 }
 
 export function runMigrations(dbPath: string): void {
