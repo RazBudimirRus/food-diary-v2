@@ -115,7 +115,8 @@ ${userInput}
       model: "deepseek-v4-flash", // deepseek-chat deprecated 2026-07-24 → deepseek-v4-pro or deepseek-v4-flash
       messages: [{ role: "user", content: prompt }],
       temperature: 0.1,
-      max_tokens: 300,
+      max_tokens: 400,
+      response_format: { type: "json_object" }, // force JSON output, suppress thinking/markdown
     }),
   });
 
@@ -133,15 +134,42 @@ ${userInput}
     };
   };
 
-  const content = data.choices?.[0]?.message?.content ?? "";
+  const rawContent = data.choices?.[0]?.message?.content ?? "";
 
-  // Extract JSON from response (may have markdown fences)
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("DeepSeek вернул неожиданный формат ответа");
+  // Strip <think>...</think> blocks (deepseek-v4-flash thinking mode)
+  const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+  // Extract JSON from response (may have markdown fences or surrounding text).
+  // Greedy match captures the full outermost object (handles nested {"note": "..."} etc.)
+  const greedyMatch = content.match(/\{[\s\S]*\}/);
+
+  let parsed: NutritionResult | null = null;
+
+  if (greedyMatch) {
+    try {
+      parsed = JSON.parse(greedyMatch[0]) as NutritionResult;
+    } catch {
+      // If greedy match grabbed extra text (e.g. two JSON blobs), scan non-greedy matches
+      const nonGreedyRegex = /\{[\s\S]*?\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = nonGreedyRegex.exec(content)) !== null) {
+        try {
+          const candidate = JSON.parse(m[0]) as NutritionResult;
+          if (candidate.calories !== undefined) {
+            parsed = candidate;
+            break;
+          }
+        } catch {
+          // continue
+        }
+      }
+    }
   }
 
-  const parsed = JSON.parse(jsonMatch[0]) as NutritionResult;
+  if (!parsed) {
+    console.error("[deepseek] Unexpected response format. Raw content:", rawContent.slice(0, 500));
+    throw new Error("DeepSeek вернул неожиданный формат ответа");
+  }
 
   // Validate and sanitize
   const tokensIn = Number(data.usage?.prompt_tokens ?? 0);

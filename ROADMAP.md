@@ -3853,3 +3853,18 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 - `client/src/components/ErrorBoundary.tsx` — React ErrorBoundary с отправкой
 - `client/src/main.tsx` — `window.onerror` + `window.onunhandledrejection`
 - `AdminPage.tsx` — новый таб «Ошибки» с таблицей и авто-refresh раз в минуту
+
+---
+
+## v2.24.1 — 2026-07-25 (hotfix)
+
+### HOTFIX: deepseek-v4-flash возвращает thinking mode
+
+- `deepseek-v4-flash` при стандартном запросе включает `<think>...</think>` блоки
+- Regex `\{[\s\S]*\}` захватывал JSON внутри think-блока (мог быть промежуточный JSON, не финальный)
+- **Исправления в `server/deepseek.ts`:**
+  1. Добавлен стриппинг `<think>...</think>` блоков перед парсингом
+  2. Добавлен `response_format: { type: "json_object" }` — API принудительно отдаёт JSON без markdown и thinking
+  3. Улучшена логика fallback-парсинга (non-greedy regex loop)
+  4. Логирование raw content при ошибке парсинга (`console.error`)
+- `max_tokens`: 300 → 400 (запас для JSON ответа в v4-flash)
