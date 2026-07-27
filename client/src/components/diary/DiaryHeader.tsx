@@ -102,7 +102,7 @@ export function DiaryHeader({
             {(userRole === "doctor" || userRole === "admin") && (
               <a
                 href="#/doctor"
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                className="hidden sm:flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <Stethoscope className="h-4 w-4" />
                 Кабинет врача
@@ -128,7 +128,7 @@ export function DiaryHeader({
                 <Button
                   size="icon"
                   variant="outline"
-                  className="h-8 w-8 sm:w-auto sm:px-3"
+                  className="hidden sm:flex h-8 w-8 sm:w-auto sm:px-3"
                   data-testid="btn-download-report"
                 >
                   <Download className="h-4 w-4" />
@@ -175,6 +175,13 @@ export function DiaryHeader({
                     <BarChart3 className="h-4 w-4" /> Аналитика
                   </a>
                 </DropdownMenuItem>
+                {(userRole === "doctor" || userRole === "admin") && (
+                  <DropdownMenuItem asChild>
+                    <a href="#/doctor" className="flex items-center gap-2">
+                      <Stethoscope className="h-4 w-4" /> Кабинет врача
+                    </a>
+                  </DropdownMenuItem>
+                )}
                 {userRole === "admin" && (
                   <DropdownMenuItem asChild>
                     <a href="#/admin" className="flex items-center gap-2">
@@ -182,6 +189,12 @@ export function DiaryHeader({
                     </a>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuItem onClick={onDownloadDay} className="flex items-center gap-2">
+                  <Download className="h-4 w-4" /> Отчёт за день
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDownloadWeek} className="flex items-center gap-2">
+                  <Download className="h-4 w-4" /> Отчёт за неделю
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={onOpenProfile} className="flex items-center gap-2">
                   <ClipboardList className="h-4 w-4" /> Моя анкета
                 </DropdownMenuItem>

@@ -133,7 +133,14 @@ If exact amounts are unknown, provide a reasonable estimate. Plain water and uns
     };
   };
 
-  const rawContent = data.choices?.[0]?.message?.content ?? "";
+  const message = data.choices?.[0]?.message ?? {};
+  // deepseek-v4-flash thinking mode: JSON may be in content or reasoning_content
+  const rawContent = (message as any).content ?? (message as any).reasoning_content ?? "";
+
+  if (!rawContent) {
+    console.error("[deepseek] Empty content. Full response:", JSON.stringify(data).slice(0, 800));
+    throw new Error("DeepSeek вернул пустой ответ");
+  }
 
   // Strip <think>...</think> blocks (deepseek-v4-flash thinking mode)
   const content = rawContent.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
@@ -165,9 +172,25 @@ If exact amounts are unknown, provide a reasonable estimate. Plain water and uns
     }
   }
 
+  // Last resort: try stripping markdown fences and parsing whole content
   if (!parsed) {
-    console.error("[deepseek] Unexpected response format. Raw content:", rawContent.slice(0, 500));
-    throw new Error("DeepSeek вернул неожиданный формат ответа");
+    try {
+      const stripped = content.replace(/```json|```/g, "").trim();
+      const candidate = JSON.parse(stripped) as NutritionResult;
+      if (candidate.calories !== undefined) parsed = candidate;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!parsed) {
+    console.error(
+      "[deepseek] Unexpected response format.\nraw:",
+      rawContent.slice(0, 600),
+      "\nstripped:",
+      content.slice(0, 600),
+    );
+    throw new Error(`DeepSeek вернул неожиданный формат. Ответ: ${content.slice(0, 200)}`);
   }
 
   // Validate and sanitize

@@ -3922,3 +3922,29 @@ ALTER TABLE idempotency_keys ADD COLUMN response_body TEXT NOT NULL DEFAULT '{}'
 - Показывает время каждого шага и размер файла
 - AdminPage: новая карточка "S3 загрузка (реальный тест)"
 - Отличие от `/api/admin/s3-test`: использует тот же код что и фото пользователей — выявляет реальные проблемы pipeline
+
+---
+
+## v2.25.0 — 2026-07-27
+
+### DS-FIX: Исправлен расчёт КБЖУ через DeepSeek
+
+- `deepseek.ts`: fallback на `reasoning_content` если `content` пустой (deepseek-v4-flash thinking mode)
+- Улучшен парсинг: strip markdown fences как последний resort
+- Детальный error log при неожиданном формате
+
+### ADMIN-1: Проверка DeepSeek API в AdminPage
+
+- `GET /api/admin/deepseek-check` — реальный вызов `analyzeNutrition()` с тестовым блюдом
+- AdminPage: новая карточка "DeepSeek API — проверка" с временем ответа и результатом
+
+### ADMIN-2: Серверный лог ошибок в Журнале
+
+- Express error middleware в `routes/index.ts` — перехватывает все 4xx/5xx кроме 401/403
+- DeepSeek ошибки из `POST /api/analyze` логируются в `client_errors` напрямую
+- Теперь в разделе "Журнал ошибок" AdminPage видны серверные ошибки
+
+### MOBILE: Исправлен header на мобилках
+
+- "Кабинет врача" и кнопка "Отчёт" скрыты на мобилке (`hidden sm:flex`)
+- В мобильное меню (троеточие) добавлены: Кабинет врача, Отчёт за день, Отчёт за неделю

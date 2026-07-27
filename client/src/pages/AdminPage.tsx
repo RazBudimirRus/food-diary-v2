@@ -22,6 +22,7 @@ import {
   HardDrive,
   CheckCircle,
   XCircle,
+  Zap,
   Loader2,
   AlertTriangle,
 } from "lucide-react";
@@ -54,6 +55,13 @@ interface DeepSeekUsageDay {
   tokensOut: number;
   costEstimate: number;
   requests: number;
+}
+
+interface DeepSeekCheckResult {
+  ok: boolean;
+  durationMs: number;
+  result?: { calories: number; protein: number; fat: number; carbs: number; note?: string };
+  detail?: string;
 }
 
 interface S3TestStep {
@@ -439,6 +447,8 @@ export default function AdminPage() {
   const [s3StatsLoading, setS3StatsLoading] = useState(false);
   const [s3UploadTest, setS3UploadTest] = useState<S3UploadTestResult | null>(null);
   const [s3UploadTestLoading, setS3UploadTestLoading] = useState(false);
+  const [dsCheck, setDsCheck] = useState<DeepSeekCheckResult | null>(null);
+  const [dsCheckLoading, setDsCheckLoading] = useState(false);
   const {
     data: usersData,
     isLoading: usersLoading,
@@ -661,6 +671,80 @@ export default function AdminPage() {
                           ))}
                         </TableBody>
                       </Table>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ADMIN-1: DeepSeek check */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  DeepSeek API — проверка
+                </CardTitle>
+                <CardDescription>
+                  Реальный запрос к DeepSeek: расчёт КБЖУ для тестового блюда. Показывает время ответа и результат.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={dsCheckLoading}
+                  onClick={async () => {
+                    setDsCheckLoading(true);
+                    setDsCheck(null);
+                    try {
+                      const res = await apiRequest("GET", "/api/admin/deepseek-check");
+                      const json = await res.json();
+                      setDsCheck(json as DeepSeekCheckResult);
+                    } catch (err) {
+                      setDsCheck({ ok: false, durationMs: 0, detail: String(err) });
+                    } finally {
+                      setDsCheckLoading(false);
+                    }
+                  }}
+                >
+                  {dsCheckLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Проверяю...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Проверить DeepSeek
+                    </>
+                  )}
+                </Button>
+                {dsCheck && (
+                  <div className="space-y-2">
+                    <div
+                      className={`flex items-center gap-2 text-sm font-medium ${dsCheck.ok ? "text-green-700 dark:text-green-400" : "text-destructive"}`}
+                    >
+                      {dsCheck.ok ? (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Работает · {dsCheck.durationMs}мс
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-4 w-4" />
+                          Недоступен · {dsCheck.durationMs}мс
+                        </>
+                      )}
+                    </div>
+                    {dsCheck.detail && <p className="text-xs text-destructive font-mono break-all">{dsCheck.detail}</p>}
+                    {dsCheck.result && (
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        <div>
+                          Два яйца варёных → <b>{dsCheck.result.calories}</b> ккал · Б {dsCheck.result.protein}г · Ж{" "}
+                          {dsCheck.result.fat}г · У {dsCheck.result.carbs}г
+                        </div>
+                        {dsCheck.result.note && <div className="italic mt-0.5">{dsCheck.result.note}</div>}
+                      </div>
                     )}
                   </div>
                 )}

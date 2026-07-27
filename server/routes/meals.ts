@@ -206,6 +206,19 @@ export function registerMealsRoutes(app: Express) {
       const { usage: _usage, ...nutrition } = result;
       res.json(nutrition);
     } catch (e: any) {
+      // ADMIN-2: логируем DeepSeek ошибки в client_errors
+      try {
+        storage.addClientError({
+          userId: req.user?.id ?? null,
+          message: `[deepseek] ${e.message}`,
+          stack: e.stack ?? null,
+          url: "POST /api/analyze",
+          userAgent: req.headers["user-agent"] ?? null,
+          extra: null,
+        });
+      } catch {
+        /* ignore */
+      }
       res.status(500).json({ error: e.message });
     }
   });

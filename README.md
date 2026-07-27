@@ -3,7 +3,7 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.24.8-blue)
+![Version](https://img.shields.io/badge/version-2.25.0-blue)
 ![Tests](https://img.shields.io/badge/tests-313%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -167,28 +167,29 @@ Prometheus metrics: `https://fooddiary.razbudimir.com/metrics`
 
 ## Changelog
 
-| Версия  | Дата       | Что вошло                                                                                                                      |
-| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| v2.24.8 | 2026-07-25 | feat: удаление фото из lightbox, кнопка в нижней части просмотра, 313 тестов                                                   |
-| v2.24.7 | 2026-07-25 | FIX: фото не пропадают после истечения access token — blob URL через apiRequest, 313 тестов                                    |
-| v2.24.6 | 2026-07-25 | FIX: предпросмотр фото — ?token= в img src, verifyToken в photos route, 313 тестов                                             |
-| v2.24.5 | 2026-07-25 | FIX: загрузка фото — CSRF + FormData в apiRequest, 313 тестов                                                                  |
-| v2.24.4 | 2026-07-25 | UX-S3-1 статистика бакета по пользователям, UX-S3-2 реальный upload тест, 313 тестов                                           |
-| v2.24.3 | 2026-07-25 | BUG-09: перенос КБЖУ из каталога — setKbjuResult при onSelect, 313 тестов                                                      |
-| v2.24.2 | 2026-07-25 | HOTFIX: system role prompt, deepseek-raw-test endpoint, fix tests messages[1], 313 тестов                                      |
-| v2.24.1 | 2026-07-25 | HOTFIX: deepseek-v4-flash thinking mode — strip <think>, response_format json_object, 313 тестов                               |
-| v2.24.0 | 2026-07-25 | BUG-fix DeepSeek deepseek-v4-flash, client error log (AdminPage + ErrorBoundary + migration 0009), 313 тестов                  |
-| v2.23.0 | 2026-07-06 | UX-18 (AI КБЖУ по приёму), UX-21 (AI КБЖУ каталог), UX-22b (PDF с графиками), BUG-04/05 (Node 22, service_healthy), 313 тестов |
-| v2.22.1 | 2026-07-05 | Hotfix: кириллица в PDF — Inter TTF встроен в Docker-образ, 305 тестов                                                         |
-| v2.22.0 | 2026-07-05 | Фаза 21 (Excel за неделю/месяц), UX-22 (PDF аналитика), E2E фикс, 305 тестов                                                   |
-| v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0009, 291 тест                                                                      |
-| v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест                                                        |
-| v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                                                                                     |
-| v2.18.0 | 2026-07-05 | UX-14/15/16 (defaultDate, порядок формы, фото при создании)                                                                    |
-| v2.17.0 | 2026-07-05 | UX-7/10/11/12/13 (каталог, bottom sheet, bookmark, batch КБЖУ)                                                                 |
-| v2.12.0 | 2026-06-30 | Рефакторинг монолитов, repositories, OpenAPI, ADR                                                                              |
-| v2.11.0 | 2026-07-01 | Audit log, CSRF, EXIF, bottom sheet UX, E2E тест-кейсы                                                                         |
-| v2.10.0 | 2026-06-30 | Drizzle-kit migrations, pino, Sentry, /health, /metrics, nginx hardening                                                       |
+| Версия  | Дата       | Что вошло                                                                                                                                |
+| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.25.0 | 2026-07-27 | FIX: DeepSeek КБЖУ (reasoning_content + markdown strip), ADMIN-1 DeepSeek check, ADMIN-2 server error log, MOBILE header fix, 313 тестов |
+| v2.24.8 | 2026-07-25 | feat: удаление фото из lightbox, кнопка в нижней части просмотра, 313 тестов                                                             |
+| v2.24.7 | 2026-07-25 | FIX: фото не пропадают после истечения access token — blob URL через apiRequest, 313 тестов                                              |
+| v2.24.6 | 2026-07-25 | FIX: предпросмотр фото — ?token= в img src, verifyToken в photos route, 313 тестов                                                       |
+| v2.24.5 | 2026-07-25 | FIX: загрузка фото — CSRF + FormData в apiRequest, 313 тестов                                                                            |
+| v2.24.4 | 2026-07-25 | UX-S3-1 статистика бакета по пользователям, UX-S3-2 реальный upload тест, 313 тестов                                                     |
+| v2.24.3 | 2026-07-25 | BUG-09: перенос КБЖУ из каталога — setKbjuResult при onSelect, 313 тестов                                                                |
+| v2.24.2 | 2026-07-25 | HOTFIX: system role prompt, deepseek-raw-test endpoint, fix tests messages[1], 313 тестов                                                |
+| v2.24.1 | 2026-07-25 | HOTFIX: deepseek-v4-flash thinking mode — strip <think>, response_format json_object, 313 тестов                                         |
+| v2.24.0 | 2026-07-25 | BUG-fix DeepSeek deepseek-v4-flash, client error log (AdminPage + ErrorBoundary + migration 0009), 313 тестов                            |
+| v2.23.0 | 2026-07-06 | UX-18 (AI КБЖУ по приёму), UX-21 (AI КБЖУ каталог), UX-22b (PDF с графиками), BUG-04/05 (Node 22, service_healthy), 313 тестов           |
+| v2.22.1 | 2026-07-05 | Hotfix: кириллица в PDF — Inter TTF встроен в Docker-образ, 305 тестов                                                                   |
+| v2.22.0 | 2026-07-05 | Фаза 21 (Excel за неделю/месяц), UX-22 (PDF аналитика), E2E фикс, 305 тестов                                                             |
+| v2.21.0 | 2026-07-05 | BUG-02: parseLiquidMl + waterMl, migration 0009, 291 тест                                                                                |
+| v2.20.0 | 2026-07-05 | Фазы 26+27+UX-17/19/20, BUG-01, S3 health round-trip, AdminPage S3 тест                                                                  |
+| v2.19.0 | 2026-07-05 | UX-6/8/9 (день недели, футер, PrivacyPage)                                                                                               |
+| v2.18.0 | 2026-07-05 | UX-14/15/16 (defaultDate, порядок формы, фото при создании)                                                                              |
+| v2.17.0 | 2026-07-05 | UX-7/10/11/12/13 (каталог, bottom sheet, bookmark, batch КБЖУ)                                                                           |
+| v2.12.0 | 2026-06-30 | Рефакторинг монолитов, repositories, OpenAPI, ADR                                                                                        |
+| v2.11.0 | 2026-07-01 | Audit log, CSRF, EXIF, bottom sheet UX, E2E тест-кейсы                                                                                   |
+| v2.10.0 | 2026-06-30 | Drizzle-kit migrations, pino, Sentry, /health, /metrics, nginx hardening                                                                 |
 
 Полная история: [ROADMAP.md](ROADMAP.md)
 

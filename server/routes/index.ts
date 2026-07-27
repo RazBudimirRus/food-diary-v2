@@ -1,9 +1,9 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
 import { openApiSpec } from "../openapi";
-import { getMskDate, getMskTime } from "../storage";
+import { getMskDate, getMskTime, storage } from "../storage";
 import { isS3Configured, uploadPhoto, deleteFromS3, buildPhotoKey } from "../s3";
 import { isDeepSeekAvailable } from "../deepseek";
 import { registerAuthRoutes } from "./auth";
@@ -32,6 +32,32 @@ export function registerRoutes(httpServer: Server, app: Express) {
   registerCatalogRoutes(app);
   registerPushRoutes(app);
   app.use("/api/client-errors", clientErrorsRouter);
+
+  // ── ADMIN-2: серверный error middleware — логирует все 4xx/5xx в client_errors ──
+  app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    const status = (err as any)?.status ?? (err as any)?.statusCode ?? 500;
+    const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Internal Server Error";
+    const stack = err instanceof Error ? (err.stack ?? null) : null;
+    const userId = (req as any)?.user?.id ?? null;
+    // Логируем все ошибки 4xx/5xx кроме 401/403 (штатный unauthorized)
+    if (status >= 400 && status !== 401 && status !== 403) {
+      try {
+        storage.addClientError({
+          userId,
+          message: `[server ${status}] ${message}`,
+          stack,
+          url: `${req.method} ${req.path}`,
+          userAgent: req.headers["user-agent"] ?? null,
+          extra: JSON.stringify({ status }).slice(0, 2000),
+        });
+      } catch {
+        /* не прерываем ответ если логирование пупнуло */
+      }
+    }
+    if (!res.headersSent) {
+      res.status(status).json({ error: message });
+    }
+  });
 
   // ── Misc ─────────────────────────────────────────────────────────────
 

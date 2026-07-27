@@ -171,6 +171,29 @@ export function registerAdminRoutes(app: Express) {
     }
   });
 
+  /** GET /api/admin/deepseek-check — ADMIN-1: проверка доступности DeepSeek API + полный цикл */
+  app.get("/api/admin/deepseek-check", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
+    const t0 = Date.now();
+    const { isDeepSeekAvailable, analyzeNutrition } = await import("../deepseek");
+    if (!isDeepSeekAvailable()) {
+      return res.status(503).json({ ok: false, detail: "DEEPSEEK_API_KEY не настроен" });
+    }
+    try {
+      const result = await analyzeNutrition("Два яйца варёных", undefined, null);
+      res.json({
+        ok: true,
+        durationMs: Date.now() - t0,
+        result,
+      });
+    } catch (e: any) {
+      res.status(500).json({
+        ok: false,
+        durationMs: Date.now() - t0,
+        detail: e.message,
+      });
+    }
+  });
+
   /** POST /api/admin/deepseek-raw-test — получить raw-ответ DeepSeek для диагностики */
   app.post("/api/admin/deepseek-raw-test", requireAuth, requireAdmin, async (_req: AuthRequest, res) => {
     const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
