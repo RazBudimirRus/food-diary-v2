@@ -73,6 +73,18 @@ export function registerCatalogRoutes(app: Express) {
       }
       res.json({ result, note: result.note });
     } catch (e: any) {
+      try {
+        storage.addClientError({
+          userId: req.user?.id ?? null,
+          message: `[deepseek/catalog] ${e.message}`,
+          stack: e.stack ?? null,
+          url: `POST /api/catalog/${req.params.id}/calculate-kbju`,
+          userAgent: req.headers["user-agent"] ?? null,
+          extra: null,
+        });
+      } catch {
+        /* ignore */
+      }
       res.status(500).json({ error: e.message });
     }
   });

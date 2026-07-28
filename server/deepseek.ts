@@ -115,7 +115,8 @@ If exact amounts are unknown, provide a reasonable estimate. Plain water and uns
         { role: "user", content: userPrompt },
       ],
       temperature: 0.1,
-      max_tokens: 400,
+      max_tokens: 4000, // total budget incl. thinking tokens
+      max_completion_tokens: 512, // output-only budget (thinking excluded)
     }),
   });
 
@@ -134,12 +135,24 @@ If exact amounts are unknown, provide a reasonable estimate. Plain water and uns
   };
 
   const message = data.choices?.[0]?.message ?? {};
-  // deepseek-v4-flash thinking mode: JSON may be in content or reasoning_content
-  const rawContent = (message as any).content ?? (message as any).reasoning_content ?? "";
+  const msgContent = (message as any).content;
+  const msgReasoning = (message as any).reasoning_content;
+
+  // deepseek-v4-flash thinking mode:
+  // - content: string (final answer) OR null (if thinking consumed all tokens)
+  // - reasoning_content: string (thinking process, may contain JSON)
+  // Strategy: prefer content, fallback to reasoning_content, strip <think> blocks from both
+  const rawContent: string =
+    (typeof msgContent === "string" && msgContent.trim() ? msgContent : null) ??
+    (typeof msgReasoning === "string" && msgReasoning.trim() ? msgReasoning : null) ??
+    "";
 
   if (!rawContent) {
-    console.error("[deepseek] Empty content. Full response:", JSON.stringify(data).slice(0, 800));
-    throw new Error("DeepSeek вернул пустой ответ");
+    console.error(
+      "[deepseek] Both content and reasoning_content are empty/null. Full response:",
+      JSON.stringify(data).slice(0, 1000),
+    );
+    throw new Error("DeepSeek вернул пустой ответ (возможно лимит токенов исчерпан, повторите запрос)");
   }
 
   // Strip <think>...</think> blocks (deepseek-v4-flash thinking mode)

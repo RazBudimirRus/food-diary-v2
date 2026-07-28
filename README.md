@@ -3,7 +3,7 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.25.0-blue)
+![Version](https://img.shields.io/badge/version-2.25.1-blue)
 ![Tests](https://img.shields.io/badge/tests-313%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -169,6 +169,7 @@ Prometheus metrics: `https://fooddiary.razbudimir.com/metrics`
 
 | Версия  | Дата       | Что вошло                                                                                                                                |
 | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| v2.25.1 | 2026-07-28 | FIX: DeepSeek content:null — max_tokens 4000 + max_completion_tokens 512 + строгая проверка типов, 313 тестов                            |
 | v2.25.0 | 2026-07-27 | FIX: DeepSeek КБЖУ (reasoning_content + markdown strip), ADMIN-1 DeepSeek check, ADMIN-2 server error log, MOBILE header fix, 313 тестов |
 | v2.24.8 | 2026-07-25 | feat: удаление фото из lightbox, кнопка в нижней части просмотра, 313 тестов                                                             |
 | v2.24.7 | 2026-07-25 | FIX: фото не пропадают после истечения access token — blob URL через apiRequest, 313 тестов                                              |
