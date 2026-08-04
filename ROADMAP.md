@@ -48,7 +48,7 @@
 | v2.7.0 · 2026-06-28  |         Фаза 4 комплит | ✅ Реализовано | Подтверждено полное реализование Admin Panel: users, sessions revoke, password reset, DeepSeek usage dashboard |
 
 | v2.25.1 · 2026-08-02 | DeepSeek thinking fix | ✅ Реализовано | content:null при thinking mode |
-| v2.27.0 · 2026-08-04 | Phase 29 W0+W1 (branch refactor/v2.27.0) | 🚧 В работе | Real User/Doctor repos; MFA/photos/plans/audit tests; storage delegates all 8 repos |
+| v2.27.0 · 2026-08-04 | Phase 29 W0–W4 (branch refactor/v2.27.0) | 🚧 В работе | Real User/Doctor repos; MFA/photos/plans/audit tests; ApiError in catalog/photos/meals; Doctor/Catalog UI split |
 | v2.26.0 · 2026-08-04 | Phase 29 finish wave 1 | ✅ В main | db.ts, Meal/Day/Session/Catalog/Photo/Audit repos, ApiError, Admin/Analytics/MealFields split |
 
 > Прод-сервер может отставать от `main`: после коммитов Phase 10/2/1 нужен отдельный деплой на VPS.

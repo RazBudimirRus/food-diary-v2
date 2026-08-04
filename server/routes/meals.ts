@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, NextFunction } from "express";
 import { storage, getMskDate } from "../storage";
 import { addMealSchema, daySummarySchema, analyzeSchema, updateMealSchema, type InsertMeal } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth";
@@ -6,38 +6,39 @@ import { analyzeNutrition, isDeepSeekAvailable } from "../deepseek";
 import { mealCreateLimiter } from "./limiters";
 import { paramValue, isDateString, daysBetween, deepseekDailyLimitStatus } from "./helpers";
 import { mealWaterMl } from "../utils/liquid";
+import { ApiError } from "../errors";
 
 export function registerMealsRoutes(app: Express) {
   // ── Days ───────────────────────────────────────────────────────────────────
 
-  app.get("/api/days/:date", requireAuth, (req: AuthRequest, res) => {
+  app.get("/api/days/:date", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const day = storage.getOrCreateDay(req.user!.id, paramValue(req.params.date));
       const mealsData = storage.getMealsByDay(day.id);
       res.json({ day, meals: mealsData });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
-  app.post("/api/days/:id/summary", requireAuth, (req: AuthRequest, res) => {
+  app.post("/api/days/:id/summary", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const parsed = daySummarySchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      if (!parsed.success) throw ApiError.badRequest("Validation failed", parsed.error.flatten());
       const existingDay = storage.getDayById(Number(req.params.id));
-      if (!existingDay) return res.status(404).json({ error: "День не найден" });
-      if (existingDay.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
+      if (!existingDay) throw ApiError.notFound("День не найден");
+      if (existingDay.userId !== req.user!.id) throw ApiError.forbidden("Forbidden");
 
       const day = storage.updateDaySummary(existingDay.id, parsed.data);
       res.json({ day });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
   // ── Meals ──────────────────────────────────────────────────────────────────
 
-  app.post("/api/meals", requireAuth, mealCreateLimiter, (req: AuthRequest, res) => {
+  app.post("/api/meals", requireAuth, mealCreateLimiter, (req: AuthRequest, res, next: NextFunction) => {
     try {
       // Phase 26.7: Idempotency — replay cached response if key already used
       const iKey = req.headers["idempotency-key"] as string | undefined;
@@ -49,7 +50,7 @@ export function registerMealsRoutes(app: Express) {
       }
 
       const parsed = addMealSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      if (!parsed.success) throw ApiError.badRequest("Validation failed", parsed.error.flatten());
 
       const data = parsed.data;
       const date = data.date ?? getMskDate();
@@ -82,49 +83,49 @@ export function registerMealsRoutes(app: Express) {
         storage.saveIdempotencyKey(iKey, req.user!.id, 200, JSON.stringify(responseBody));
       }
       res.json(responseBody);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
-  app.delete("/api/meals/:id", requireAuth, (req: AuthRequest, res) => {
+  app.delete("/api/meals/:id", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const meal = storage.getMeal(Number(req.params.id));
-      if (!meal) return res.status(404).json({ error: "Not found" });
-      if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
+      if (!meal) throw ApiError.notFound("Not found");
+      if (meal.userId !== req.user!.id) throw ApiError.forbidden("Forbidden");
       storage.deleteMeal(meal.id);
       res.json({ ok: true });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
   // Phase 31.1: Restore soft-deleted meal within undo window
-  app.post("/api/meals/:id/restore", requireAuth, (req: AuthRequest, res) => {
+  app.post("/api/meals/:id/restore", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const meal = storage.getMeal(Number(req.params.id));
-      if (!meal) return res.status(404).json({ error: "Not found" });
-      if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
-      if (!meal.deletedAt) return res.status(400).json({ error: "Запись не удалена" });
+      if (!meal) throw ApiError.notFound("Not found");
+      if (meal.userId !== req.user!.id) throw ApiError.forbidden("Forbidden");
+      if (!meal.deletedAt) throw ApiError.badRequest("Запись не удалена");
       // Allow restore only within 60 seconds
       const deletedMs = new Date(meal.deletedAt).getTime();
       if (Date.now() - deletedMs > 60_000) {
-        return res.status(410).json({ error: "Окно восстановления истекло" });
+        throw new ApiError(410, "Окно восстановления истекло", "gone");
       }
       storage.restoreMeal(meal.id);
       res.json({ ok: true });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
-  app.patch("/api/meals/:id", requireAuth, (req: AuthRequest, res) => {
+  app.patch("/api/meals/:id", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const meal = storage.getMeal(Number(req.params.id));
-      if (!meal) return res.status(404).json({ error: "Not found" });
-      if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Forbidden" });
+      if (!meal) throw ApiError.notFound("Not found");
+      if (meal.userId !== req.user!.id) throw ApiError.forbidden("Forbidden");
       const parsed = updateMealSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      if (!parsed.success) throw ApiError.badRequest("Validation failed", parsed.error.flatten());
 
       const data = parsed.data;
       const update: Partial<InsertMeal> = {};
@@ -164,8 +165,8 @@ export function registerMealsRoutes(app: Express) {
         previousDate: storage.getDayById(meal.dayId)?.date,
         day: targetDay,
       });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
@@ -177,15 +178,17 @@ export function registerMealsRoutes(app: Express) {
   });
 
   /** POST /api/analyze — анализ еды/напитков через DeepSeek */
-  app.post("/api/analyze", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/analyze", requireAuth, async (req: AuthRequest, res, next: NextFunction) => {
     try {
       const parsed = analyzeSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      if (!parsed.success) throw ApiError.badRequest("Validation failed", parsed.error.flatten());
 
       const limitStatus = deepseekDailyLimitStatus();
       if (limitStatus.dailyLimitExceeded) {
+        // Preserve top-level limit fields for existing clients/tests
         return res.status(429).json({
           error: "DeepSeek daily token limit exceeded",
+          code: "rate_limited",
           ...limitStatus,
         });
       }
@@ -219,7 +222,7 @@ export function registerMealsRoutes(app: Express) {
       } catch {
         /* ignore */
       }
-      res.status(500).json({ error: e.message });
+      next(e);
     }
   });
 
@@ -230,25 +233,29 @@ export function registerMealsRoutes(app: Express) {
    * Если у записи нет текста, возвращает 400.
    * Сохраняет результат в meal.calories/protein/fat/carbs.
    */
-  app.post("/api/meals/:id/analyze-kbju", requireAuth, async (req: AuthRequest, res) => {
+  app.post("/api/meals/:id/analyze-kbju", requireAuth, async (req: AuthRequest, res, next: NextFunction) => {
     try {
       if (!isDeepSeekAvailable()) {
-        return res.status(503).json({ error: "DeepSeek API не настроен" });
+        throw new ApiError(503, "DeepSeek API не настроен", "service_unavailable");
       }
       const mealId = parseInt(paramValue(req.params.id), 10);
-      if (isNaN(mealId)) return res.status(400).json({ error: "Некорректный id" });
+      if (isNaN(mealId)) throw ApiError.badRequest("Некорректный id");
 
       const meal = storage.getMeal(mealId);
-      if (!meal) return res.status(404).json({ error: "Запись не найдена" });
-      if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
+      if (!meal) throw ApiError.notFound("Запись не найдена");
+      if (meal.userId !== req.user!.id) throw ApiError.forbidden("Нет доступа");
 
       if (!meal.foodText && !meal.drinkText) {
-        return res.status(400).json({ error: "Нет описания блюда для анализа. Добавьте текст к записи." });
+        throw ApiError.badRequest("Нет описания блюда для анализа. Добавьте текст к записи.");
       }
 
       const limitStatus = deepseekDailyLimitStatus();
       if (limitStatus.dailyLimitExceeded) {
-        return res.status(429).json({ error: "Превышен дневной лимит DeepSeek", ...limitStatus });
+        return res.status(429).json({
+          error: "Превышен дневной лимит DeepSeek",
+          code: "rate_limited",
+          ...limitStatus,
+        });
       }
 
       const userProfile = storage.getUserProfile(req.user!.id);
@@ -277,8 +284,8 @@ export function registerMealsRoutes(app: Express) {
       });
 
       res.json({ meal: updated, note: result.note });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
+    } catch (e) {
+      next(e);
     }
   });
 
@@ -309,11 +316,11 @@ export function registerMealsRoutes(app: Express) {
   app.get("/api/meals/:id/photos", requireAuth, (req: AuthRequest, res) => {
     const mealId = parseInt(paramValue(req.params.id), 10);
     const meal = storage.getMeal(mealId);
-    if (!meal) return res.status(404).json({ error: "Приём пищи не найден" });
+    if (!meal) throw ApiError.notFound("Приём пищи не найден");
     // Доступ: пользователь или врач пациента
     if (meal.userId !== req.user!.id) {
       const doctor = storage.getDoctorByUserId(req.user!.id);
-      if (!doctor) return res.status(403).json({ error: "Нет доступа" });
+      if (!doctor) throw ApiError.forbidden("Нет доступа");
     }
     const photos = storage.getPhotosByMeal(mealId);
     res.json({ photos });

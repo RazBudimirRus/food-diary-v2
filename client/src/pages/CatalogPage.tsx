@@ -11,11 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { BottomNav } from "@/components/BottomNav";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,58 +23,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { BookOpen, Search, ArrowLeft, Plus } from "lucide-react";
 import {
-  BookOpen,
-  Search,
-  Pencil,
-  Trash2,
-  ArrowLeft,
-  Flame,
-  ChevronDown,
-  ChevronUp,
-  Plus,
-  Sparkles,
-} from "lucide-react";
-
-interface CatalogEntry {
-  id: number;
-  mealName: string;
-  grams?: number | null;
-  kcal?: number | null;
-  protein?: number | null;
-  fat?: number | null;
-  carbs?: number | null;
-}
-
-interface CatalogItem {
-  id: number;
-  name: string;
-  description?: string | null;
-  isSet: boolean;
-  createdAt: string;
-  entries: CatalogEntry[];
-}
-
-// ── Blank product form state ──────────────────────────────────────────────────
-interface ProductForm {
-  name: string;
-  description: string;
-  grams: string;
-  kcal: string;
-  protein: string;
-  fat: string;
-  carbs: string;
-}
-
-const emptyForm = (): ProductForm => ({
-  name: "",
-  description: "",
-  grams: "",
-  kcal: "",
-  protein: "",
-  fat: "",
-  carbs: "",
-});
+  AddProductDialog,
+  EditCatalogItemDialog,
+  CatalogItemCard,
+  emptyForm,
+  type CatalogItem,
+  type ProductForm,
+} from "@/components/catalog";
 
 export default function CatalogPage() {
   const { user } = useAuth();
@@ -87,16 +41,13 @@ export default function CatalogPage() {
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // Add product dialog
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState<ProductForm>(emptyForm());
 
-  // Edit dialog
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
 
-  // Delete confirm
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery<{ items: CatalogItem[] }>({
@@ -113,47 +64,6 @@ export default function CatalogPage() {
       )
     : items;
 
-  // ── Create product mutation ───────────────────────────────────────────────
-  const createMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof apiRequest>[2]) =>
-      apiRequest("POST", "/api/catalog", payload).then((r) => r.json()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/catalog"] });
-      setAddOpen(false);
-      setForm(emptyForm());
-      toast({ title: "Продукт добавлен в каталог" });
-    },
-    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
-  });
-
-  function handleCreate() {
-    if (!form.name.trim()) return;
-    const entry: Record<string, unknown> = { mealName: form.name.trim() };
-    if (form.grams) entry.grams = parseFloat(form.grams);
-    if (form.kcal) entry.kcal = parseFloat(form.kcal);
-    if (form.protein) entry.protein = parseFloat(form.protein);
-    if (form.fat) entry.fat = parseFloat(form.fat);
-    if (form.carbs) entry.carbs = parseFloat(form.carbs);
-
-    createMutation.mutate({
-      name: form.name.trim(),
-      description: form.description.trim() || undefined,
-      isSet: false,
-      entries: [entry],
-    });
-  }
-
-  const renameMutation = useMutation({
-    mutationFn: ({ id, name, description }: { id: number; name: string; description?: string }) =>
-      apiRequest("PUT", `/api/catalog/${id}`, { name, description }).then((r) => r.json()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/catalog"] });
-      setEditItem(null);
-      toast({ title: "Шаблон обновлён" });
-    },
-    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
-  });
-
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/catalog/${id}`).then((r) => r.json()),
     onSuccess: () => {
@@ -164,7 +74,6 @@ export default function CatalogPage() {
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
 
-  // UX-21: AI-calculate КБЖУ for a catalog item
   const [calcKbjuId, setCalcKbjuId] = useState<number | null>(null);
   const calcKbjuMutation = useMutation({
     mutationFn: (id: number) => apiRequest("POST", `/api/catalog/${id}/calculate-kbju`).then((r) => r.json()),
@@ -193,6 +102,11 @@ export default function CatalogPage() {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  function openAddDialog() {
+    setForm(emptyForm());
+    setAddOpen(true);
+  }
+
   return (
     <div className="min-h-screen bg-background pb-24 sm:pb-8">
       {/* Header */}
@@ -211,15 +125,7 @@ export default function CatalogPage() {
           <span className="ml-auto text-xs text-muted-foreground">
             {items.length} {items.length === 1 ? "шаблон" : items.length < 5 ? "шаблона" : "шаблонов"}
           </span>
-          <Button
-            size="sm"
-            className="shrink-0 gap-1.5"
-            onClick={() => {
-              setForm(emptyForm());
-              setAddOpen(true);
-            }}
-            data-testid="btn-add-catalog-product"
-          >
+          <Button size="sm" className="shrink-0 gap-1.5" onClick={openAddDialog} data-testid="btn-add-catalog-product">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Добавить продукт</span>
             <span className="sm:hidden">Добавить</span>
@@ -250,15 +156,7 @@ export default function CatalogPage() {
                 : "Ничего не найдено"}
             </p>
             {items.length === 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => {
-                  setForm(emptyForm());
-                  setAddOpen(true);
-                }}
-              >
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={openAddDialog}>
                 <Plus className="h-4 w-4" />
                 Добавить первый продукт
               </Button>
@@ -267,305 +165,34 @@ export default function CatalogPage() {
         )}
 
         {/* Items */}
-        {filtered.map((item) => {
-          const totalKcal = item.entries.reduce((s, e) => s + (e.kcal ?? 0), 0);
-          const isExpanded = expandedId === item.id;
-          return (
-            <Card key={item.id} className="border hover:shadow-sm transition-shadow">
-              <CardContent className="px-4 py-3 space-y-2">
-                {/* Row: name + actions */}
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm leading-snug">{item.name}</p>
-                    {item.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.description}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1">
-                      {totalKcal > 0 && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Flame className="h-3 w-3" />
-                          {Math.round(totalKcal)} ккал
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground/60">
-                        {item.entries.length} {item.entries.length === 1 ? "позиция" : "позиции"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                      title={isExpanded ? "Свернуть" : "Развернуть"}
-                    >
-                      {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </Button>
-                    {/* UX-21: AI КБЖУ */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-violet-500"
-                      onClick={() => {
-                        setCalcKbjuId(item.id);
-                        calcKbjuMutation.mutate(item.id);
-                      }}
-                      disabled={calcKbjuMutation.isPending && calcKbjuId === item.id}
-                      title="Рассчитать КБЖУ через AI"
-                      aria-label="Рассчитать КБЖУ"
-                    >
-                      <Sparkles
-                        className={`h-4 w-4 ${calcKbjuMutation.isPending && calcKbjuId === item.id ? "animate-pulse" : ""}`}
-                      />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => openEdit(item)}
-                      title="Переименовать"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => setDeleteId(item.id)}
-                      title="Удалить"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Expanded entries */}
-                {isExpanded && item.entries.length > 0 && (
-                  <div className="border-t pt-2 space-y-1">
-                    {item.entries.map((entry) => (
-                      <div key={entry.id} className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="truncate flex-1">{entry.mealName}</span>
-                        <span className="ml-2 shrink-0 tabular-nums">
-                          {entry.grams ? `${entry.grams} г` : ""}
-                          {entry.kcal ? ` · ${Math.round(entry.kcal)} ккал` : ""}
-                          {entry.protein || entry.fat || entry.carbs ? (
-                            <span className="ml-1 text-muted-foreground/60">
-                              {entry.protein ? `Б${entry.protein}` : ""}
-                              {entry.fat ? ` Ж${entry.fat}` : ""}
-                              {entry.carbs ? ` У${entry.carbs}` : ""}
-                            </span>
-                          ) : null}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+        {filtered.map((item) => (
+          <CatalogItemCard
+            key={item.id}
+            item={item}
+            isExpanded={expandedId === item.id}
+            onToggleExpand={() => setExpandedId(expandedId === item.id ? null : item.id)}
+            calcKbjuId={calcKbjuId}
+            onCalcKbju={(id) => {
+              setCalcKbjuId(id);
+              calcKbjuMutation.mutate(id);
+            }}
+            calcKbjuMutation={calcKbjuMutation}
+            onEdit={openEdit}
+            onDelete={setDeleteId}
+          />
+        ))}
       </div>
 
-      {/* ── Add product dialog ──────────────────────────────────────────── */}
-      <Dialog
-        open={addOpen}
-        onOpenChange={(v) => {
-          if (!v) {
-            setAddOpen(false);
-            setForm(emptyForm());
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Добавить продукт в каталог
-            </DialogTitle>
-          </DialogHeader>
+      <AddProductDialog open={addOpen} onOpenChange={setAddOpen} form={form} setForm={setForm} setField={setField} />
 
-          <div className="space-y-3">
-            {/* Name */}
-            <div className="space-y-1.5">
-              <Label htmlFor="add-name">
-                Название <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="add-name"
-                value={form.name}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder="Например: Куриная грудка"
-                maxLength={100}
-                autoFocus
-                data-testid="input-catalog-name"
-              />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-1.5">
-              <Label htmlFor="add-desc">
-                Описание <span className="text-muted-foreground text-xs">(необязательно)</span>
-              </Label>
-              <Input
-                id="add-desc"
-                value={form.description}
-                onChange={(e) => setField("description", e.target.value)}
-                placeholder="Отварная, без кожи"
-                maxLength={255}
-              />
-            </div>
-
-            {/* КБЖУ row */}
-            <div className="border-t pt-3">
-              <p className="text-xs text-muted-foreground mb-2">КБЖУ на порцию (необязательно)</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="add-grams" className="text-xs">
-                    Граммы
-                  </Label>
-                  <Input
-                    id="add-grams"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={form.grams}
-                    onChange={(e) => setField("grams", e.target.value)}
-                    placeholder="100"
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="add-kcal" className="text-xs">
-                    Ккал
-                  </Label>
-                  <Input
-                    id="add-kcal"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.kcal}
-                    onChange={(e) => setField("kcal", e.target.value)}
-                    placeholder="165"
-                    className="h-8 text-sm"
-                    data-testid="input-catalog-kcal"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="add-protein" className="text-xs">
-                    Белки (г)
-                  </Label>
-                  <Input
-                    id="add-protein"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.protein}
-                    onChange={(e) => setField("protein", e.target.value)}
-                    placeholder="31"
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="add-fat" className="text-xs">
-                    Жиры (г)
-                  </Label>
-                  <Input
-                    id="add-fat"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.fat}
-                    onChange={(e) => setField("fat", e.target.value)}
-                    placeholder="3.6"
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label htmlFor="add-carbs" className="text-xs">
-                    Углеводы (г)
-                  </Label>
-                  <Input
-                    id="add-carbs"
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={form.carbs}
-                    onChange={(e) => setField("carbs", e.target.value)}
-                    placeholder="0"
-                    className="h-8 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 pt-1">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddOpen(false);
-                setForm(emptyForm());
-              }}
-            >
-              Отмена
-            </Button>
-            <Button
-              disabled={!form.name.trim() || createMutation.isPending}
-              onClick={handleCreate}
-              data-testid="btn-save-catalog-product"
-            >
-              {createMutation.isPending ? "Сохраняю..." : "Добавить"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit dialog */}
-      <Dialog open={!!editItem} onOpenChange={(v) => !v && setEditItem(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Редактировать шаблон</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="cat-name">Название</Label>
-              <Input
-                id="cat-name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                maxLength={100}
-                autoFocus
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cat-desc">Описание (необязательно)</Label>
-              <Input
-                id="cat-desc"
-                value={editDesc}
-                onChange={(e) => setEditDesc(e.target.value)}
-                maxLength={255}
-                placeholder="Например: быстрый завтрак"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setEditItem(null)}>
-              Отмена
-            </Button>
-            <Button
-              disabled={!editName.trim() || renameMutation.isPending}
-              onClick={() =>
-                editItem &&
-                renameMutation.mutate({ id: editItem.id, name: editName, description: editDesc || undefined })
-              }
-            >
-              {renameMutation.isPending ? "Сохраняю..." : "Сохранить"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditCatalogItemDialog
+        editItem={editItem}
+        editName={editName}
+        setEditName={setEditName}
+        editDesc={editDesc}
+        setEditDesc={setEditDesc}
+        onClose={() => setEditItem(null)}
+      />
 
       {/* Delete confirm */}
       <AlertDialog open={deleteId !== null} onOpenChange={(v) => !v && setDeleteId(null)}>

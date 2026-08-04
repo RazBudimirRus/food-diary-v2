@@ -120,28 +120,25 @@ curl -sS https://fooddiary.razbudimir.com/api/health
 curl -sS https://fooddiary.razbudimir.com/api/now
 ```
 
-### Dev / preview ветка `refactor/v2.26.0` (Phase 29)
+### Preview ветка `refactor/v2.27.0` (Phase 29 W0–W4)
 
 На сервере с внешним nginx (`docker-compose.prod.yml`):
 
 ```bash
-# путь к клону: /srv/foodbot или ~/food_app — как у вас настроено
 cd /srv/foodbot
 
 # Если раньше правили/собирали под root — сначала починить владельца,
-# иначе git checkout падает с Permission denied и файлы (напр. MealFields.tsx) не появляются.
+# иначе git checkout падает с Permission denied.
 sudo chown -R "$USER:$USER" /srv/foodbot
 
 git fetch origin
-git checkout refactor/v2.26.0
-git reset --hard origin/refactor/v2.26.0
+git checkout refactor/v2.27.0
+git reset --hard origin/refactor/v2.27.0
 git clean -fd
-# убедиться, что критичные файлы на месте:
-test -f client/src/components/diary/MealFields.tsx
 
 # бэкап БД перед обновлением
 mkdir -p /srv/foodbot/data/backups
-sudo cp /srv/foodbot/data/data.db "/srv/foodbot/data/backups/pre-v2.26.0-$(date +%Y%m%d_%H%M%S).db"
+sudo cp /srv/foodbot/data/data.db "/srv/foodbot/data/backups/pre-v2.27.0-$(date +%Y%m%d_%H%M%S).db"
 
 sudo docker compose -f docker-compose.prod.yml up -d --build
 sudo docker compose -f docker-compose.prod.yml ps
@@ -151,12 +148,19 @@ curl -sS https://fooddiary.razbudimir.com/api/now
 sudo docker compose -f docker-compose.prod.yml logs --tail=80 api
 ```
 
+Проверка после деплоя (ручной smoke):
+
+1. Логин / дневник — свои приёмы пищи на месте
+2. Админка → Журнал (audit) открывается у admin
+3. Каталог / кабинет врача (если роль есть) — вкладки открываются
+4. Версия в UI / `package.json` в образе соответствует ветке
+
 Откат на `main`:
 
 ```bash
 cd /srv/foodbot
-git checkout main && git pull
-docker compose -f docker-compose.prod.yml up -d --build
+git fetch origin && git checkout main && git reset --hard origin/main
+sudo docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ---

@@ -1,9 +1,10 @@
-import type { Express } from "express";
+import type { Express, NextFunction } from "express";
 import { storage } from "../storage";
 import { createCatalogItemSchema } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth";
 import { paramValue } from "./helpers";
 import { analyzeNutrition, isDeepSeekAvailable } from "../deepseek";
+import { ApiError } from "../errors";
 
 export function registerCatalogRoutes(app: Express) {
   // ════════════════════════════════════════════════════════════════════
@@ -19,7 +20,7 @@ export function registerCatalogRoutes(app: Express) {
   /** POST /api/catalog */
   app.post("/api/catalog", requireAuth, (req: AuthRequest, res) => {
     const parsed = createCatalogItemSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    if (!parsed.success) throw ApiError.badRequest("Validation failed", parsed.error.flatten());
     const item = storage.createCatalogItem(req.user!.id, parsed.data);
     res.json({ item });
   });
@@ -28,9 +29,9 @@ export function registerCatalogRoutes(app: Express) {
   app.put("/api/catalog/:id", requireAuth, (req: AuthRequest, res) => {
     const itemId = parseInt(paramValue(req.params.id), 10);
     const { name, description } = req.body as { name?: string; description?: string };
-    if (!name?.trim()) return res.status(400).json({ error: "Название обязательно" });
+    if (!name?.trim()) throw ApiError.badRequest("Название обязательно");
     const item = storage.updateCatalogItem(req.user!.id, itemId, { name: name.trim(), description });
-    if (!item) return res.status(404).json({ error: "Шаблон не найден" });
+    if (!item) throw ApiError.notFound("Шаблон не найден");
     res.json({ item });
   });
 
@@ -44,22 +45,22 @@ export function registerCatalogRoutes(app: Express) {
   // ── UX-21: calculate КБЖУ for catalog item via AI ─────────────────────────
 
   /** POST /api/catalog/:id/calculate-kbju */
-  app.post("/api/catalog/:id/calculate-kbju", requireAuth, async (req: AuthRequest, res) => {
-    if (!isDeepSeekAvailable()) {
-      return res.status(503).json({ error: "AI-расчёт недоступен: DEEPSEEK_API_KEY не настроен" });
-    }
-    const itemId = parseInt(paramValue(req.params.id), 10);
-    const items = storage.getCatalogItems(req.user!.id);
-    const item = items.find((it) => it.id === itemId);
-    if (!item) return res.status(404).json({ error: "Позиция каталога не найдена" });
-
-    // Build text from entries mealName fields
-    const foodText = item.entries.map((e) => e.mealName).join(", ");
-    if (!foodText.trim()) {
-      return res.status(400).json({ error: "Нет текста для анализа" });
-    }
-
+  app.post("/api/catalog/:id/calculate-kbju", requireAuth, async (req: AuthRequest, res, next: NextFunction) => {
     try {
+      if (!isDeepSeekAvailable()) {
+        throw new ApiError(503, "AI-расчёт недоступен: DEEPSEEK_API_KEY не настроен", "service_unavailable");
+      }
+      const itemId = parseInt(paramValue(req.params.id), 10);
+      const items = storage.getCatalogItems(req.user!.id);
+      const item = items.find((it) => it.id === itemId);
+      if (!item) throw ApiError.notFound("Позиция каталога не найдена");
+
+      // Build text from entries mealName fields
+      const foodText = item.entries.map((e) => e.mealName).join(", ");
+      if (!foodText.trim()) {
+        throw ApiError.badRequest("Нет текста для анализа");
+      }
+
       const result = await analyzeNutrition(foodText);
       // Persist to the first entry
       const firstEntry = item.entries[0];
@@ -85,7 +86,7 @@ export function registerCatalogRoutes(app: Express) {
       } catch {
         /* ignore */
       }
-      res.status(500).json({ error: e.message });
+      next(e);
     }
   });
 
@@ -93,8 +94,8 @@ export function registerCatalogRoutes(app: Express) {
   app.post("/api/catalog/from-meal/:mealId", requireAuth, (req: AuthRequest, res) => {
     const mealId = parseInt(paramValue(req.params.mealId), 10);
     const meal = storage.getMeal(mealId);
-    if (!meal) return res.status(404).json({ error: "Приём пищи не найден" });
-    if (meal.userId !== req.user!.id) return res.status(403).json({ error: "Нет доступа" });
+    if (!meal) throw ApiError.notFound("Приём пищи не найден");
+    if (meal.userId !== req.user!.id) throw ApiError.forbidden("Нет доступа");
     const { name } = req.body;
     const item = storage.saveMealToCatalog(req.user!.id, mealId, name || meal.mealType);
     res.json({ item });

@@ -3,164 +3,22 @@
  * Кабинет врача: профиль, список пациентов, просмотр дневника пациента.
  */
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Stethoscope, ChevronLeft, Bell, UserPlus, Trash2, Flame, Clock, BookOpen, History } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { Stethoscope, ChevronLeft } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BottomNav } from "@/components/BottomNav";
 import { useLocation } from "wouter";
-
-interface Meal {
-  id: number;
-  mealType: string;
-  tsStart: string;
-  tsEnd?: string;
-  foodText?: string;
-  drinkText?: string;
-  calories?: number;
-  protein?: number;
-  fat?: number;
-  carbs?: number;
-  contextNote?: string;
-}
-
-interface Patient {
-  user: { id: number; username: string; displayName?: string; email: string };
-  assignedAt: string;
-}
-
-interface AuditLogEntry {
-  id: number;
-  actorId: number;
-  actorRole: "user" | "doctor" | "admin";
-  action: string;
-  targetId: number | null;
-  detail: string | null;
-  ip: string | null;
-  userAgent: string | null;
-  createdAt: string;
-}
-
-function formatHistoryDate(value: string) {
-  return new Date(value).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-type Tab = "patients" | "diary" | "history";
-
-async function apiCall(path: string, opts?: RequestInit) {
-  const method = (opts?.method ?? "GET") as string;
-  const body = opts?.body as string | undefined;
-  const res = await apiRequest(method, path, body ? JSON.parse(body) : undefined);
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.error || res.statusText);
-  return json;
-}
+import { PatientsTab, PatientDiaryTab, DoctorHistoryTab } from "@/components/doctor";
+import type { Patient, DoctorTab } from "@/components/doctor";
 
 export default function DoctorPage() {
-  const qc = useQueryClient();
-  const { toast } = useToast();
   const { user } = useAuth();
   const [location] = useLocation();
 
-  const [tab, setTab] = useState<Tab>("patients");
+  const [tab, setTab] = useState<DoctorTab>("patients");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [diaryDate, setDiaryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notifyTitle, setNotifyTitle] = useState("");
   const [notifyBody, setNotifyBody] = useState("");
-
-  // ── Patients ──────────────────────────────────────────────────────────────
-  const { data: patientsData, isLoading: patientsLoading } = useQuery<{ patients: Patient[] }>({
-    queryKey: ["/api/doctor/patients"],
-    enabled: tab === "patients" || tab === "diary",
-  });
-  const patients = patientsData?.patients ?? [];
-
-  const [assignQuery, setAssignQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<{ id: number; username: string; displayName?: string }[]>([]);
-  const [searchDone, setSearchDone] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [assignError, setAssignError] = useState<string | null>(null);
-
-  const searchUser = async () => {
-    setSearchError(null);
-    setAssignError(null);
-    const q = assignQuery.trim();
-    if (q.length < 2) {
-      setSearchError("Введите минимум 2 символа для поиска");
-      return;
-    }
-    try {
-      const r = await apiCall(`/api/doctor/search-users?q=${encodeURIComponent(q)}`);
-      setSearchResults(r.users ?? []);
-      setSearchDone(true);
-      if ((r.users ?? []).length === 0) {
-        setSearchError("Пользователи не найдены. Проверьте имя пользователя или отображаемое имя.");
-      }
-    } catch (e: any) {
-      setSearchError(e.message || "Ошибка поиска. Попробуйте ещё раз.");
-    }
-  };
-
-  const assign = useMutation({
-    mutationFn: (patientId: number) => apiCall(`/api/doctor/patients/${patientId}/assign`, { method: "POST" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/doctor/patients"] });
-      setAssignQuery("");
-      setSearchDone(false);
-      setSearchResults([]);
-      setAssignError(null);
-      toast({ title: "Пациент привязан" });
-    },
-    onError: (e: Error) => setAssignError(e.message),
-  });
-
-  const removePatient = useMutation({
-    mutationFn: (patientId: number) => apiCall(`/api/doctor/patients/${patientId}`, { method: "DELETE" }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/doctor/patients"] });
-      if (selectedPatient) setSelectedPatient(null);
-      toast({ title: "Пациент откреплён" });
-    },
-    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
-  });
-
-  // ── Patient diary ─────────────────────────────────────────────────────────
-  const { data: diaryData, isLoading: diaryLoading } = useQuery<{ day: any; meals: Meal[] }>({
-    queryKey: ["/api/doctor/patients", selectedPatient?.user.id, "diary", diaryDate],
-    queryFn: () => apiCall(`/api/doctor/patients/${selectedPatient!.user.id}/diary?date=${diaryDate}`),
-    enabled: !!selectedPatient && tab === "diary",
-  });
-
-  // ── History (audit log, Phase 24.8) ───────────────────────────────────────
-  const { data: historyData, isLoading: historyLoading } = useQuery<{ entries: AuditLogEntry[] }>({
-    queryKey: ["/api/doctor/audit-log"],
-    enabled: tab === "history",
-  });
-  const historyEntries = historyData?.entries ?? [];
-
-  // ── Notify patient ────────────────────────────────────────────────────────
-  const notify = useMutation({
-    mutationFn: (patientId: number) =>
-      apiCall(`/api/doctor/patients/${patientId}/notify`, {
-        method: "POST",
-        body: JSON.stringify({ title: notifyTitle, body: notifyBody }),
-      }),
-    onSuccess: (d) => toast({ title: `Отправлено: ${d.sent} уведомлений` }),
-    onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
-  });
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -191,7 +49,7 @@ export default function DoctorPage() {
       {/* Tabs */}
       <div className="max-w-2xl mx-auto px-4 pt-4">
         <div className="flex gap-1 mb-4 border rounded-lg p-1 bg-muted/40">
-          {(["patients", "diary", "history"] as Tab[]).map((t) => (
+          {(["patients", "diary", "history"] as DoctorTab[]).map((t) => (
             <button
               key={t}
               className={`flex-1 text-xs py-1.5 px-2 rounded-md font-medium transition-colors ${
@@ -204,233 +62,22 @@ export default function DoctorPage() {
           ))}
         </div>
 
-        {/* ── Patients tab ── */}
         {tab === "patients" && (
-          <div className="space-y-4">
-            {/* Assign new patient */}
-            <Card>
-              <CardContent className="px-4 py-3 space-y-3">
-                <p className="text-sm font-medium flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" /> Привязать пациента
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Имя пользователя или отображаемое имя"
-                    value={assignQuery}
-                    onChange={(e) => {
-                      setAssignQuery(e.target.value);
-                      setSearchDone(false);
-                      setSearchError(null);
-                      setAssignError(null);
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && searchUser()}
-                    className="h-9 text-sm"
-                  />
-                  <Button size="sm" variant="outline" onClick={searchUser} className="shrink-0">
-                    Найти
-                  </Button>
-                </div>
-                {searchError && <p className="text-sm text-destructive">{searchError}</p>}
-                {assignError && <p className="text-sm text-destructive">{assignError}</p>}
-                {searchDone && searchResults.length > 0 && (
-                  <div className="space-y-1">
-                    {searchResults.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between border rounded-lg px-3 py-2">
-                        <span className="text-sm">
-                          {u.displayName || u.username}{" "}
-                          <span className="text-muted-foreground text-xs">@{u.username}</span>
-                        </span>
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => assign.mutate(u.id)}
-                          disabled={assign.isPending}
-                        >
-                          {assign.isPending ? "..." : "Привязать"}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Patient list */}
-            <div className="space-y-2">
-              {patientsLoading && <p className="text-sm text-muted-foreground text-center py-4">Загрузка...</p>}
-              {!patientsLoading && patients.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-6">Нет привязанных пациентов</p>
-              )}
-              {patients.map((p) => (
-                <Card key={p.user.id} className="cursor-pointer hover:shadow-sm transition-shadow">
-                  <CardContent className="px-4 py-3 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">{p.user.displayName || p.user.username}</p>
-                      <p className="text-xs text-muted-foreground">@{p.user.username}</p>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs"
-                        onClick={() => {
-                          setSelectedPatient(p);
-                          setTab("diary");
-                        }}
-                      >
-                        <BookOpen className="h-3.5 w-3.5 mr-1" /> Дневник
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => removePatient.mutate(p.user.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
+          <PatientsTab selectedPatient={selectedPatient} setSelectedPatient={setSelectedPatient} setTab={setTab} />
         )}
-
-        {/* ── Diary tab ── */}
         {tab === "diary" && (
-          <div className="space-y-3">
-            {/* Patient selector */}
-            <div className="flex gap-2 items-center">
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                value={selectedPatient?.user.id ?? ""}
-                onChange={(e) => {
-                  const id = Number(e.target.value);
-                  const p = patients.find((pt) => pt.user.id === id) ?? null;
-                  setSelectedPatient(p);
-                }}
-              >
-                <option value="">— Выберите пациента —</option>
-                {patients.map((p) => (
-                  <option key={p.user.id} value={p.user.id}>
-                    {p.user.displayName || p.user.username}
-                  </option>
-                ))}
-              </select>
-              <Input
-                type="date"
-                className="h-9 w-36 shrink-0 text-sm"
-                value={diaryDate}
-                onChange={(e) => setDiaryDate(e.target.value)}
-              />
-            </div>
-
-            {selectedPatient && (
-              <>
-                {diaryLoading && <p className="text-sm text-muted-foreground text-center py-6">Загрузка...</p>}
-                {!diaryLoading && !diaryData?.meals?.length && (
-                  <p className="text-sm text-muted-foreground text-center py-6">Нет записей за этот день</p>
-                )}
-                {diaryData?.meals?.map((meal) => (
-                  <Card key={meal.id}>
-                    <CardContent className="px-4 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Clock className="h-3.5 w-3.5" />
-                          {meal.tsEnd && meal.tsEnd !== meal.tsStart ? `${meal.tsStart}–${meal.tsEnd}` : meal.tsStart}
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {meal.mealType}
-                        </Badge>
-                      </div>
-                      {meal.foodText && <p className="text-sm mt-1.5">🍽 {meal.foodText}</p>}
-                      {meal.drinkText && <p className="text-sm mt-0.5">💧 {meal.drinkText}</p>}
-                      {meal.calories != null && (
-                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 rounded-md px-2 py-1 w-fit">
-                          <Flame className="h-3 w-3" />
-                          <span>{Math.round(meal.calories)} ккал</span>
-                          {meal.protein != null && <span>· Б {meal.protein?.toFixed(1)}</span>}
-                          {meal.fat != null && <span>· Ж {meal.fat?.toFixed(1)}</span>}
-                          {meal.carbs != null && <span>· У {meal.carbs?.toFixed(1)}</span>}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {/* Notify block */}
-                <Card>
-                  <CardContent className="px-4 py-3 space-y-2">
-                    <p className="text-sm font-medium flex items-center gap-2">
-                      <Bell className="h-4 w-4" /> Уведомление пациенту
-                    </p>
-                    <Input
-                      placeholder="Заголовок"
-                      value={notifyTitle}
-                      onChange={(e) => setNotifyTitle(e.target.value)}
-                      className="h-9 text-sm"
-                    />
-                    <Textarea
-                      placeholder="Текст (необязательно)"
-                      value={notifyBody}
-                      onChange={(e) => setNotifyBody(e.target.value)}
-                      className="text-sm resize-none"
-                      rows={2}
-                    />
-                    <Button
-                      size="sm"
-                      disabled={!notifyTitle || notify.isPending}
-                      onClick={() => notify.mutate(selectedPatient.user.id)}
-                    >
-                      {notify.isPending ? "Отправка..." : "Отправить"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </div>
+          <PatientDiaryTab
+            selectedPatient={selectedPatient}
+            setSelectedPatient={setSelectedPatient}
+            diaryDate={diaryDate}
+            setDiaryDate={setDiaryDate}
+            notifyTitle={notifyTitle}
+            setNotifyTitle={setNotifyTitle}
+            notifyBody={notifyBody}
+            setNotifyBody={setNotifyBody}
+          />
         )}
-
-        {/* ── History tab ── */}
-        {tab === "history" && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium flex items-center gap-2">
-              <History className="h-4 w-4" /> Мои последние действия
-            </p>
-            {historyLoading && <p className="text-sm text-muted-foreground text-center py-6">Загрузка...</p>}
-            {!historyLoading && historyEntries.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">Действий пока нет</p>
-            )}
-            {!historyLoading && historyEntries.length > 0 && (
-              <Card>
-                <CardContent className="px-0 py-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Дата</TableHead>
-                        <TableHead>Действие</TableHead>
-                        <TableHead>Цель</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {historyEntries.map((entry) => (
-                        <TableRow key={entry.id}>
-                          <TableCell className="whitespace-nowrap text-xs">
-                            {formatHistoryDate(entry.createdAt)}
-                          </TableCell>
-                          <TableCell className="text-xs">{entry.action}</TableCell>
-                          <TableCell className="text-xs">
-                            {entry.targetId != null ? `#${entry.targetId}` : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
+        {tab === "history" && <DoctorHistoryTab />}
       </div>
 
       <BottomNav

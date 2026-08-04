@@ -10,25 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-interface CatalogEntry {
-  id: number;
-  mealName: string;
-  grams?: number | null;
-  kcal?: number | null;
-  protein?: number | null;
-  fat?: number | null;
-  carbs?: number | null;
-}
-
-interface CatalogItem {
-  id: number;
-  name: string;
-  description?: string | null;
-  isSet: boolean;
-  createdAt: string;
-  entries: CatalogEntry[];
-}
+import type { CatalogItem } from "@/components/catalog";
 
 interface FoodCatalogModalProps {
   open: boolean;
