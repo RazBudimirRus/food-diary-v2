@@ -285,3 +285,84 @@ describe("POST /api/doctor/patients/:id/notify (Web Push)", () => {
       .expect(503);
   });
 });
+
+describe("Doctor КБЖУ plans", () => {
+  let planId: number;
+
+  it("POST /api/doctor/patients/:id/plans creates a plan", async () => {
+    const csrf = await getCsrf(doctorToken);
+    const res = await request(app)
+      .post(`/api/doctor/patients/${patientId}/plans`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .set("x-csrf-token", csrf)
+      .send({
+        startDate: "2026-07-01",
+        endDate: "2026-07-31",
+        kcal: 2000,
+        protein: 120,
+        fat: 70,
+        carbs: 200,
+        waterMl: 2000,
+        notes: "Лёгкий дефицит",
+      })
+      .expect(200);
+
+    expect(res.body.plan).toMatchObject({
+      patientId,
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+      kcal: 2000,
+      protein: 120,
+    });
+    planId = res.body.plan.id;
+  });
+
+  it("GET /api/doctor/patients/:id/plans lists plans for patient", async () => {
+    const res = await request(app)
+      .get(`/api/doctor/patients/${patientId}/plans`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .expect(200);
+
+    expect(res.body.plans.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.plans.some((p: { id: number }) => p.id === planId)).toBe(true);
+  });
+
+  it("GET /api/user/active-plan returns doctor plan for patient on active date", async () => {
+    const res = await request(app)
+      .get("/api/user/active-plan?date=2026-07-15")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .expect(200);
+
+    expect(res.body.source).toBe("doctor");
+    expect(res.body.plan).toMatchObject({
+      id: planId,
+      kcal: 2000,
+      protein: 120,
+    });
+  });
+
+  it("GET /api/user/active-plan returns null source outside plan dates", async () => {
+    const res = await request(app)
+      .get("/api/user/active-plan?date=2026-08-15")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .expect(200);
+
+    expect(res.body.source).toBe("none");
+    expect(res.body.plan).toBeNull();
+  });
+
+  it("DELETE /api/doctor/plans/:id removes the plan", async () => {
+    const csrf = await getCsrf(doctorToken);
+    await request(app)
+      .delete(`/api/doctor/plans/${planId}`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .set("x-csrf-token", csrf)
+      .expect(200);
+
+    const list = await request(app)
+      .get(`/api/doctor/patients/${patientId}/plans`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .expect(200);
+    expect(list.body.plans.some((p: { id: number }) => p.id === planId)).toBe(false);
+  });
+});

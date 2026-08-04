@@ -588,6 +588,48 @@ describe("admin routes", () => {
       .expect(403);
   });
 
+  it("forbids non-admin users from reading audit log", async () => {
+    const auth = await registerUser("audit_forbidden_user");
+
+    await request(app).get("/api/admin/audit-log").set("Authorization", `Bearer ${auth.accessToken}`).expect(403);
+  });
+
+  it("allows admin users to read audit log with optional filters", async () => {
+    const admin = await registerUser("audit_admin_user");
+    const target = await registerUser("audit_target_user");
+    const { storage } = await import("../../server/storage");
+    storage.bootstrapAdminByUsername(admin.user.username);
+
+    await storage.addAuditLog({
+      actorId: admin.user.id,
+      actorRole: "admin",
+      action: "admin.set_role",
+      targetId: target.user.id,
+      detail: JSON.stringify({ role: "doctor" }),
+      ip: "127.0.0.1",
+      userAgent: "vitest",
+    });
+
+    const all = await request(app)
+      .get("/api/admin/audit-log")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    expect(all.body.entries).toEqual(expect.any(Array));
+    expect(all.body.entries.some((e: { action: string }) => e.action === "admin.set_role")).toBe(true);
+
+    const filtered = await request(app)
+      .get(`/api/admin/audit-log?actor=${admin.user.id}&action=admin.set_role&limit=10`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    expect(filtered.body.entries.length).toBeGreaterThanOrEqual(1);
+    expect(filtered.body.entries.every((e: { actorId: number; action: string }) => e.actorId === admin.user.id)).toBe(
+      true,
+    );
+    expect(filtered.body.entries.every((e: { action: string }) => e.action === "admin.set_role")).toBe(true);
+  });
+
   it("allows admins to reset a user password and revoke their sessions", async () => {
     const admin = await registerUser("admin_reset_allowed_user");
     const target = await registerUser("target_reset_password_user");

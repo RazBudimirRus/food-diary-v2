@@ -23,21 +23,7 @@ import type {
   AuditLogEntry,
   NewAuditLogEntry,
 } from "@shared/schema";
-import {
-  users,
-  days,
-  meals,
-  secrets,
-  apiUsage,
-  userProfiles,
-  doctors,
-  doctorPatients,
-  doctorMealNotes,
-  doctorPlans,
-  pushSubscriptions,
-  idempotencyKeys,
-  clientErrors,
-} from "@shared/schema";
+import { idempotencyKeys, clientErrors } from "@shared/schema";
 import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskNowTime, mskToday } from "@shared/dates";
 import {
   computeMealTimingMetrics,
@@ -52,9 +38,11 @@ import { db, sqlite } from "./db";
 import { auditRepository } from "./repositories/audit";
 import { catalogRepository } from "./repositories/catalog";
 import { dayRepository } from "./repositories/day";
+import { doctorRepository } from "./repositories/doctor";
 import { mealRepository } from "./repositories/meal";
 import { photoRepository } from "./repositories/photo";
 import { sessionRepository } from "./repositories/session";
+import { userRepository } from "./repositories/user";
 
 export type { AdminSession, ApiUsageDay, ApiUsageSummary, InsertApiUsage } from "./admin-types";
 export { db, sqlite };
@@ -487,23 +475,19 @@ export interface NutritionAnalyticsSummary {
 
 class SqliteStorage implements IStorage {
   getUserById(id: number) {
-    return db.select().from(users).where(eq(users.id, id)).get();
+    return userRepository.getUserById(id);
   }
 
   getUserByUsername(username: string) {
-    return db.select().from(users).where(eq(users.username, username)).get();
+    return userRepository.getUserByUsername(username);
   }
 
   getUserByEmail(email: string) {
-    return db.select().from(users).where(eq(users.email, email)).get();
+    return userRepository.getUserByEmail(email);
   }
 
   searchUsers(q: string, limit = 10): User[] {
-    const results = db.select().from(users).all();
-    const ql = q.toLowerCase();
-    return results
-      .filter((u) => u.username.toLowerCase().includes(ql) || (u.displayName?.toLowerCase().includes(ql) ?? false))
-      .slice(0, limit);
+    return userRepository.searchUsers(q, limit);
   }
 
   createUser(data: {
@@ -513,108 +497,54 @@ class SqliteStorage implements IStorage {
     displayName?: string;
     pdConsentAt?: string;
   }): User {
-    return db
-      .insert(users)
-      .values({
-        username: data.username,
-        email: data.email,
-        passwordHash: data.passwordHash,
-        displayName: data.displayName ?? null,
-        role: "user",
-        pdConsentAt: data.pdConsentAt ?? null,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return userRepository.createUser(data);
   }
 
   deleteUser(userId: number): void {
-    // Cascade delete in correct FK order
-    sqlite.prepare("DELETE FROM api_usage WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM refresh_tokens WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM secrets WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM user_profiles WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM meals WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM days WHERE user_id = ?").run(userId);
-    sqlite.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    userRepository.deleteUser(userId);
   }
 
   getUserAllData(userId: number): { user: User | undefined; days: Day[]; meals: Meal[]; apiUsage: ApiUsage[] } {
-    return {
-      user: this.getUserById(userId),
-      days: db.select().from(days).where(eq(days.userId, userId)).all(),
-      meals: db.select().from(meals).where(eq(meals.userId, userId)).all(),
-      apiUsage: db.select().from(apiUsage).where(eq(apiUsage.userId, userId)).all(),
-    };
+    return userRepository.getUserAllData(userId);
   }
 
   getUserProfile(userId: number): UserProfile | undefined {
-    return db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).get();
+    return userRepository.getUserProfile(userId);
   }
 
   upsertUserProfile(userId: number, data: Partial<UserProfile>): UserProfile {
-    const existing = this.getUserProfile(userId);
-    if (existing) {
-      const { id: _id, userId: _userId, ...rest } = data;
-      return db
-        .update(userProfiles)
-        .set({ ...rest, updatedAt: new Date().toISOString() })
-        .where(eq(userProfiles.userId, userId))
-        .returning()
-        .get();
-    }
-    const { id: _id, userId: _userId, ...rest } = data;
-    return db
-      .insert(userProfiles)
-      .values({
-        userId,
-        ...rest,
-        updatedAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return userRepository.upsertUserProfile(userId, data);
   }
 
   bootstrapAdminByUsername(username: string): User | undefined {
-    const user = this.getUserByUsername(username);
-    if (!user) return undefined;
-    if (user.role === "admin") return user;
-    return db.update(users).set({ role: "admin" }).where(eq(users.id, user.id)).returning().get();
+    return userRepository.bootstrapAdminByUsername(username);
   }
 
   updateUserPassword(userId: number, passwordHash: string): User | undefined {
-    return db.update(users).set({ passwordHash }).where(eq(users.id, userId)).returning().get();
+    return userRepository.updateUserPassword(userId, passwordHash);
   }
 
   updateUserProfile(userId: number, data: { displayName?: string }): User | undefined {
-    const updates: Partial<typeof users.$inferInsert> = {};
-    if (data.displayName !== undefined) updates.displayName = data.displayName;
-    if (Object.keys(updates).length === 0) return this.getUserById(userId);
-    return db.update(users).set(updates).where(eq(users.id, userId)).returning().get();
+    return userRepository.updateUserProfile(userId, data);
   }
 
   setLastLogin(userId: number): void {
-    db.update(users).set({ lastLoginAt: new Date().toISOString() }).where(eq(users.id, userId)).run();
+    userRepository.setLastLogin(userId);
   }
 
   // Phase 28.2: MFA
   setMfaSecret(userId: number, packedSecret: string): void {
-    db.update(users).set({ mfaSecret: packedSecret }).where(eq(users.id, userId)).run();
+    userRepository.setMfaSecret(userId, packedSecret);
   }
   enableMfa(userId: number): void {
-    db.update(users).set({ mfaEnabled: true }).where(eq(users.id, userId)).run();
+    userRepository.enableMfa(userId);
   }
   disableMfa(userId: number): void {
-    db.update(users).set({ mfaEnabled: false, mfaSecret: null }).where(eq(users.id, userId)).run();
+    userRepository.disableMfa(userId);
   }
 
   listUsers(): User[] {
-    return db
-      .select()
-      .from(users)
-      .all()
-      .sort((a, b) => a.username.localeCompare(b.username));
+    return userRepository.listUsers();
   }
 
   listActiveRefreshSessions(nowIso = new Date().toISOString()): AdminSession[] {
@@ -846,44 +776,15 @@ class SqliteStorage implements IStorage {
   }
 
   getSecret(userId: number, key: string) {
-    return db
-      .select()
-      .from(secrets)
-      .where(and(eq(secrets.userId, userId), eq(secrets.key, key)))
-      .get();
+    return userRepository.getSecret(userId, key);
   }
 
   setSecret(userId: number, key: string, encryptedValue: string, iv: string): Secret {
-    // upsert
-    const existing = this.getSecret(userId, key);
-    if (existing) {
-      return db
-        .update(secrets)
-        .set({ encryptedValue, iv, updatedAt: new Date().toISOString() })
-        .where(eq(secrets.id, existing.id))
-        .returning()
-        .get();
-    }
-    return db
-      .insert(secrets)
-      .values({
-        userId,
-        key,
-        encryptedValue,
-        iv,
-        updatedAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return userRepository.setSecret(userId, key, encryptedValue, iv);
   }
 
   listSecretKeys(userId: number): string[] {
-    return db
-      .select({ key: secrets.key })
-      .from(secrets)
-      .where(eq(secrets.userId, userId))
-      .all()
-      .map((r) => r.key);
+    return userRepository.listSecretKeys(userId);
   }
 
   getDayById(id: number) {
@@ -937,219 +838,75 @@ class SqliteStorage implements IStorage {
   // ── Phase 20 — Dietary Restrictions ─────────────────────────────────────────
 
   upsertDietaryRestrictions(userId: number, restrictions: string): UserProfile {
-    const now = new Date().toISOString();
-    const existing = sqlite.prepare("SELECT id FROM user_profiles WHERE user_id = ?").get(userId);
-    if (existing) {
-      sqlite
-        .prepare("UPDATE user_profiles SET dietary_restrictions = ?, updated_at = ? WHERE user_id = ?")
-        .run(restrictions, now, userId);
-    } else {
-      sqlite
-        .prepare("INSERT INTO user_profiles (user_id, dietary_restrictions, updated_at) VALUES (?, ?, ?)")
-        .run(userId, restrictions, now);
-    }
-    return db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).get()!;
+    return userRepository.upsertDietaryRestrictions(userId, restrictions);
   }
 
   // ── Phase 15 — Doctor Cabinet ────────────────────────────────────────────────
 
   getDoctorByUserId(userId: number): Doctor | undefined {
-    return db.select().from(doctors).where(eq(doctors.userId, userId)).get();
+    return doctorRepository.getDoctorByUserId(userId);
   }
 
   upsertDoctor(userId: number, data: { fullName: string; phone?: string; telegramUrl?: string }): Doctor {
-    const existing = this.getDoctorByUserId(userId);
-    if (existing) {
-      return db
-        .update(doctors)
-        .set({
-          fullName: data.fullName,
-          phone: data.phone ?? null,
-          telegramUrl: data.telegramUrl ?? null,
-        })
-        .where(eq(doctors.userId, userId))
-        .returning()
-        .get();
-    }
-    return db
-      .insert(doctors)
-      .values({
-        userId,
-        fullName: data.fullName,
-        phone: data.phone ?? null,
-        telegramUrl: data.telegramUrl ?? null,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return doctorRepository.upsertDoctor(userId, data);
   }
 
   getDoctorPatients(doctorId: number): Array<{ user: User; assignedAt: string }> {
-    const rows = sqlite
-      .prepare(
-        `
-      SELECT u.*, dp.assigned_at
-      FROM doctor_patients dp
-      JOIN users u ON u.id = dp.patient_id
-      WHERE dp.doctor_id = ?
-      ORDER BY dp.assigned_at DESC
-    `,
-      )
-      .all(doctorId) as any[];
-    return rows.map((r) => ({
-      user: {
-        id: r.id,
-        username: r.username,
-        email: r.email,
-        passwordHash: r.password_hash,
-        displayName: r.display_name,
-        role: r.role,
-        pdConsentAt: r.pd_consent_at,
-        createdAt: r.created_at,
-      } as User,
-      assignedAt: r.assigned_at,
-    }));
+    return doctorRepository.getDoctorPatients(doctorId);
   }
 
   assignPatient(doctorId: number, patientId: number): DoctorPatient {
-    return db
-      .insert(doctorPatients)
-      .values({
-        doctorId,
-        patientId,
-        assignedAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return doctorRepository.assignPatient(doctorId, patientId);
   }
 
   removePatient(doctorId: number, patientId: number): void {
-    db.delete(doctorPatients)
-      .where(and(eq(doctorPatients.doctorId, doctorId), eq(doctorPatients.patientId, patientId)))
-      .run();
+    doctorRepository.removePatient(doctorId, patientId);
   }
 
   getPatientDoctor(patientId: number): Doctor | undefined {
-    const row = sqlite
-      .prepare(
-        `
-      SELECT d.* FROM doctor_patients dp
-      JOIN doctors d ON d.id = dp.doctor_id
-      WHERE dp.patient_id = ?
-      LIMIT 1
-    `,
-      )
-      .get(patientId) as any;
-    if (!row) return undefined;
-    return {
-      id: row.id,
-      userId: row.user_id,
-      fullName: row.full_name,
-      phone: row.phone,
-      telegramUrl: row.telegram_url,
-      createdAt: row.created_at,
-    } as Doctor;
+    return doctorRepository.getPatientDoctor(patientId);
   }
 
   addDoctorMealNote(data: { doctorId: number; mealId: number; note?: string; suggestedKcal?: number }): DoctorMealNote {
-    return db
-      .insert(doctorMealNotes)
-      .values({
-        doctorId: data.doctorId,
-        mealId: data.mealId,
-        note: data.note ?? null,
-        suggestedKcal: data.suggestedKcal ?? null,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return doctorRepository.addDoctorMealNote(data);
   }
 
   getDoctorMealNotes(mealId: number): DoctorMealNote[] {
-    return db.select().from(doctorMealNotes).where(eq(doctorMealNotes.mealId, mealId)).all();
+    return doctorRepository.getDoctorMealNotes(mealId);
   }
 
   setUserRole(userId: number, role: "user" | "doctor" | "admin"): User | undefined {
-    return db.update(users).set({ role }).where(eq(users.id, userId)).returning().get();
+    return userRepository.setUserRole(userId, role);
   }
 
   savePushSubscription(data: { userId: number; endpoint: string; p256dh: string; auth: string }): PushSubscription {
-    // upsert by endpoint
-    const existing = db.select().from(pushSubscriptions).where(eq(pushSubscriptions.endpoint, data.endpoint)).get();
-    if (existing) {
-      return db
-        .update(pushSubscriptions)
-        .set({ userId: data.userId, p256dh: data.p256dh, auth: data.auth })
-        .where(eq(pushSubscriptions.endpoint, data.endpoint))
-        .returning()
-        .get();
-    }
-    return db
-      .insert(pushSubscriptions)
-      .values({
-        ...data,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return userRepository.savePushSubscription(data);
   }
 
   getUserPushSubscriptions(userId: number): PushSubscription[] {
-    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).all();
+    return userRepository.getUserPushSubscriptions(userId);
   }
 
   deletePushSubscription(endpoint: string): void {
-    db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint)).run();
+    userRepository.deletePushSubscription(endpoint);
   }
 
   // ── Phase 18 — Doctor Plans ──────────────────────────────────────────────────
 
   createDoctorPlan(doctorId: number, data: InsertDoctorPlan): DoctorPlan {
-    return db
-      .insert(doctorPlans)
-      .values({
-        doctorId,
-        patientId: data.patientId,
-        startDate: data.startDate,
-        endDate: data.endDate ?? null,
-        kcal: data.kcal ?? null,
-        protein: data.protein ?? null,
-        fat: data.fat ?? null,
-        carbs: data.carbs ?? null,
-        waterMl: data.waterMl ?? null,
-        notes: data.notes ?? null,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return doctorRepository.createDoctorPlan(doctorId, data);
   }
 
   getDoctorPlansForPatient(patientId: number): DoctorPlan[] {
-    return db
-      .select()
-      .from(doctorPlans)
-      .where(eq(doctorPlans.patientId, patientId))
-      .all()
-      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    return doctorRepository.getDoctorPlansForPatient(patientId);
   }
 
   deleteDoctorPlan(planId: number): void {
-    db.delete(doctorPlans).where(eq(doctorPlans.id, planId)).run();
+    doctorRepository.deleteDoctorPlan(planId);
   }
 
   getActivePlan(patientId: number, date: string): DoctorPlan | undefined {
-    return sqlite
-      .prepare(
-        `
-      SELECT * FROM doctor_plans
-      WHERE patient_id = ?
-        AND start_date <= ?
-        AND (end_date IS NULL OR end_date >= ?)
-      ORDER BY start_date DESC
-      LIMIT 1
-    `,
-      )
-      .get(patientId, date, date) as DoctorPlan | undefined;
+    return doctorRepository.getActivePlan(patientId, date);
   }
 
   // ── UX-7 — Food Catalog ───────────────────────────────────────────────────────
