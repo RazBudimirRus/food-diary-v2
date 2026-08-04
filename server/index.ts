@@ -1,78 +1,14 @@
 import "dotenv/config";
-import express, { Response, NextFunction } from "express";
-import type { Request } from "express";
-import cors from "cors";
-import helmet from "helmet";
-import cookieParser from "cookie-parser";
-import { registerRoutes } from "./routes";
-import { csrfMiddleware } from "./csrf";
-import { serveStatic } from "./static";
+import type { Request, Response, NextFunction } from "express";
 import { createServer } from "node:http";
+import { createApp } from "./app";
+import { registerRoutes } from "./routes";
+import { serveStatic } from "./static";
 import { initDeepSeekKey } from "./deepseek";
 import { storage } from "./storage";
 import { runMigrations } from "./migrate";
 import { logger, requestContext } from "./logger";
-import { registry, httpRequestsTotal, httpRequestDurationMs } from "./metrics";
 import { initSentry } from "./sentry";
-import { randomUUID } from "crypto";
-
-// Phase 27.3: init Sentry before everything else
-initSentry();
-
-const app = express();
-const httpServer = createServer(app);
-
-if (process.env.TRUST_PROXY === "1") {
-  app.set("trust proxy", 1);
-}
-
-function allowedOrigins(): string[] {
-  const configured = (process.env.ALLOWED_ORIGINS || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-  const publicUrl = process.env.PUBLIC_URL ? [process.env.PUBLIC_URL] : [];
-  const domainUrl = process.env.DOMAIN ? [`https://${process.env.DOMAIN}`] : [];
-  const devOrigins =
-    process.env.NODE_ENV === "production"
-      ? []
-      : ["http://localhost:5000", "http://localhost:5173", "http://127.0.0.1:5000", "http://127.0.0.1:5173"];
-
-  return Array.from(new Set([...configured, ...publicUrl, ...domainUrl, ...devOrigins]));
-}
-
-app.use(
-  helmet({
-    contentSecurityPolicy:
-      process.env.NODE_ENV === "production"
-        ? {
-            directives: {
-              defaultSrc: ["'self'"],
-              baseUri: ["'self'"],
-              objectSrc: ["'none'"],
-              frameAncestors: ["'none'"],
-              scriptSrc: ["'self'"],
-              styleSrc: ["'self'", "'unsafe-inline'"],
-              imgSrc: ["'self'", "data:"],
-              fontSrc: ["'self'", "data:"],
-              connectSrc: ["'self'"],
-            },
-          }
-        : false,
-    hsts: process.env.NODE_ENV === "production" ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
-  }),
-);
-
-const corsOrigins = allowedOrigins();
-app.use(
-  cors({
-    credentials: true,
-    origin(origin, callback) {
-      if (!origin || corsOrigins.includes(origin)) return callback(null, true);
-      return callback(null, false);
-    },
-  }),
-);
 
 declare module "http" {
   interface IncomingMessage {
@@ -80,62 +16,16 @@ declare module "http" {
   }
 }
 
-app.use(
-  express.json({
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
+// Phase 27.3: init Sentry before everything else
+initSentry();
 
-app.use(express.urlencoded({ extended: false }));
-
-// Phase 28.2: cookies must be parsed before CSRF middleware can read them
-app.use(cookieParser());
-app.use(csrfMiddleware);
+const app = createApp();
+const httpServer = createServer(app);
 
 // Phase 27.1: keep legacy log() for backward compat — now delegates to pino
 export function log(message: string, source = "express") {
   logger.info({ source }, message);
 }
-
-// Phase 27.1: request_id + structured HTTP logging middleware
-app.use((req, res, next) => {
-  const requestId = (req.headers["x-request-id"] as string) || randomUUID();
-  const start = Date.now();
-
-  requestContext.run({ requestId }, () => {
-    res.setHeader("X-Request-ID", requestId);
-
-    res.on("finish", () => {
-      const duration = Date.now() - start;
-      const route = req.route?.path ?? req.path;
-      // Phase 27.4: record Prometheus metrics
-      const labels = { method: req.method, route, status_code: String(res.statusCode) };
-      httpRequestsTotal.inc(labels);
-      httpRequestDurationMs.observe(labels, duration);
-
-      if (req.path.startsWith("/api")) {
-        logger.info(
-          { method: req.method, path: req.path, status: res.statusCode, durationMs: duration, requestId },
-          "request",
-        );
-      }
-    });
-
-    next();
-  });
-});
-
-// Phase 27.4: /metrics endpoint for Prometheus scraping
-app.get("/metrics", async (_req, res) => {
-  try {
-    res.set("Content-Type", registry.contentType);
-    res.end(await registry.metrics());
-  } catch {
-    res.status(500).end();
-  }
-});
 
 (async () => {
   // Phase 26.1: Run versioned migrations before anything else

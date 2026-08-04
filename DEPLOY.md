@@ -120,7 +120,9 @@ curl -sS https://fooddiary.razbudimir.com/api/health
 curl -sS https://fooddiary.razbudimir.com/api/now
 ```
 
-### Preview ветка `refactor/v2.27.0` (Phase 29 W0–W4)
+### Preview ветка `refactor/v2.27.0` (Phase 29 W0–W4 + W3 DDL)
+
+После этого деплоя схема БД создаётся **только** миграциями (`runMigrations`), без `CREATE TABLE` в `storage.ts`. На существующей prod-БД поведение не меняется; на пустой БД достаточно штатного boot. Локальная проверка: `npx tsx script/cold-start-check.ts`.
 
 На сервере с внешним nginx (`docker-compose.prod.yml`):
 

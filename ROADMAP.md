@@ -48,7 +48,7 @@
 | v2.7.0 · 2026-06-28  |         Фаза 4 комплит | ✅ Реализовано | Подтверждено полное реализование Admin Panel: users, sessions revoke, password reset, DeepSeek usage dashboard |
 
 | v2.25.1 · 2026-08-02 | DeepSeek thinking fix | ✅ Реализовано | content:null при thinking mode |
-| v2.27.0 · 2026-08-04 | Phase 29 W0–W4 cont. (branch refactor/v2.27.0) | 🚧 В работе | User/Doctor repos; ApiError catalog/photos/meals/admin/doctor; Doctor/Catalog/Profile/MealCard UI splits; version bump |
+| v2.27.0 · 2026-08-04 | Phase 29 W0–W5 (branch refactor/v2.27.0) | 🚧 Preview | User/Doctor repos; ApiError; UI splits; bootstrap DDL removed; createApp() + boot tests |
 | v2.26.0 · 2026-08-04 | Phase 29 finish wave 1 | ✅ В main | db.ts, Meal/Day/Session/Catalog/Photo/Audit repos, ApiError, Admin/Analytics/MealFields split |
 
 > Прод-сервер может отставать от `main`: после коммитов Phase 10/2/1 нужен отдельный деплой на VPS.
@@ -3270,7 +3270,9 @@ app.get("/api/report/:date", ...)   // параметрический — вто
 
 Wave 3 (v2.12) разнесла `routes.ts` / `schema` / заготовки `repositories/`. К v2.26.0 добавлены: `server/db.ts`, реальный `MealRepository` (не pass-through), `ApiError`, унификация `config` (TTL + photo limits), MSK `mskNowTime` в `shared/dates`, фикс soft-delete в analytics SQL, auth-фото в MealForm, снятие duplicate `cookieParser`.
 
-Остаётся: убрать bootstrap DDL из storage (BUG-03) когда миграции покрывают cold start; внедрить ApiError в route handlers; UI Doctor/Catalog/Profile split.
+К v2.27.0: User/Doctor repos; ApiError в auth/catalog/photos/meals/admin/doctor; UI Doctor/Catalog/Profile/MealCard; **bootstrap DDL убран**; **`createApp()`** (`server/app.ts`) + boot tests; удалён shim `server/routes.ts` (резолв в `routes/index`).
+
+Остаётся: merge в `main` по запросу.
 
 ### Подзадачи
 
@@ -3279,13 +3281,13 @@ Wave 3 (v2.12) разнесла `routes.ts` / `schema` / заготовки `rep
 - ✅ Разнести по доменам: `server/routes/auth.ts`, `meals.ts`, `doctor.ts`, `admin.ts`, `photos.ts`, `reports.ts`, `catalog.ts`
 - 🚧 Единый `server/routes/index.ts` — register\* (не nested Router mounts)
 - ✅ Общая типизация ошибок: `ApiError { code, message, details? }` (`server/errors.ts`)
-- 📋 Adoption: handlers ещё не `throw ApiError` (middleware готов)
+- ✅ Adoption: auth / meals / catalog / photos / admin / doctor throw `ApiError` (MFA 202 и спец. payload сохранены)
 
 #### 29.2 Расщепление server/storage.ts
 
-- 🚧 `server/repositories/` + **`server/db.ts`** (shared connection)
+- ✅ `server/repositories/` + **`server/db.ts`** (shared connection)
 - ✅ Real SQL: Meal / Day / Session / Catalog / Photo / Audit / **User** / **Doctor** (v2.27) — storage делегирует
-- 🚧 `storage.ts` — facade + analytics SQL + bootstrap DDL (документировано в `migrate.ts`)
+- ✅ `storage.ts` — facade + analytics SQL; **без** bootstrap DDL (v2.27 W3)
 - ✅ Split AdminPage → `components/admin/*`; AnalyticsPage → `components/analytics/*`
 - ✅ MealFields unify MealForm + MealEditSheet
 
@@ -3725,7 +3727,9 @@ INSERT INTO __drizzle_migrations (hash, created_at) VALUES
 
 В `server/migrate.ts` guarded DDL выполняется **после** `migrate()`, то есть уже применённые вручную DDL не мешают drizzle. Но если в `__drizzle_migrations` нет записи — drizzle попытается применить SQL снова.
 
-**TODO (Фаза 29 / рефакторинг):** заменить guarded DDL в `migrate.ts` на корректные drizzle-kit миграции, чтобы хэши записывались автоматически. Guarded DDL оставить только как аварийный fallback для реально сломанных БД.
+**Статус v2.27:** bootstrap DDL из `storage.ts` удалён; cold start покрыт drizzle migrations + guarded DDL. Guarded DDL остаётся аварийным fallback (не дублировать схему в storage).
+
+**TODO (дальше):** по возможности свернуть guarded DDL, когда уверенность в `__drizzle_migrations` на всех окружениях высокая.
 
 ---
 

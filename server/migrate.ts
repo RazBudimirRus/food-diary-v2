@@ -1,13 +1,14 @@
 /**
  * Versioned migrations via drizzle-kit (Phase 26.1) + guarded DDL (Phase 29.6 / BUG-03).
  *
- * Order on boot:
+ * Order on boot (v2.27+):
  * 1. `runMigrations(dbPath)` — drizzle migrator + `applyGuardedDDL`
- * 2. `storage.ts` bootstrap `CREATE TABLE IF NOT EXISTS` — legacy safety net for empty DBs
+ * 2. Then storage / repositories may open the DB (lazy Proxy in db.ts)
  *
- * Dual DDL is intentional until bootstrap can be removed: migrations own schema evolution;
- * guarded DDL repairs partial applies; bootstrap only creates missing tables/indexes.
- * Do not add new columns to bootstrap — add a migration (+ guarded repair if needed).
+ * Schema source of truth: `migrations/*.sql`. Guarded DDL only repairs partial applies
+ * (column/table missing while drizzle hash was recorded). Add new columns via a migration
+ * (+ guarded repair if prod may have a partial apply). Verify empty DB with
+ * `npx tsx script/cold-start-check.ts`.
  */
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { drizzle } from "drizzle-orm/better-sqlite3";
