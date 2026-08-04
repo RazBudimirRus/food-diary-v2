@@ -127,17 +127,28 @@ curl -sS https://fooddiary.razbudimir.com/api/now
 ```bash
 # путь к клону: /srv/foodbot или ~/food_app — как у вас настроено
 cd /srv/foodbot
+
+# Если раньше правили/собирали под root — сначала починить владельца,
+# иначе git checkout падает с Permission denied и файлы (напр. MealFields.tsx) не появляются.
+sudo chown -R "$USER:$USER" /srv/foodbot
+
 git fetch origin
 git checkout refactor/v2.26.0
-git pull origin refactor/v2.26.0
+git reset --hard origin/refactor/v2.26.0
+git clean -fd
+# убедиться, что критичные файлы на месте:
+test -f client/src/components/diary/MealFields.tsx
+
 # бэкап БД перед обновлением
-cp /srv/foodbot/data/data.db "/srv/foodbot/data/backups/pre-v2.26.0-$(date +%Y%m%d_%H%M%S).db" 2>/dev/null || true
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml ps
+mkdir -p /srv/foodbot/data/backups
+sudo cp /srv/foodbot/data/data.db "/srv/foodbot/data/backups/pre-v2.26.0-$(date +%Y%m%d_%H%M%S).db"
+
+sudo docker compose -f docker-compose.prod.yml up -d --build
+sudo docker compose -f docker-compose.prod.yml ps
 curl -sS https://fooddiary.razbudimir.com/api/health
 curl -sS https://fooddiary.razbudimir.com/api/now
 # логи при проблемах
-docker compose -f docker-compose.prod.yml logs --tail=80 api
+sudo docker compose -f docker-compose.prod.yml logs --tail=80 api
 ```
 
 Откат на `main`:
