@@ -3269,7 +3269,7 @@ app.get("/api/report/:date", ...)   // параметрический — вто
 
 Wave 3 (v2.12) разнесла `routes.ts` / `schema` / заготовки `repositories/`. К v2.26.0 добавлены: `server/db.ts`, реальный `MealRepository` (не pass-through), `ApiError`, унификация `config` (TTL + photo limits), MSK `mskNowTime` в `shared/dates`, фикс soft-delete в analytics SQL, auth-фото в MealForm, снятие duplicate `cookieParser`.
 
-Остаётся: остальные repositories (day/user/doctor/…) с SQL из storage; split AdminPage/AnalyticsPage; MealFields unify; убрать bootstrap DDL из storage (BUG-03).
+Остаётся: user/doctor repos (ещё pass-through); убрать bootstrap DDL из storage (BUG-03) когда миграции покрывают cold start.
 
 ### Подзадачи
 
@@ -3282,19 +3282,11 @@ Wave 3 (v2.12) разнесла `routes.ts` / `schema` / заготовки `rep
 #### 29.2 Расщепление server/storage.ts
 
 - 🚧 `server/repositories/` + **`server/db.ts`** (shared connection)
-- ✅ `MealRepository` — реальный Drizzle SQL; storage делегирует meal CRUD
-- 📋 Остальные repos: day, user, doctor, session, catalog, photo, audit — ещё pass-through
-- 📋 `storage.ts` остаётся facade + analytics SQL + bootstrap DDL
-
-#### 29.3 Расщепление shared/schema.ts
-
-- ✅ `shared/schema/tables.ts` / `validators.ts` / `types.ts` / `index.ts`
-
-#### 29.4 Расщепление DiaryPage.tsx
-
-- ✅ Выделены `MealCard`, `MealForm`, `DaySummary`, `DateCarousel`, `DayCommentBox`
-- 🚧 `DiaryPage.tsx` ~387 строк (цель ≤300); MealForm/MealCard всё ещё крупные
-- 📋 Unify MealFields / MealEditSheet
+- ✅ `MealRepository` / `DayRepository` / `SessionRepository` / `CatalogRepository` / `PhotoRepository` / `AuditRepository` — реальный SQL; storage делегирует
+- 📋 User / Doctor repos — ещё pass-through
+- 🚧 `storage.ts` — facade + analytics SQL + bootstrap DDL (документировано в `migrate.ts`)
+- ✅ Split AdminPage → `components/admin/*`; AnalyticsPage → `components/analytics/*`
+- ✅ MealFields unify MealForm + MealEditSheet
 
 #### 29.5 Магические числа → config.ts
 
