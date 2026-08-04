@@ -6,6 +6,7 @@ import { openApiSpec } from "../openapi";
 import { getMskDate, getMskTime, storage } from "../storage";
 import { isS3Configured, uploadPhoto, deleteFromS3, buildPhotoKey } from "../s3";
 import { isDeepSeekAvailable } from "../deepseek";
+import { ApiError } from "../errors";
 import { registerAuthRoutes } from "./auth";
 import { registerMealsRoutes } from "./meals";
 import { registerReportsRoutes } from "./reports";
@@ -17,6 +18,8 @@ import { registerPushRoutes } from "./push";
 import { clientErrorsRouter } from "./client-errors";
 
 export function registerRoutes(httpServer: Server, app: Express) {
+  // Required here (not only in index.ts) so integration tests that call
+  // registerRoutes() directly can parse refresh_token cookies.
   app.use(cookieParser());
 
   // Task 34.1: OpenAPI / Swagger UI docs
@@ -35,7 +38,12 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   // ── ADMIN-2: серверный error middleware — логирует все 4xx/5xx в client_errors ──
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
-    const status = (err as any)?.status ?? (err as any)?.statusCode ?? 500;
+    const status =
+      err instanceof ApiError
+        ? err.status
+        : ((err as { status?: number; statusCode?: number })?.status ??
+          (err as { statusCode?: number })?.statusCode ??
+          500);
     const message = err instanceof Error ? err.message : typeof err === "string" ? err : "Internal Server Error";
     const stack = err instanceof Error ? (err.stack ?? null) : null;
     const userId = (req as any)?.user?.id ?? null;
@@ -55,7 +63,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
       }
     }
     if (!res.headersSent) {
-      res.status(status).json({ error: message });
+      if (err instanceof ApiError) {
+        res.status(status).json(err.toJSON());
+      } else {
+        res.status(status).json({ error: message });
+      }
     }
   });
 

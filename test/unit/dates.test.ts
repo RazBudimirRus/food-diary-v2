@@ -7,6 +7,7 @@ import {
   getCalendarYearRange,
   inferSleepDate,
   iterateDates,
+  mskNowTime,
 } from "../../shared/dates";
 
 describe("calendar period ranges", () => {
@@ -29,11 +30,13 @@ describe("calendar period ranges", () => {
   });
 
   it("iterates every calendar day in range", () => {
-    expect(iterateDates("2026-06-01", "2026-06-03")).toEqual([
-      "2026-06-01",
-      "2026-06-02",
-      "2026-06-03",
-    ]);
+    expect(iterateDates("2026-06-01", "2026-06-03")).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
+  });
+});
+
+describe("MSK clock helpers", () => {
+  it("mskNowTime returns HH:MM", () => {
+    expect(mskNowTime(Date.UTC(2026, 5, 15, 12, 30, 0))).toMatch(/^\d{2}:\d{2}$/);
   });
 });
 
@@ -55,9 +58,7 @@ describe("sleep date inference and duration", () => {
   });
 
   it("supports explicit wake date on the next day", () => {
-    expect(
-      calculateSleepDurationHours("2026-06-20", "23:30", "07:00", "2026-06-20", "2026-06-21"),
-    ).toBe(7.5);
+    expect(calculateSleepDurationHours("2026-06-20", "23:30", "07:00", "2026-06-20", "2026-06-21")).toBe(7.5);
   });
 
   it("adds days in UTC-safe YYYY-MM-DD format", () => {

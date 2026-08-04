@@ -90,8 +90,8 @@ vi.mock("../../server/storage", () => {
 });
 
 import { UserRepository } from "../../server/repositories/user";
-import { MealRepository } from "../../server/repositories/meal";
-import { DayRepository } from "../../server/repositories/day";
+import { mealRepository } from "../../server/repositories/meal";
+import { dayRepository } from "../../server/repositories/day";
 import { DoctorRepository } from "../../server/repositories/doctor";
 import { SessionRepository } from "../../server/repositories/session";
 import { CatalogRepository } from "../../server/repositories/catalog";
@@ -167,66 +167,29 @@ describe("UserRepository", () => {
 });
 
 // ─── MealRepository ──────────────────────────────────────────────────────────
+// Phase 29.2: MealRepository uses shared db (not storage pass-through).
+// Behaviour covered by meals-routes + soft-delete analytics integration tests.
 
 describe("MealRepository", () => {
-  const repo = new MealRepository();
-
-  it("getMealsByDay delegates", () => {
-    repo.getMealsByDay(10);
-    expect(s.getMealsByDay).toHaveBeenCalledWith(10);
-  });
-  it("addMeal delegates", () => {
-    const data = {
-      dayId: 1,
-      userId: 1,
-      mealType: "обед",
-      foodText: "еда",
-      tsStart: "12:00",
-      hungerBefore: 3,
-      satietyAfter: 7,
-    };
-    repo.addMeal(data as Parameters<typeof repo.addMeal>[0]);
-    expect(s.addMeal).toHaveBeenCalledWith(data);
-  });
-  it("updateMeal delegates", () => {
-    repo.updateMeal(5, { foodText: "обновлено" });
-    expect(s.updateMeal).toHaveBeenCalledWith(5, { foodText: "обновлено" });
-  });
-  it("deleteMeal delegates", () => {
-    repo.deleteMeal(7);
-    expect(s.deleteMeal).toHaveBeenCalledWith(7);
-  });
-  it("getMeal delegates", () => {
-    repo.getMeal(8);
-    expect(s.getMeal).toHaveBeenCalledWith(8);
+  it("exposes real meal CRUD API (not storage wrappers)", () => {
+    expect(typeof mealRepository.getMealsByDay).toBe("function");
+    expect(typeof mealRepository.addMeal).toBe("function");
+    expect(typeof mealRepository.updateMeal).toBe("function");
+    expect(typeof mealRepository.deleteMeal).toBe("function");
+    expect(typeof mealRepository.restoreMeal).toBe("function");
+    expect(typeof mealRepository.getMeal).toBe("function");
   });
 });
 
 // ─── DayRepository ───────────────────────────────────────────────────────────
+// Phase 29.2: real SQL via db.ts — covered by meals/days integration routes.
 
 describe("DayRepository", () => {
-  const repo = new DayRepository();
-
-  it("getDayById delegates", () => {
-    repo.getDayById(1);
-    expect(s.getDayById).toHaveBeenCalledWith(1);
-  });
-  it("getDayByDate delegates", () => {
-    repo.getDayByDate(1, "2026-07-04");
-    expect(s.getDayByDate).toHaveBeenCalledWith(1, "2026-07-04");
-  });
-  it("getDaysInRange delegates", () => {
-    repo.getDaysInRange(1, "2026-07-01", "2026-07-07");
-    expect(s.getDaysInRange).toHaveBeenCalledWith(1, "2026-07-01", "2026-07-07");
-  });
-  it("getOrCreateDay delegates", () => {
-    repo.getOrCreateDay(2, "2026-07-04");
-    expect(s.getOrCreateDay).toHaveBeenCalledWith(2, "2026-07-04");
-  });
-  it("updateDaySummary delegates", () => {
-    const summary = { totalKcal: 2000, totalProtein: 100, totalFat: 70, totalCarbs: 250 };
-    repo.updateDaySummary(3, summary as Parameters<typeof repo.updateDaySummary>[1]);
-    expect(s.updateDaySummary).toHaveBeenCalledWith(3, summary);
+  it("exposes real day API (not storage wrappers)", () => {
+    expect(typeof dayRepository.getDayById).toBe("function");
+    expect(typeof dayRepository.getDayByDate).toBe("function");
+    expect(typeof dayRepository.getOrCreateDay).toBe("function");
+    expect(typeof dayRepository.updateDaySummary).toBe("function");
   });
 });
 

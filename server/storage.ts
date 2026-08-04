@@ -1,7 +1,4 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
 import { eq, and, sql, desc, gte, lte, type SQL } from "drizzle-orm";
-import * as schema from "@shared/schema";
 import type {
   User,
   Day,
@@ -47,7 +44,7 @@ import {
   auditLog,
   clientErrors,
 } from "@shared/schema";
-import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskToday } from "@shared/dates";
+import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskNowTime, mskToday } from "@shared/dates";
 import {
   computeMealTimingMetrics,
   computePeriodInsights,
@@ -56,17 +53,11 @@ import {
   type MealType,
   type PeriodInsights,
 } from "@shared/analytics";
+import { db, sqlite } from "./db";
+import { mealRepository } from "./repositories/meal";
+import { dayRepository } from "./repositories/day";
 
-// data/ is the Docker volume mount point (/app/data inside container)
-const DB_PATH = process.env.SQLITE_DB_PATH || "data/data.db";
-const sqlite = new Database(DB_PATH);
-export const db = drizzle(sqlite, { schema });
-
-// Phase 3 — production SQLite tuning (WAL: safe concurrent reads during writes)
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("synchronous = NORMAL");
-sqlite.pragma("foreign_keys = ON");
-
+export { db, sqlite };
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,8 +261,7 @@ export function getMskDate(utcMs?: number): string {
 }
 
 export function getMskTime(): string {
-  const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
-  return d.toISOString().slice(11, 16);
+  return mskNowTime();
 }
 
 function round1(value: number): number {
@@ -783,7 +773,7 @@ class SqliteStorage implements IStorage {
         AVG(meals.hunger_before) AS avgHunger,
         AVG(meals.satiety_after) AS avgSatiety
       FROM days
-      LEFT JOIN meals ON meals.day_id = days.id
+      LEFT JOIN meals ON meals.day_id = days.id AND meals.deleted_at IS NULL
       WHERE days.user_id = ?
         AND days.date >= ?
         AND days.date <= ?
@@ -825,6 +815,7 @@ class SqliteStorage implements IStorage {
       WHERE days.user_id = ?
         AND days.date >= ?
         AND days.date <= ?
+        AND meals.deleted_at IS NULL
       ORDER BY days.date ASC, meals.ts_start ASC
     `,
       )
@@ -1042,99 +1033,51 @@ class SqliteStorage implements IStorage {
   }
 
   getDayById(id: number) {
-    return db.select().from(days).where(eq(days.id, id)).get();
+    return dayRepository.getDayById(id);
   }
 
   getDayByDate(userId: number, date: string) {
-    return db
-      .select()
-      .from(days)
-      .where(and(eq(days.userId, userId), eq(days.date, date)))
-      .get();
+    return dayRepository.getDayByDate(userId, date);
   }
 
   getDaysInRange(userId: number, startDate: string, endDate: string): Day[] {
-    return sqlite
-      .prepare("SELECT * FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date ASC")
-      .all(userId, startDate, endDate)
-      .map((row: any) => ({
-        id: row.id,
-        userId: row.user_id,
-        date: row.date,
-        wakeTime: row.wake_time,
-        sleepTime: row.sleep_time,
-        wakeDate: row.wake_date,
-        sleepDate: row.sleep_date,
-        sportActivity: row.sport_activity,
-        steps: row.steps,
-        dayComment: row.day_comment,
-        summaryFilled: !!row.summary_filled,
-      })) as Day[];
+    return dayRepository.getDaysInRange(userId, startDate, endDate);
   }
 
   getOrCreateDay(userId: number, date: string): Day {
-    const existing = this.getDayByDate(userId, date);
-    if (existing) return existing;
-    return db.insert(days).values({ userId, date, summaryFilled: false }).returning().get();
+    return dayRepository.getOrCreateDay(userId, date);
   }
 
   updateDaySummary(dayId: number, summary: DaySummary): Day {
-    return db
-      .update(days)
-      .set({
-        wakeTime: summary.wakeTime || null,
-        sleepTime: summary.sleepTime || null,
-        wakeDate: summary.wakeDate || null,
-        sleepDate: summary.sleepDate || null,
-        sportActivity: summary.sportActivity || null,
-        steps: summary.steps ? Number(summary.steps) : null,
-        dayComment: summary.dayComment || null,
-        summaryFilled: true,
-      })
-      .where(eq(days.id, dayId))
-      .returning()
-      .get();
+    return dayRepository.updateDaySummary(dayId, summary);
   }
 
   getMealsByDay(dayId: number): Meal[] {
-    return db
-      .select()
-      .from(meals)
-      .where(and(eq(meals.dayId, dayId), sql`${meals.deletedAt} IS NULL`))
-      .all()
-      .sort((a, b) => a.tsStart.localeCompare(b.tsStart));
+    return mealRepository.getMealsByDay(dayId);
   }
 
   addMeal(data: InsertMeal): Meal {
-    return db
-      .insert(meals)
-      .values({ ...data, createdAt: new Date().toISOString() })
-      .returning()
-      .get();
+    return mealRepository.addMeal(data);
   }
 
   updateMeal(id: number, data: Partial<InsertMeal>) {
-    return db.update(meals).set(data).where(eq(meals.id, id)).returning().get();
+    return mealRepository.updateMeal(id, data);
   }
 
   deleteMeal(id: number) {
-    // Soft-delete: mark with timestamp instead of physical removal
-    db.update(meals).set({ deletedAt: new Date().toISOString() }).where(eq(meals.id, id)).run();
+    mealRepository.deleteMeal(id);
   }
 
   restoreMeal(id: number) {
-    db.update(meals).set({ deletedAt: null }).where(eq(meals.id, id)).run();
+    mealRepository.restoreMeal(id);
   }
 
   hardDeleteExpiredMeals(olderThanDays = 30) {
-    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-    db.delete(meals)
-      .where(and(sql`${meals.deletedAt} IS NOT NULL`, sql`${meals.deletedAt} < ${cutoff}`))
-      .run();
+    mealRepository.hardDeleteExpiredMeals(olderThanDays);
   }
 
   getMeal(id: number) {
-    return db.select().from(meals).where(eq(meals.id, id)).get();
+    return mealRepository.getMeal(id);
   }
 
   // ── Phase 20 — Dietary Restrictions ─────────────────────────────────────────

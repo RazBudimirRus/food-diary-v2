@@ -368,6 +368,57 @@ describe("analytics routes", () => {
     expect(analytics.body.days.find((day: { date: string }) => day.date === "2026-06-24")?.mealsCount).toBe(1);
     expect(analytics.body.summary.periodDays).toBe(7);
   });
+
+  it("excludes soft-deleted meals from nutrition analytics aggregates", async () => {
+    const auth = await registerUser("analytics_softdelete_user");
+    await request(app)
+      .post("/api/meals")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({
+        date: "2026-06-15",
+        tsStart: "09:00",
+        mealType: "завтрак",
+        foodText: "Останется",
+        hungerBefore: 3,
+        satietyAfter: 6,
+        calories: 400,
+        protein: 20,
+        fat: 10,
+        carbs: 40,
+      })
+      .expect(200);
+
+    const doomed = await request(app)
+      .post("/api/meals")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .send({
+        date: "2026-06-15",
+        tsStart: "13:00",
+        mealType: "обед",
+        foodText: "Удалится",
+        hungerBefore: 4,
+        satietyAfter: 7,
+        calories: 600,
+        protein: 30,
+        fat: 20,
+        carbs: 50,
+      })
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/meals/${doomed.body.meal.id}`)
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    const analytics = await request(app)
+      .get("/api/analytics/summary?from=2026-06-15&to=2026-06-15")
+      .set("Authorization", `Bearer ${auth.accessToken}`)
+      .expect(200);
+
+    expect(analytics.body.days[0].mealsCount).toBe(1);
+    expect(analytics.body.days[0].totalCalories).toBe(400);
+    expect(analytics.body.summary.totalMeals).toBe(1);
+  });
 });
 
 describe("admin routes", () => {

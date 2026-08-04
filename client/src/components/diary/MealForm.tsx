@@ -8,6 +8,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { usePhotoUrl } from "@/hooks/use-photo-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +39,28 @@ interface MealFormProps {
   onSaved: () => void;
 }
 
+function ExistingPhotoThumb({ photoId, onDelete }: { photoId: string; onDelete: (id: string) => void }) {
+  const src = usePhotoUrl(photoId);
+  return (
+    <div className="relative">
+      {src ? (
+        <img src={src} alt="Фото" className="w-16 h-16 object-cover rounded-md border" />
+      ) : (
+        <div className="w-16 h-16 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground">
+          …
+        </div>
+      )}
+      <button
+        type="button"
+        className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full text-xs flex items-center justify-center"
+        onClick={() => onDelete(photoId)}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 // UX-19.2: show existing photos attached to a meal in edit mode, with delete
 function ExistingPhotosEdit({ mealId }: { mealId: number }) {
   const { data } = useQuery<{ photos: { id: string }[] }>({
@@ -59,16 +82,7 @@ function ExistingPhotosEdit({ mealId }: { mealId: number }) {
   return (
     <div className="flex flex-wrap gap-2 mt-1">
       {photos.map((p) => (
-        <div key={p.id} className="relative">
-          <img src={`/api/photos/${p.id}`} alt="Фото" className="w-16 h-16 object-cover rounded-md border" />
-          <button
-            type="button"
-            className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full text-xs flex items-center justify-center"
-            onClick={() => deletePhotoMutation.mutate(p.id)}
-          >
-            ×
-          </button>
-        </div>
+        <ExistingPhotoThumb key={p.id} photoId={p.id} onDelete={(id) => deletePhotoMutation.mutate(id)} />
       ))}
     </div>
   );
