@@ -1,23 +1,44 @@
-import { storage } from "../storage";
+import { eq } from "drizzle-orm";
+import { photos, type Photo } from "@shared/schema";
+import { db, sqlite } from "../db";
 
 export class PhotoRepository {
-  savePhoto(data: Parameters<typeof storage.savePhoto>[0]) {
-    return storage.savePhoto(data);
+  savePhoto(data: { id: string; userId: number; mealId?: number | null; s3Key: string; sizeBytes: number }): Photo {
+    return db
+      .insert(photos)
+      .values({
+        id: data.id,
+        userId: data.userId,
+        mealId: data.mealId ?? null,
+        s3Key: data.s3Key,
+        sizeBytes: data.sizeBytes,
+        createdAt: new Date().toISOString(),
+      })
+      .returning()
+      .get();
   }
-  getPhoto(photoId: string) {
-    return storage.getPhoto(photoId);
+
+  getPhoto(photoId: string): Photo | undefined {
+    return db.select().from(photos).where(eq(photos.id, photoId)).get();
   }
-  getPhotosByMeal(mealId: number) {
-    return storage.getPhotosByMeal(mealId);
+
+  getPhotosByMeal(mealId: number): Photo[] {
+    return db.select().from(photos).where(eq(photos.mealId, mealId)).all();
   }
-  getPhotosByUser(userId: number) {
-    return storage.getPhotosByUser(userId);
+
+  getPhotosByUser(userId: number): Photo[] {
+    return db.select().from(photos).where(eq(photos.userId, userId)).all();
   }
-  deletePhoto(photoId: string) {
-    return storage.deletePhoto(photoId);
+
+  deletePhoto(photoId: string): void {
+    db.delete(photos).where(eq(photos.id, photoId)).run();
   }
-  countUserPhotos(userId: number) {
-    return storage.countUserPhotos(userId);
+
+  countUserPhotos(userId: number): number {
+    const row = sqlite.prepare("SELECT COUNT(*) as cnt FROM photos WHERE user_id = ?").get(userId) as {
+      cnt: number;
+    };
+    return row.cnt;
   }
 }
 

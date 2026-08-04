@@ -1,7 +1,4 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
-import { eq, and, sql, desc, gte, lte, type SQL } from "drizzle-orm";
-import * as schema from "@shared/schema";
+import { eq, and, sql, desc } from "drizzle-orm";
 import type {
   User,
   Day,
@@ -31,23 +28,17 @@ import {
   days,
   meals,
   secrets,
-  refreshTokens,
   apiUsage,
-  passwordResetTokens,
   userProfiles,
   doctors,
   doctorPatients,
   doctorMealNotes,
   doctorPlans,
   pushSubscriptions,
-  foodCatalogItems,
-  foodCatalogEntries,
-  photos,
   idempotencyKeys,
-  auditLog,
   clientErrors,
 } from "@shared/schema";
-import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskToday } from "@shared/dates";
+import { calculateSleepDurationHours, countInclusiveDays, iterateDates, mskNowTime, mskToday } from "@shared/dates";
 import {
   computeMealTimingMetrics,
   computePeriodInsights,
@@ -56,17 +47,17 @@ import {
   type MealType,
   type PeriodInsights,
 } from "@shared/analytics";
+import type { AdminSession, ApiUsageDay, ApiUsageSummary, InsertApiUsage } from "./admin-types";
+import { db, sqlite } from "./db";
+import { auditRepository } from "./repositories/audit";
+import { catalogRepository } from "./repositories/catalog";
+import { dayRepository } from "./repositories/day";
+import { mealRepository } from "./repositories/meal";
+import { photoRepository } from "./repositories/photo";
+import { sessionRepository } from "./repositories/session";
 
-// data/ is the Docker volume mount point (/app/data inside container)
-const DB_PATH = process.env.SQLITE_DB_PATH || "data/data.db";
-const sqlite = new Database(DB_PATH);
-export const db = drizzle(sqlite, { schema });
-
-// Phase 3 — production SQLite tuning (WAL: safe concurrent reads during writes)
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("synchronous = NORMAL");
-sqlite.pragma("foreign_keys = ON");
-
+export type { AdminSession, ApiUsageDay, ApiUsageSummary, InsertApiUsage } from "./admin-types";
+export { db, sqlite };
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,8 +261,7 @@ export function getMskDate(utcMs?: number): string {
 }
 
 export function getMskTime(): string {
-  const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
-  return d.toISOString().slice(11, 16);
+  return mskNowTime();
 }
 
 function round1(value: number): number {
@@ -447,46 +437,6 @@ export interface IStorage {
     to?: string;
     limit?: number;
   }): Promise<AuditLogEntry[]>;
-}
-
-export interface AdminSession {
-  id: number;
-  userId: number;
-  username: string;
-  email: string;
-  displayName: string | null;
-  role: User["role"];
-  createdAt: string;
-  expiresAt: string;
-  userAgent: string | null;
-  ip: string | null;
-}
-
-export interface InsertApiUsage {
-  userId: number;
-  endpoint: string;
-  tokensIn: number;
-  tokensOut: number;
-  costEstimate: number;
-  timestamp?: string;
-}
-
-export interface ApiUsageDay {
-  date: string;
-  totalTokens: number;
-  tokensIn: number;
-  tokensOut: number;
-  costEstimate: number;
-  requests: number;
-}
-
-export interface ApiUsageSummary {
-  totalRequests: number;
-  totalTokens: number;
-  tokensIn: number;
-  tokensOut: number;
-  costEstimate: number;
-  byDay: ApiUsageDay[];
 }
 
 export interface NutritionAnalyticsDay {
@@ -668,98 +618,15 @@ class SqliteStorage implements IStorage {
   }
 
   listActiveRefreshSessions(nowIso = new Date().toISOString()): AdminSession[] {
-    return sqlite
-      .prepare(
-        `
-      SELECT
-        refresh_tokens.id AS id,
-        refresh_tokens.user_id AS userId,
-        users.username AS username,
-        users.email AS email,
-        users.display_name AS displayName,
-        users.role AS role,
-        refresh_tokens.created_at AS createdAt,
-        refresh_tokens.expires_at AS expiresAt,
-        refresh_tokens.user_agent AS userAgent,
-        refresh_tokens.ip AS ip
-      FROM refresh_tokens
-      JOIN users ON users.id = refresh_tokens.user_id
-      WHERE refresh_tokens.revoked = 0
-        AND refresh_tokens.expires_at > ?
-      ORDER BY refresh_tokens.created_at DESC
-    `,
-      )
-      .all(nowIso) as AdminSession[];
+    return sessionRepository.listActiveRefreshSessions(nowIso);
   }
 
   recordApiUsage(data: InsertApiUsage): ApiUsage {
-    return db
-      .insert(apiUsage)
-      .values({
-        userId: data.userId,
-        endpoint: data.endpoint,
-        tokensIn: data.tokensIn,
-        tokensOut: data.tokensOut,
-        costEstimate: data.costEstimate,
-        timestamp: data.timestamp ?? new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return sessionRepository.recordApiUsage(data);
   }
 
   getApiUsageSummary(fromIso: string, toIso: string): ApiUsageSummary {
-    const rows = sqlite
-      .prepare(
-        `
-      SELECT
-        substr(timestamp, 1, 10) AS date,
-        COUNT(*) AS requests,
-        COALESCE(SUM(tokens_in), 0) AS tokensIn,
-        COALESCE(SUM(tokens_out), 0) AS tokensOut,
-        COALESCE(SUM(cost_estimate), 0) AS costEstimate
-      FROM api_usage
-      WHERE endpoint = 'deepseek'
-        AND timestamp >= ?
-        AND timestamp < ?
-      GROUP BY substr(timestamp, 1, 10)
-      ORDER BY date DESC
-    `,
-      )
-      .all(fromIso, toIso) as Array<{
-      date: string;
-      requests: number;
-      tokensIn: number;
-      tokensOut: number;
-      costEstimate: number;
-    }>;
-
-    const byDay = rows.map((row) => ({
-      date: row.date,
-      requests: Number(row.requests),
-      tokensIn: Number(row.tokensIn),
-      tokensOut: Number(row.tokensOut),
-      totalTokens: Number(row.tokensIn) + Number(row.tokensOut),
-      costEstimate: Number(row.costEstimate),
-    }));
-
-    return byDay.reduce<ApiUsageSummary>(
-      (summary, day) => ({
-        totalRequests: summary.totalRequests + day.requests,
-        tokensIn: summary.tokensIn + day.tokensIn,
-        tokensOut: summary.tokensOut + day.tokensOut,
-        totalTokens: summary.totalTokens + day.totalTokens,
-        costEstimate: summary.costEstimate + day.costEstimate,
-        byDay: summary.byDay,
-      }),
-      {
-        totalRequests: 0,
-        tokensIn: 0,
-        tokensOut: 0,
-        totalTokens: 0,
-        costEstimate: 0,
-        byDay,
-      },
-    );
+    return sessionRepository.getApiUsageSummary(fromIso, toIso);
   }
 
   getNutritionAnalytics(userId: number, fromDate: string, toDate: string): NutritionAnalyticsSummary {
@@ -783,7 +650,7 @@ class SqliteStorage implements IStorage {
         AVG(meals.hunger_before) AS avgHunger,
         AVG(meals.satiety_after) AS avgSatiety
       FROM days
-      LEFT JOIN meals ON meals.day_id = days.id
+      LEFT JOIN meals ON meals.day_id = days.id AND meals.deleted_at IS NULL
       WHERE days.user_id = ?
         AND days.date >= ?
         AND days.date <= ?
@@ -825,6 +692,7 @@ class SqliteStorage implements IStorage {
       WHERE days.user_id = ?
         AND days.date >= ?
         AND days.date <= ?
+        AND meals.deleted_at IS NULL
       ORDER BY days.date ASC, meals.ts_start ASC
     `,
       )
@@ -938,66 +806,43 @@ class SqliteStorage implements IStorage {
     userAgent?: string | null;
     ip?: string | null;
   }): RefreshToken {
-    return db
-      .insert(refreshTokens)
-      .values({
-        token: data.token,
-        userId: data.userId,
-        expiresAt: data.expiresAt,
-        revoked: false,
-        createdAt: new Date().toISOString(),
-        userAgent: data.userAgent ?? null,
-        ip: data.ip ?? null,
-      })
-      .returning()
-      .get();
+    return sessionRepository.createRefreshToken(data);
   }
 
   getRefreshToken(token: string) {
-    return db.select().from(refreshTokens).where(eq(refreshTokens.token, token)).get();
+    return sessionRepository.getRefreshToken(token);
   }
 
   revokeRefreshToken(token: string) {
-    db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.token, token)).run();
+    sessionRepository.revokeRefreshToken(token);
   }
 
   revokeRefreshSessionById(id: number): boolean {
-    const result = sqlite.prepare("UPDATE refresh_tokens SET revoked = 1 WHERE id = ? AND revoked = 0").run(id);
-    return result.changes > 0;
+    return sessionRepository.revokeRefreshSessionById(id);
   }
 
   revokeUserRefreshTokens(userId: number) {
-    db.update(refreshTokens).set({ revoked: true }).where(eq(refreshTokens.userId, userId)).run();
+    sessionRepository.revokeUserRefreshTokens(userId);
   }
 
   deleteExpiredOrRevokedRefreshTokens(nowIso = new Date().toISOString()) {
-    sqlite.prepare("DELETE FROM refresh_tokens WHERE revoked = 1 OR expires_at <= ?").run(nowIso);
+    sessionRepository.deleteExpiredOrRevokedRefreshTokens(nowIso);
   }
 
   createPasswordResetToken(data: { token: string; userId: number; expiresAt: string }): PasswordResetToken {
-    return db
-      .insert(passwordResetTokens)
-      .values({
-        token: data.token,
-        userId: data.userId,
-        expiresAt: data.expiresAt,
-        used: false,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return sessionRepository.createPasswordResetToken(data);
   }
 
   getPasswordResetToken(tokenHash: string) {
-    return db.select().from(passwordResetTokens).where(eq(passwordResetTokens.token, tokenHash)).get();
+    return sessionRepository.getPasswordResetToken(tokenHash);
   }
 
   markPasswordResetTokenUsed(id: number) {
-    db.update(passwordResetTokens).set({ used: true }).where(eq(passwordResetTokens.id, id)).run();
+    sessionRepository.markPasswordResetTokenUsed(id);
   }
 
   deleteExpiredPasswordResetTokens(nowIso = new Date().toISOString()) {
-    sqlite.prepare("DELETE FROM password_reset_tokens WHERE used = 1 OR expires_at <= ?").run(nowIso);
+    sessionRepository.deleteExpiredPasswordResetTokens(nowIso);
   }
 
   getSecret(userId: number, key: string) {
@@ -1042,99 +887,51 @@ class SqliteStorage implements IStorage {
   }
 
   getDayById(id: number) {
-    return db.select().from(days).where(eq(days.id, id)).get();
+    return dayRepository.getDayById(id);
   }
 
   getDayByDate(userId: number, date: string) {
-    return db
-      .select()
-      .from(days)
-      .where(and(eq(days.userId, userId), eq(days.date, date)))
-      .get();
+    return dayRepository.getDayByDate(userId, date);
   }
 
   getDaysInRange(userId: number, startDate: string, endDate: string): Day[] {
-    return sqlite
-      .prepare("SELECT * FROM days WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date ASC")
-      .all(userId, startDate, endDate)
-      .map((row: any) => ({
-        id: row.id,
-        userId: row.user_id,
-        date: row.date,
-        wakeTime: row.wake_time,
-        sleepTime: row.sleep_time,
-        wakeDate: row.wake_date,
-        sleepDate: row.sleep_date,
-        sportActivity: row.sport_activity,
-        steps: row.steps,
-        dayComment: row.day_comment,
-        summaryFilled: !!row.summary_filled,
-      })) as Day[];
+    return dayRepository.getDaysInRange(userId, startDate, endDate);
   }
 
   getOrCreateDay(userId: number, date: string): Day {
-    const existing = this.getDayByDate(userId, date);
-    if (existing) return existing;
-    return db.insert(days).values({ userId, date, summaryFilled: false }).returning().get();
+    return dayRepository.getOrCreateDay(userId, date);
   }
 
   updateDaySummary(dayId: number, summary: DaySummary): Day {
-    return db
-      .update(days)
-      .set({
-        wakeTime: summary.wakeTime || null,
-        sleepTime: summary.sleepTime || null,
-        wakeDate: summary.wakeDate || null,
-        sleepDate: summary.sleepDate || null,
-        sportActivity: summary.sportActivity || null,
-        steps: summary.steps ? Number(summary.steps) : null,
-        dayComment: summary.dayComment || null,
-        summaryFilled: true,
-      })
-      .where(eq(days.id, dayId))
-      .returning()
-      .get();
+    return dayRepository.updateDaySummary(dayId, summary);
   }
 
   getMealsByDay(dayId: number): Meal[] {
-    return db
-      .select()
-      .from(meals)
-      .where(and(eq(meals.dayId, dayId), sql`${meals.deletedAt} IS NULL`))
-      .all()
-      .sort((a, b) => a.tsStart.localeCompare(b.tsStart));
+    return mealRepository.getMealsByDay(dayId);
   }
 
   addMeal(data: InsertMeal): Meal {
-    return db
-      .insert(meals)
-      .values({ ...data, createdAt: new Date().toISOString() })
-      .returning()
-      .get();
+    return mealRepository.addMeal(data);
   }
 
   updateMeal(id: number, data: Partial<InsertMeal>) {
-    return db.update(meals).set(data).where(eq(meals.id, id)).returning().get();
+    return mealRepository.updateMeal(id, data);
   }
 
   deleteMeal(id: number) {
-    // Soft-delete: mark with timestamp instead of physical removal
-    db.update(meals).set({ deletedAt: new Date().toISOString() }).where(eq(meals.id, id)).run();
+    mealRepository.deleteMeal(id);
   }
 
   restoreMeal(id: number) {
-    db.update(meals).set({ deletedAt: null }).where(eq(meals.id, id)).run();
+    mealRepository.restoreMeal(id);
   }
 
   hardDeleteExpiredMeals(olderThanDays = 30) {
-    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
-    db.delete(meals)
-      .where(and(sql`${meals.deletedAt} IS NOT NULL`, sql`${meals.deletedAt} < ${cutoff}`))
-      .run();
+    mealRepository.hardDeleteExpiredMeals(olderThanDays);
   }
 
   getMeal(id: number) {
-    return db.select().from(meals).where(eq(meals.id, id)).get();
+    return mealRepository.getMeal(id);
   }
 
   // ── Phase 20 — Dietary Restrictions ─────────────────────────────────────────
@@ -1358,44 +1155,11 @@ class SqliteStorage implements IStorage {
   // ── UX-7 — Food Catalog ───────────────────────────────────────────────────────
 
   getCatalogItems(userId: number): Array<FoodCatalogItem & { entries: FoodCatalogEntry[] }> {
-    const items = db.select().from(foodCatalogItems).where(eq(foodCatalogItems.userId, userId)).all();
-    return items.map((item) => ({
-      ...item,
-      entries: db.select().from(foodCatalogEntries).where(eq(foodCatalogEntries.catalogItemId, item.id)).all(),
-    }));
+    return catalogRepository.getCatalogItems(userId);
   }
 
   createCatalogItem(userId: number, data: CreateCatalogItem): FoodCatalogItem & { entries: FoodCatalogEntry[] } {
-    const item = db
-      .insert(foodCatalogItems)
-      .values({
-        userId,
-        name: data.name,
-        description: data.description ?? null,
-        isSet: data.isSet ?? false,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
-
-    const entries: FoodCatalogEntry[] = [];
-    for (const e of data.entries ?? []) {
-      const entry = db
-        .insert(foodCatalogEntries)
-        .values({
-          catalogItemId: item.id,
-          mealName: e.mealName,
-          grams: e.grams ?? null,
-          kcal: e.kcal ?? null,
-          protein: e.protein ?? null,
-          fat: e.fat ?? null,
-          carbs: e.carbs ?? null,
-        })
-        .returning()
-        .get();
-      entries.push(entry);
-    }
-    return { ...item, entries };
+    return catalogRepository.createCatalogItem(userId, data);
   }
 
   updateCatalogItem(
@@ -1403,28 +1167,11 @@ class SqliteStorage implements IStorage {
     itemId: number,
     data: { name: string; description?: string },
   ): (FoodCatalogItem & { entries: FoodCatalogEntry[] }) | null {
-    const existing = db
-      .select()
-      .from(foodCatalogItems)
-      .where(and(eq(foodCatalogItems.id, itemId), eq(foodCatalogItems.userId, userId)))
-      .get();
-    if (!existing) return null;
-    db.update(foodCatalogItems)
-      .set({ name: data.name, description: data.description ?? null })
-      .where(eq(foodCatalogItems.id, itemId))
-      .run();
-    const updated = db.select().from(foodCatalogItems).where(eq(foodCatalogItems.id, itemId)).get()!;
-    return {
-      ...updated,
-      entries: db.select().from(foodCatalogEntries).where(eq(foodCatalogEntries.catalogItemId, itemId)).all(),
-    };
+    return catalogRepository.updateCatalogItem(userId, itemId, data);
   }
 
   deleteCatalogItem(userId: number, itemId: number): void {
-    // entries cascade via FK
-    db.delete(foodCatalogItems)
-      .where(and(eq(foodCatalogItems.id, itemId), eq(foodCatalogItems.userId, userId)))
-      .run();
+    catalogRepository.deleteCatalogItem(userId, itemId);
   }
 
   // UX-21: persist AI-calculated КБЖУ to a catalog entry
@@ -1433,98 +1180,37 @@ class SqliteStorage implements IStorage {
     entryId: number,
     data: { kcal: number; protein: number; fat: number; carbs: number },
   ): void {
-    // Verify ownership via join
-    const entry = db
-      .select({ id: foodCatalogEntries.id, catalogItemId: foodCatalogEntries.catalogItemId })
-      .from(foodCatalogEntries)
-      .where(eq(foodCatalogEntries.id, entryId))
-      .get();
-    if (!entry) return;
-    const item = db
-      .select({ userId: foodCatalogItems.userId })
-      .from(foodCatalogItems)
-      .where(and(eq(foodCatalogItems.id, entry.catalogItemId), eq(foodCatalogItems.userId, userId)))
-      .get();
-    if (!item) return;
-    db.update(foodCatalogEntries)
-      .set({ kcal: data.kcal, protein: data.protein, fat: data.fat, carbs: data.carbs })
-      .where(eq(foodCatalogEntries.id, entryId))
-      .run();
+    catalogRepository.updateCatalogEntryKbju(userId, entryId, data);
   }
 
   saveMealToCatalog(userId: number, mealId: number, name: string): FoodCatalogItem & { entries: FoodCatalogEntry[] } {
-    const meal = this.getMeal(mealId);
-    if (!meal) throw new Error("Meal not found");
-
-    const itemName = name || meal.mealType;
-    const item = db
-      .insert(foodCatalogItems)
-      .values({
-        userId,
-        name: itemName,
-        description: meal.foodText ?? null,
-        isSet: false,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
-
-    const entries: FoodCatalogEntry[] = [];
-    if (meal.foodText) {
-      const entry = db
-        .insert(foodCatalogEntries)
-        .values({
-          catalogItemId: item.id,
-          mealName: meal.foodText.slice(0, 200),
-          grams: null,
-          kcal: meal.calories ?? null,
-          protein: meal.protein ?? null,
-          fat: meal.fat ?? null,
-          carbs: meal.carbs ?? null,
-        })
-        .returning()
-        .get();
-      entries.push(entry);
-    }
-    return { ...item, entries };
+    return catalogRepository.saveMealToCatalog(userId, mealId, name);
   }
 
   // ── Phase 23 — Photos ────────────────────────────────────────────────────────
 
   savePhoto(data: { id: string; userId: number; mealId?: number | null; s3Key: string; sizeBytes: number }): Photo {
-    return db
-      .insert(photos)
-      .values({
-        id: data.id,
-        userId: data.userId,
-        mealId: data.mealId ?? null,
-        s3Key: data.s3Key,
-        sizeBytes: data.sizeBytes,
-        createdAt: new Date().toISOString(),
-      })
-      .returning()
-      .get();
+    return photoRepository.savePhoto(data);
   }
 
   getPhoto(photoId: string): Photo | undefined {
-    return db.select().from(photos).where(eq(photos.id, photoId)).get();
+    return photoRepository.getPhoto(photoId);
   }
 
   getPhotosByMeal(mealId: number): Photo[] {
-    return db.select().from(photos).where(eq(photos.mealId, mealId)).all();
+    return photoRepository.getPhotosByMeal(mealId);
   }
 
   getPhotosByUser(userId: number): Photo[] {
-    return db.select().from(photos).where(eq(photos.userId, userId)).all();
+    return photoRepository.getPhotosByUser(userId);
   }
 
   deletePhoto(photoId: string): void {
-    db.delete(photos).where(eq(photos.id, photoId)).run();
+    photoRepository.deletePhoto(photoId);
   }
 
   countUserPhotos(userId: number): number {
-    const row = sqlite.prepare("SELECT COUNT(*) as cnt FROM photos WHERE user_id = ?").get(userId) as { cnt: number };
-    return row.cnt;
+    return photoRepository.countUserPhotos(userId);
   }
   // ── Idempotency Keys (Phase 26.7) ────────────────────────────────────────────
   getIdempotencyKey(key: string, userId: number): { status: number; body: string } | null {
@@ -1566,17 +1252,7 @@ class SqliteStorage implements IStorage {
 
   // ── Phase 24 — Audit Log ───────────────────────────────────────────────────
   async addAuditLog(data: Omit<NewAuditLogEntry, "id" | "createdAt">): Promise<void> {
-    db.insert(auditLog)
-      .values({
-        actorId: data.actorId,
-        actorRole: data.actorRole,
-        action: data.action,
-        targetId: data.targetId ?? null,
-        detail: data.detail ?? null,
-        ip: data.ip ?? null,
-        userAgent: data.userAgent ?? null,
-      })
-      .run();
+    return auditRepository.addAuditLog(data);
   }
 
   async getAuditLog(filters: {
@@ -1587,22 +1263,7 @@ class SqliteStorage implements IStorage {
     to?: string;
     limit?: number;
   }): Promise<AuditLogEntry[]> {
-    const conditions: SQL[] = [];
-    if (filters.actorId !== undefined) conditions.push(eq(auditLog.actorId, filters.actorId));
-    if (filters.targetId !== undefined) conditions.push(eq(auditLog.targetId, filters.targetId));
-    if (filters.action !== undefined) conditions.push(eq(auditLog.action, filters.action));
-    if (filters.from !== undefined) conditions.push(gte(auditLog.createdAt, filters.from));
-    if (filters.to !== undefined) conditions.push(lte(auditLog.createdAt, filters.to));
-
-    const limit = filters.limit ?? 100;
-    const query = db
-      .select()
-      .from(auditLog)
-      .where(conditions.length ? and(...conditions) : undefined)
-      .orderBy(desc(auditLog.createdAt))
-      .limit(limit);
-
-    return query.all();
+    return auditRepository.getAuditLog(filters);
   }
 
   // ── Client Error Log ────────────────────────────────────────────────────────

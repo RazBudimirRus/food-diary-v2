@@ -1,9 +1,13 @@
 /**
- * Versioned migrations via drizzle-kit (Phase 26.1)
+ * Versioned migrations via drizzle-kit (Phase 26.1) + guarded DDL (Phase 29.6 / BUG-03).
  *
- * Запускается один раз при старте сервера перед инициализацией storage.
- * Idempotent: повторный запуск безопасен — drizzle отслеживает уже
- * применённые миграции в таблице __drizzle_migrations.
+ * Order on boot:
+ * 1. `runMigrations(dbPath)` — drizzle migrator + `applyGuardedDDL`
+ * 2. `storage.ts` bootstrap `CREATE TABLE IF NOT EXISTS` — legacy safety net for empty DBs
+ *
+ * Dual DDL is intentional until bootstrap can be removed: migrations own schema evolution;
+ * guarded DDL repairs partial applies; bootstrap only creates missing tables/indexes.
+ * Do not add new columns to bootstrap — add a migration (+ guarded repair if needed).
  */
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { drizzle } from "drizzle-orm/better-sqlite3";

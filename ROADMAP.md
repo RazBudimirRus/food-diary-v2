@@ -47,6 +47,9 @@
 | v2.6.0 · 2026-06-28  |   Bugfix #1–5 + README | ✅ Реализовано | dark theme fix (toggleTheme), header two-row layout, analytics back nav, onboarding mobile pos/localStorage    |
 | v2.7.0 · 2026-06-28  |         Фаза 4 комплит | ✅ Реализовано | Подтверждено полное реализование Admin Panel: users, sessions revoke, password reset, DeepSeek usage dashboard |
 
+| v2.25.1 · 2026-08-02 | DeepSeek thinking fix | ✅ Реализовано | content:null при thinking mode |
+| v2.26.0 · 2026-08-04 | Phase 29 finish wave 1 | 🚧 В работе | db.ts, Meal/Day repos real SQL, ApiError, config unify, soft-delete analytics fix, MealForm photo auth, ROADMAP sync |
+
 > Прод-сервер может отставать от `main`: после коммитов Phase 10/2/1 нужен отдельный деплой на VPS.
 
 | v2.10.0 · 2026-06-30 | Волна 1 (26+27) | ✅ Реализовано | drizzle-kit migrations, убран `as any`, nginx hardening, AuthPage toggle пароля, pino логи, /api/health, Sentry, /metrics, prod error handler, README v2 |
@@ -3256,7 +3259,7 @@ app.get("/api/report/:date", ...)   // параметрический — вто
 
 ## Фаза 29 — Рефакторинг: Расщепление монолитов
 
-> **Статус:** 📋 Запланировано
+> **Статус:** 🚧 Частично (Wave 3 skeleton v2.12 + finish v2.26.0)
 > **Приоритет:** Высокий
 > **Сложность:** Высокая
 > **Источник:** Аудит: «Архитектура — 6/10»
@@ -3264,45 +3267,36 @@ app.get("/api/report/:date", ...)   // параметрический — вто
 
 ### Описание
 
-`routes.ts` (1065 строк), `storage.ts` (1513 строк), `DiaryPage.tsx` (1544 строки) — три главных монолита. Без расщепления добавление новых фич становится всё дороже.
+Wave 3 (v2.12) разнесла `routes.ts` / `schema` / заготовки `repositories/`. К v2.26.0 добавлены: `server/db.ts`, реальный `MealRepository` (не pass-through), `ApiError`, унификация `config` (TTL + photo limits), MSK `mskNowTime` в `shared/dates`, фикс soft-delete в analytics SQL, auth-фото в MealForm, снятие duplicate `cookieParser`.
+
+Остаётся: user/doctor repos (ещё pass-through); убрать bootstrap DDL из storage (BUG-03) когда миграции покрывают cold start.
 
 ### Подзадачи
 
 #### 29.1 Расщепление server/routes.ts
 
-- Разнести по доменам: `server/routes/auth.ts`, `meals.ts`, `doctor.ts`, `admin.ts`, `photos.ts`, `reports.ts`, `catalog.ts`
-- Единый `server/routes/index.ts` — только `app.use('/api/...', router)`
-- Общая типизация ошибок: `ApiError { code, message, details? }`
+- ✅ Разнести по доменам: `server/routes/auth.ts`, `meals.ts`, `doctor.ts`, `admin.ts`, `photos.ts`, `reports.ts`, `catalog.ts`
+- 🚧 Единый `server/routes/index.ts` — register\* (не nested Router mounts)
+- ✅ Общая типизация ошибок: `ApiError { code, message, details? }` (`server/errors.ts`)
 
 #### 29.2 Расщепление server/storage.ts
 
-- Создать `server/repositories/`: `user.ts`, `meal.ts`, `day.ts`, `doctor.ts`, `session.ts`, `catalog.ts`
-- Каждый репозиторий — класс с инъекцией `db`
-- `storage.ts` остаётся временно как facade, постепенно делегирует репозиториям
-
-#### 29.3 Расщепление shared/schema.ts
-
-- `shared/schema/tables.ts` — Drizzle table definitions
-- `shared/schema/validators.ts` — Zod schemas
-- `shared/schema/types.ts` — TypeScript type exports
-- `shared/schema/index.ts` — реэкспорт всего для обратной совместимости
-
-#### 29.4 Расщепление DiaryPage.tsx
-
-- Выделить компоненты: `MealCard.tsx`, `MealForm.tsx`, `DaySummary.tsx`, `DateCarousel.tsx`, `DayCommentBox.tsx`
-- `DiaryPage.tsx` — только оркестрация и state management
-- Цель: не более 300 строк в `DiaryPage.tsx`
+- 🚧 `server/repositories/` + **`server/db.ts`** (shared connection)
+- ✅ `MealRepository` / `DayRepository` / `SessionRepository` / `CatalogRepository` / `PhotoRepository` / `AuditRepository` — реальный SQL; storage делегирует
+- 📋 User / Doctor repos — ещё pass-through
+- 🚧 `storage.ts` — facade + analytics SQL + bootstrap DDL (документировано в `migrate.ts`)
+- ✅ Split AdminPage → `components/admin/*`; AnalyticsPage → `components/analytics/*`
+- ✅ MealFields unify MealForm + MealEditSheet
 
 #### 29.5 Магические числа → config.ts
 
-- Создать `server/config.ts` с именованными константами: `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`, `DEFAULT_PAGE_SIZE`, `MAX_PHOTO_SIZE_MB`
-- Заменить все литералы (`30 * 60`, `7 * 24 * 60 * 60`, `limit: 10`) на импорт из `config.ts`
+- ✅ `server/config.ts`: TTL, rate limits, page size, **PHOTO*MAX*\***
+- ✅ `auth.ts` / `s3.ts` читают config
 
 #### 29.6 Единая MSK-логика
 
-- `shared/dates.ts` — единственная точка истины для timezone-утилит (уже есть)
-- Удалить дублирующие расчёты MSK из `server/routes.ts`
-- Для `bot/bot.py`: вынести константы в `bot/utils/dates.py` с теми же правилами
+- ✅ `mskToday` / `mskNowTime` в `shared/dates.ts`; storage re-export
+- 📋 bot/utils/dates.py
 
 ---
 
@@ -3666,7 +3660,7 @@ app.get("/api/report/:date", ...)   // параметрический — вто
 | 26    | Tech Debt Sprint: срочные исправления               | Критический | Средняя   | ✅ Реализовано (v2.10.0)                                                                              |
 | 27    | Наблюдаемость (pino, Sentry, /health, metrics)      | Критический | Средняя   | ✅ Реализовано (v2.10.0)                                                                              |
 | 28    | Безопасность: CSRF, MFA, EXIF, ClamAV               | Высокий     | Высокая   | ✅ Реализовано (v2.11.0+v2.16.0): CSRF+EXIF+reset-pw+scrypt (v2.11/v2.16), MFA TOTP+ClamAV (v2.16.0)  |
-| 29    | Рефакторинг: расщепление монолитов                  | Высокий     | Высокая   | 📋 Запланировано                                                                                      |
+| 29    | Рефакторинг: расщепление монолитов                  | Высокий     | Высокая   | 🚧 Частично (v2.12 skeleton + v2.26.0 MealRepo/db/ApiError)                                           |
 | 30    | Тестирование: расширение покрытия                   | Высокий     | Высокая   | ✅ Реализовано (v2.13.0): 99 тестов, coverage 40.1%, DeepSeek mock, E2E TC-02/03/05/11                |
 | 31    | UX-полировка: undo, skeleton, a11y, dark            | Высокий     | Средняя   | ✅ Реализовано (v2.15.0): soft-delete + undo, skeletons, zod валидация, aria-labels, dark mode toggle |
 | 32    | Продуктовые фичи: лендинг, PDF, digest              | Средний     | Высокая   | 📋 Запланировано                                                                                      |

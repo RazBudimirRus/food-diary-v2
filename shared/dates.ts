@@ -62,29 +62,19 @@ export function getCalendarYearRange(anchor: string): { from: string; to: string
   return { from: `${y}-01-01`, to: `${y}-12-31` };
 }
 
-export function getCalendarPeriodRange(
-  period: CalendarPeriodType,
-  anchor: string,
-): { from: string; to: string } {
+export function getCalendarPeriodRange(period: CalendarPeriodType, anchor: string): { from: string; to: string } {
   if (period === "week") return getCalendarWeekRange(anchor);
   if (period === "month") return getCalendarMonthRange(anchor);
   return getCalendarYearRange(anchor);
 }
 
-export function getAnalyticsPeriodRange(
-  period: AnalyticsPeriodType,
-  anchor: string,
-): { from: string; to: string } {
+export function getAnalyticsPeriodRange(period: AnalyticsPeriodType, anchor: string): { from: string; to: string } {
   if (period === "quarter") return getSlidingRange(anchor, 90);
   if (period === "half") return getSlidingRange(anchor, 180);
   return getCalendarPeriodRange(period, anchor);
 }
 
-export function shiftCalendarAnchor(
-  anchor: string,
-  period: CalendarPeriodType,
-  delta: -1 | 1,
-): string {
+export function shiftCalendarAnchor(anchor: string, period: CalendarPeriodType, delta: -1 | 1): string {
   const [y, m] = anchor.split("-").map(Number);
   if (period === "week") return addDays(anchor, delta * 7);
   if (period === "month") {
@@ -94,27 +84,29 @@ export function shiftCalendarAnchor(
   return `${y + delta}-01-01`;
 }
 
-export function shiftAnalyticsAnchor(
-  anchor: string,
-  period: AnalyticsPeriodType,
-  delta: -1 | 1,
-): string {
+export function shiftAnalyticsAnchor(anchor: string, period: AnalyticsPeriodType, delta: -1 | 1): string {
   if (period === "quarter") return addDays(anchor, delta * 90);
   if (period === "half") return addDays(anchor, delta * 180);
   return shiftCalendarAnchor(anchor, period, delta);
 }
 
-export function formatAnalyticsPeriodLabel(
-  period: AnalyticsPeriodType,
-  from: string,
-  to: string,
-): string {
+export function formatAnalyticsPeriodLabel(period: AnalyticsPeriodType, from: string, to: string): string {
   if (period === "week") return `${formatRuDate(from)} — ${formatRuDate(to)}`;
   if (period === "month") {
     const [, month] = from.split("-");
     const monthNames = [
-      "января", "февраля", "марта", "апреля", "мая", "июня",
-      "июля", "августа", "сентября", "октября", "ноября", "декабря",
+      "января",
+      "февраля",
+      "марта",
+      "апреля",
+      "мая",
+      "июня",
+      "июля",
+      "августа",
+      "сентября",
+      "октября",
+      "ноября",
+      "декабря",
     ];
     return `${monthNames[Number(month) - 1]} ${from.slice(0, 4)}`;
   }
@@ -133,10 +125,7 @@ export function inferSleepDate(diaryDate: string, sleepTime: string | null | und
   return addDays(diaryDate, 1);
 }
 
-export function resolveWakeDate(
-  diaryDate: string,
-  wakeDate: string | null | undefined,
-): string | null {
+export function resolveWakeDate(diaryDate: string, wakeDate: string | null | undefined): string | null {
   return wakeDate ?? diaryDate;
 }
 
@@ -171,6 +160,12 @@ export function calculateSleepDurationHours(
   const minutes = (wakeMs - sleepMs) / 60000;
   if (!Number.isFinite(minutes) || minutes < 0) return null;
   return Math.round((minutes / 60) * 10) / 10;
+}
+
+/** Current MSK wall-clock time as HH:MM (UTC+3 offset). */
+export function mskNowTime(utcMs?: number): string {
+  const d = new Date((utcMs ?? Date.now()) + 3 * 60 * 60 * 1000);
+  return d.toISOString().slice(11, 16);
 }
 
 export function formatRuDate(date: string): string {

@@ -13,6 +13,7 @@ import {
 import sharp from "sharp";
 import { Readable } from "stream";
 import net from "net";
+import { PHOTO_MAX_PER_USER as CFG_PHOTO_MAX_PER_USER, PHOTO_MAX_SIZE_BYTES as CFG_PHOTO_MAX_SIZE } from "./config";
 
 const ENDPOINT = process.env.VK_S3_ENDPOINT || "https://hb.ru-msk.vkcloud-storage.ru";
 const REGION = process.env.VK_S3_REGION || "ru-msk";
@@ -20,8 +21,8 @@ const BUCKET = process.env.VK_S3_BUCKET || "food-diary-photos";
 const ACCESS_KEY = process.env.VK_S3_ACCESS_KEY || "";
 const SECRET_KEY = process.env.VK_S3_SECRET_KEY || "";
 
-export const PHOTO_MAX_SIZE_BYTES = (Number(process.env.PHOTO_MAX_SIZE_MB) || 50) * 1024 * 1024;
-export const PHOTO_MAX_PER_USER = Number(process.env.PHOTO_MAX_PER_USER) || 500;
+export const PHOTO_MAX_SIZE_BYTES = CFG_PHOTO_MAX_SIZE;
+export const PHOTO_MAX_PER_USER = CFG_PHOTO_MAX_PER_USER;
 
 let _client: S3Client | null = null;
 

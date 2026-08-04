@@ -107,20 +107,66 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api
 
 ## 11. Обновление
 
+### Основной прод (Caddy на том же хосте)
+
 ```bash
 cd /srv/foodbot
+git fetch origin
+git checkout main   # или нужная ветка
 git pull
 docker compose up -d --build
+docker compose ps
+curl -sS https://fooddiary.razbudimir.com/api/health
+curl -sS https://fooddiary.razbudimir.com/api/now
+```
+
+### Dev / preview ветка `refactor/v2.26.0` (Phase 29)
+
+На сервере с внешним nginx (`docker-compose.prod.yml`):
+
+```bash
+# путь к клону: /srv/foodbot или ~/food_app — как у вас настроено
+cd /srv/foodbot
+
+# Если раньше правили/собирали под root — сначала починить владельца,
+# иначе git checkout падает с Permission denied и файлы (напр. MealFields.tsx) не появляются.
+sudo chown -R "$USER:$USER" /srv/foodbot
+
+git fetch origin
+git checkout refactor/v2.26.0
+git reset --hard origin/refactor/v2.26.0
+git clean -fd
+# убедиться, что критичные файлы на месте:
+test -f client/src/components/diary/MealFields.tsx
+
+# бэкап БД перед обновлением
+mkdir -p /srv/foodbot/data/backups
+sudo cp /srv/foodbot/data/data.db "/srv/foodbot/data/backups/pre-v2.26.0-$(date +%Y%m%d_%H%M%S).db"
+
+sudo docker compose -f docker-compose.prod.yml up -d --build
+sudo docker compose -f docker-compose.prod.yml ps
+curl -sS https://fooddiary.razbudimir.com/api/health
+curl -sS https://fooddiary.razbudimir.com/api/now
+# логи при проблемах
+sudo docker compose -f docker-compose.prod.yml logs --tail=80 api
+```
+
+Откат на `main`:
+
+```bash
+cd /srv/foodbot
+git checkout main && git pull
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ---
 
 ## Структура контейнеров (Phase 6)
 
-| Контейнер | Назначение | Порт на хосте |
-|---|---|---|
+| Контейнер        | Назначение              | Порт на хосте             |
+| ---------------- | ----------------------- | ------------------------- |
 | `food_diary_api` | Backend API + React SPA | — (только Docker network) |
-| `food_caddy` | HTTPS reverse proxy | 80, 443 |
+| `food_caddy`     | HTTPS reverse proxy     | 80, 443                   |
 
 ## База данных
 
@@ -129,12 +175,12 @@ SQLite `data.db` в `/srv/foodbot/data/` (bind mount).
 
 ## Troubleshooting
 
-| Симптом | Решение |
-|---------|---------|
-| Caddy не стартует | Проверить `certs/fullchain.pem` и `privkey.pem` |
-| 526 / SSL error | Неверная цепочка сертификатов |
-| Cookie не сохраняется | Нужен HTTPS; `COOKIE_SECURE=1` в production |
-| 502 Bad Gateway | `docker compose logs api` — дождаться healthcheck |
+| Симптом               | Решение                                           |
+| --------------------- | ------------------------------------------------- |
+| Caddy не стартует     | Проверить `certs/fullchain.pem` и `privkey.pem`   |
+| 526 / SSL error       | Неверная цепочка сертификатов                     |
+| Cookie не сохраняется | Нужен HTTPS; `COOKIE_SECURE=1` в production       |
+| 502 Bad Gateway       | `docker compose logs api` — дождаться healthcheck |
 
 ---
 

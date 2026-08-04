@@ -4,6 +4,12 @@ import crypto from "crypto";
 import type { Request, Response, NextFunction, CookieOptions } from "express";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
+import {
+  ACCESS_TOKEN_TTL,
+  REFRESH_TOKEN_TTL_SECONDS,
+  REFRESH_TOKEN_TTL_ENV,
+  REFRESH_COOKIE_MAX_AGE_ENV,
+} from "./config";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -17,7 +23,7 @@ const JWT_SECRET =
     return "dev-insecure-secret-change-me";
   })();
 
-const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || "30m") as jwt.SignOptions["expiresIn"];
+const JWT_EXPIRES_IN = ACCESS_TOKEN_TTL as jwt.SignOptions["expiresIn"];
 const REFRESH_COOKIE_NAME = "refresh_token";
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
@@ -36,8 +42,8 @@ function parseDurationSeconds(value: string | undefined, fallback: number): numb
   return amount * multiplier;
 }
 
-const REFRESH_EXPIRES_SECONDS = parseDurationSeconds(process.env.JWT_REFRESH_EXPIRES_IN, 7 * 24 * 60 * 60);
-const REFRESH_COOKIE_MAX_AGE_SECONDS = parsePositiveInt(process.env.REFRESH_COOKIE_MAX_AGE, REFRESH_EXPIRES_SECONDS);
+const REFRESH_EXPIRES_SECONDS = parseDurationSeconds(REFRESH_TOKEN_TTL_ENV, REFRESH_TOKEN_TTL_SECONDS);
+const REFRESH_COOKIE_MAX_AGE_SECONDS = parsePositiveInt(REFRESH_COOKIE_MAX_AGE_ENV, REFRESH_EXPIRES_SECONDS);
 const REFRESH_EXPIRES_MS = REFRESH_EXPIRES_SECONDS * 1000;
 const REFRESH_COOKIE_MAX_AGE_MS = REFRESH_COOKIE_MAX_AGE_SECONDS * 1000;
 

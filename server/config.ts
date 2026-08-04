@@ -4,9 +4,11 @@
  */
 
 // Auth token TTLs
-export const ACCESS_TOKEN_TTL = "30m";
+export const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || "30m";
 export const REFRESH_TOKEN_TTL_DAYS = 7;
 export const REFRESH_TOKEN_TTL_SECONDS = REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60;
+export const REFRESH_TOKEN_TTL_ENV = process.env.JWT_REFRESH_EXPIRES_IN;
+export const REFRESH_COOKIE_MAX_AGE_ENV = process.env.REFRESH_COOKIE_MAX_AGE;
 
 // Password reset
 export const PASSWORD_RESET_TTL_MINUTES = 60;
@@ -29,3 +31,8 @@ export const ANALYTICS_MAX_DAYS = 90;
 
 // Idle session
 export const IDLE_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
+
+// Photos (Phase 29.5)
+export const MAX_PHOTO_SIZE_MB = Number(process.env.PHOTO_MAX_SIZE_MB) || 50;
+export const PHOTO_MAX_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
+export const PHOTO_MAX_PER_USER = Number(process.env.PHOTO_MAX_PER_USER) || 500;
