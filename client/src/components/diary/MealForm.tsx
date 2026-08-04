@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpen, Camera } from "lucide-react";
 import { FoodCatalogModal } from "@/components/FoodCatalogModal";
-import { MealEditSheet } from "@/components/MealEditSheet";
+import { MealEditSheet } from "@/components/diary/MealEditSheet";
 import { MealFields } from "@/components/diary/MealFields";
 import type { Meal } from "@shared/schema";
 import {
