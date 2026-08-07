@@ -4,9 +4,10 @@ import cookieParser from "cookie-parser";
 import swaggerUi from "swagger-ui-express";
 import { openApiSpec } from "../openapi";
 import { getMskDate, getMskTime, storage } from "../storage";
-import { isS3Configured, uploadPhoto, deleteFromS3, buildPhotoKey } from "../s3";
+import { isS3Configured, pingS3 } from "../s3";
 import { isDeepSeekAvailable } from "../deepseek";
 import { ApiError } from "../errors";
+import { HEALTH_S3_CACHE_MS } from "../config";
 import { registerAuthRoutes } from "./auth";
 import { registerMealsRoutes } from "./meals";
 import { registerReportsRoutes } from "./reports";
@@ -16,6 +17,11 @@ import { registerPhotosRoutes } from "./photos";
 import { registerCatalogRoutes } from "./catalog";
 import { registerPushRoutes } from "./push";
 import { clientErrorsRouter } from "./client-errors";
+
+type HealthCheck = { ok: boolean; detail?: string };
+
+/** Cached result of the S3 probe in `/api/health` — see HEALTH_S3_CACHE_MS. */
+let s3CheckCache: { at: number; result: HealthCheck } | null = null;
 
 export function registerRoutes(httpServer: Server, app: Express) {
   // Required here (not only in index.ts) so integration tests that call
@@ -89,24 +95,21 @@ export function registerRoutes(httpServer: Server, app: Express) {
       checks.db = { ok: false, detail: e.message };
     }
 
-    // S3 check — real PutObject + DeleteObject round-trip (not just HeadBucket)
-    try {
-      if (isS3Configured()) {
-        const testKey = buildPhotoKey(0, `health-check-${Date.now()}`);
-        // Minimal 1×1 white JPEG
-        const testBuf = Buffer.from(
-          "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=",
-          "base64",
-        );
-        const t = Date.now();
-        await uploadPhoto(testKey, testBuf, "image/jpeg");
-        await deleteFromS3(testKey);
-        checks.s3 = { ok: true, detail: `rw ok ${Date.now() - t}ms` };
-      } else {
-        checks.s3 = { ok: true, detail: "not configured" };
+    // S3 check — PutObject + DeleteObject round-trip, cached (see HEALTH_S3_CACHE_MS).
+    // The docker healthcheck polls this endpoint every 30s; an uncached probe would
+    // write and delete ~2900 objects per day.
+    if (!isS3Configured()) {
+      checks.s3 = { ok: true, detail: "not configured" };
+    } else if (s3CheckCache && Date.now() - s3CheckCache.at < HEALTH_S3_CACHE_MS) {
+      checks.s3 = s3CheckCache.result;
+    } else {
+      try {
+        const durationMs = await pingS3();
+        checks.s3 = { ok: true, detail: `rw ok ${durationMs}ms` };
+      } catch (e: any) {
+        checks.s3 = { ok: false, detail: e.message };
       }
-    } catch (e: any) {
-      checks.s3 = { ok: false, detail: e.message };
+      s3CheckCache = { at: Date.now(), result: checks.s3 };
     }
 
     // DeepSeek check

@@ -1,32 +1,26 @@
-# Production docker-compose для сервера с внешним nginx (95.163.213.45)
+# Production docker-compose для сервера с внешним nginx.
+# Актуальные адрес сервера и порядок обновления — в DEPLOY.md.
 # Запуск: docker compose -f docker-compose.prod.yml up -d --build
 # Nginx проксирует на 127.0.0.1:5000
 # Phase 26.3: см. nginx.conf в корне репозитория — эталонный конфиг внешнего
 # nginx (server_tokens off, TLS, проксирование на 127.0.0.1:5000). Файл нужно
 # скопировать на хост (/etc/nginx/sites-available/) — он не собирается в образ.
 
-version: "3.9"
+# BUG-08: сервис clamav удалён. FreshClam не мог обновлять базы (Cisco/Talos CDN
+# блокирует IP-диапазон VK Cloud), из-за чего clamd не поднимался, сокет не
+# создавался и контейнер месяцами висел unhealthy. Скан при этом всё равно не
+# выполнялся (fail-open в scanForViruses), но каждая проверка /api/health писала
+# ошибку в лог — ~2900 строк в сутки.
+#
+# Компенсирующая мера: uploadPhoto() в server/s3.ts перекодирует любое изображение
+# через sharp в WebP, что уничтожает вложенные payload'ы в метаданных.
+#
+# Как вернуть антивирус: восстановить сервис clamav и volume clamav_sock из
+# истории git, вернуть api.environment.CLAMAV_SOCKET и монтирование сокета.
+# Код в s3.ts менять не нужно — scanForViruses() сам включается при заданном
+# CLAMAV_SOCKET и пропускает скан, когда переменная пуста.
 
 services:
-  clamav:
-    image: clamav/clamav:1.4
-    container_name: food_diary_clamav
-    restart: unless-stopped
-    volumes:
-      - clamav_db:/var/lib/clamav
-      - clamav_sock:/var/run/clamav
-    networks:
-      - food_net
-    healthcheck:
-      # clamav/clamav:1.4 ships clamdcheck at /usr/local/bin/clamdcheck
-      # It checks the Unix socket at /var/run/clamav/clamd.sock
-      test: ["CMD", "sh", "-c", "echo PING | nc -q1 -U /var/run/clamav/clamd.sock | grep -q PONG"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      # First run: freshclam must finish downloading virus databases (~300 MB)
-      start_period: 300s
-
   api:
     build:
       context: .
@@ -38,21 +32,12 @@ services:
     environment:
       NODE_ENV: production
       TRUST_PROXY: "1"
-      # Phase 28.4: ClamAV socket path (shared volume with clamav service)
-      CLAMAV_SOCKET: /var/run/clamav/clamd.sock
     volumes:
       - data_db:/app/data
-      - clamav_sock:/var/run/clamav:ro
     ports:
       - "127.0.0.1:5000:5000"
     networks:
       - food_net
-    depends_on:
-      clamav:
-        # service_started: API не блокируется на ClamAV healthcheck.
-        # ClamAV при первом запуске скачивает ~300MB баз — это занимает минуты.
-        # Код в s3.ts уже graceful: если сокет недоступен — скан пропускается.
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 30s
@@ -71,5 +56,3 @@ volumes:
       type: none
       o: bind
       device: /srv/foodbot/data
-  clamav_db:
-  clamav_sock:

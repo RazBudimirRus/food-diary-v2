@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS client_errors (
   extra       TEXT,
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_client_errors_created_at ON client_errors (created_at);
-CREATE INDEX IF NOT EXISTS idx_client_errors_user_id    ON client_errors (user_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_client_errors_user_id ON client_errors (user_id);

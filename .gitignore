@@ -6,11 +6,20 @@ test-results/
 playwright-report/
 blob-report/
 
+# Runtime data dir (prod bind mount /srv/foodbot/data): live DB + backups.
+# Backup files are named food-diary_*.db / pre-*.db and would NOT be caught by
+# the patterns below — without this rule `git add -A` on the server stages
+# databases containing personal health data.
+data/
+
 # SQLite database files — never commit; exposes demo data at rest
 data.db
 data.db-shm
 data.db-wal
 data.db-journal
+*.db-shm
+*.db-wal
+*.db-journal
 e2e-test.db
 e2e-test.db-shm
 e2e-test.db-wal

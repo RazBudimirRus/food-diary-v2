@@ -36,3 +36,8 @@ export const IDLE_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
 export const MAX_PHOTO_SIZE_MB = Number(process.env.PHOTO_MAX_SIZE_MB) || 50;
 export const PHOTO_MAX_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024;
 export const PHOTO_MAX_PER_USER = Number(process.env.PHOTO_MAX_PER_USER) || 500;
+
+// Health check: the S3 probe writes and deletes a real object, so it is cached.
+// The docker healthcheck polls /api/health every 30s; without caching that is
+// ~2900 write+delete pairs per day against the bucket.
+export const HEALTH_S3_CACHE_MS = Number(process.env.HEALTH_S3_CACHE_MS) || 5 * 60 * 1000;

@@ -38,7 +38,7 @@
 - **Хранение фото:** VK Object Storage (S3-совместимое) через `@aws-sdk/client-s3`, sharp для EXIF-strip и конвертации
 - **Отчёты:** exceljs (Excel), pdfkit + chartjs-node-canvas (PDF-аналитика с графиками)
 - **Наблюдаемость:** pino (+ request_id), Sentry, `/api/health`, `/metrics` (prom-client)
-- **Deploy:** Docker Compose. `docker-compose.yml` (Caddy + api) или `docker-compose.prod.yml` (внешний nginx + ClamAV)
+- **Deploy:** Docker Compose. `docker-compose.yml` (Caddy + api) или `docker-compose.prod.yml` (внешний nginx, только `api`)
 - **Часовой пояс:** МСК (UTC+3), день = 00:00–23:59 MSK. Единая логика — `shared/dates.ts`
 
 ---
@@ -119,11 +119,18 @@ PROJECT24_FOODDIARY2/
 | **PERF-01** | Расчёт КБЖУ 5–15 с — `deepseek-v4-flash` генерирует thinking-блок. UX-блокер             |
 | **BUG-10**  | Не грузятся фото с мобильного телефона (вероятно HEIC/HEIF или MIME). Причина не найдена |
 
-**Низкий приоритет:** BUG-08 (ClamAV: Cisco/Talos CDN блокирует IP VK Cloud, freshclam не обновляет базы; clamd работает на старых базах, API не затронут), хвост Фазы 29 (`bot/utils/dates.py`), мёртвый Python-бот `bot/`, неиспользуемые npm-зависимости из шаблона Replit.
+**Низкий приоритет:** хвост Фазы 29 (`bot/utils/dates.py`), мёртвый Python-бот `bot/`, неиспользуемые npm-зависимости из шаблона Replit.
+
+**Закрыто 2026-08-07 (v2.27.1)** по итогам диагностики прода:
+
+- **BUG-08** — ClamAV удалён из `docker-compose.prod.yml`. На проде контейнер висел `unhealthy` 8+ дней, сокета не было вовсе, скан не выполнялся (fail-open), а `/api/health` писал ~2900 ошибок в сутки. Код `scanForViruses()` в `s3.ts` **оставлен**: он сам включается при заданном `CLAMAV_SOCKET`, поэтому возврат — правка одного compose-файла.
+- **BUG-11** — миграция `0009_client_error_log` не была зарегистрирована в `migrations/meta/_journal.json`, из-за чего drizzle её игнорировал, а таблица `client_errors` жила только за счёт guarded DDL. Добавлена запись в журнал + `--> statement-breakpoint` в сам `.sql`.
+- `data/` добавлен в `.gitignore` — бэкапы `food-diary_*.db` не попадали под прежние шаблоны, и `git add -A` на сервере мог отправить медданные в публичный репозиторий.
+- S3-проверка в `/api/health` теперь кэшируется (`HEALTH_S3_CACHE_MS`, 5 мин) и идёт через лёгкий `pingS3()` без sharp и антивируса.
 
 **Не начатые фазы:** 19 (AI-советник), 22 (FatSecret), 25 (GigaChat), 32 (лендинг/digest), 33 (DR, k6, Postgres), 36 (Health-платформы), 7 (WAF), 12/13 (Android + RuStore), 0 (TG-бот), 8 (масштабирование).
 
-**Прод (проверено 2026-08-07 внешними запросами):** развёрнута **v2.27.0** — совпадает с `main` по коду. `/api/health` → `status: ok`, все проверки зелёные (`db: sqlite ok`, `s3: rw ok ~120ms`, `deepseek: configured`). Фронт отдаётся через `nginx/1.24.0` (Ubuntu), то есть используется `docker-compose.prod.yml`. HSTS и CSP на месте. Uptime на момент проверки ~50 ч → контейнер поднят ~2026-08-05 11:08 MSK, то есть сразу после мержа v2.27.0.
+**Прод (проверено 2026-08-07):** развёрнута **v2.27.0**. После v2.27.1 прод отстаёт от `main` — нужен деплой (см. ниже про удаление контейнера ClamAV). `/api/health` → `status: ok`, все проверки зелёные (`db: sqlite ok`, `s3: rw ok ~120ms`, `deepseek: configured`). Фронт отдаётся через `nginx/1.24.0` (Ubuntu), то есть используется `docker-compose.prod.yml`. HSTS и CSP на месте. Uptime на момент проверки ~50 ч → контейнер поднят ~2026-08-05 11:08 MSK, то есть сразу после мержа v2.27.0.
 
 > Версию прода снаружи можно узнать так: взять имя JS-бандла из `curl -sS https://fooddiary.razbudimir.com/`, затем найти в нём строку версии — она вшивается на этапе сборки через `__APP_VERSION__` (см. `vite.config.ts`).
 
@@ -131,9 +138,9 @@ PROJECT24_FOODDIARY2/
 
 ## Docker / данные / деплой
 
-- Два compose-файла: `docker-compose.yml` (Caddy + api, HTTPS на том же хосте) и `docker-compose.prod.yml` (внешний nginx + ClamAV). На проде используется **prod**-вариант.
-- SQLite `data.db` в bind mount `/srv/foodbot/data` → `/app/data` в контейнере.
-- Бэкапы: `scripts/backup.sh` (hot backup), `install-backup-cron.sh` (03:00 MSK), хранится 30 копий.
+- Два compose-файла: `docker-compose.yml` (Caddy + api, HTTPS на том же хосте) и `docker-compose.prod.yml` (внешний nginx, единственный сервис `api`). На проде используется **prod**-вариант.
+- SQLite `data.db` в bind mount `/srv/foodbot/data` → `/app/data` в контейнере. Там же `data/backups/` — каталог целиком в `.gitignore`.
+- Бэкапы: `scripts/backup.sh` (hot backup), `install-backup-cron.sh` (00:00 UTC = 03:00 MSK), хранится 30 копий. Задание ставится в crontab пользователя (`${SUDO_USER:-$USER}`), поэтому в `sudo crontab -l` его не видно — искать через `crontab -l`, `/etc/cron.d/`.
 - **Никогда** не запускать `docker compose down -v`.
 - Перед деплоем: `sudo bash preflight-check.sh`. Проверка холодного старта локально: `npx tsx script/cold-start-check.ts`.
 - Подробности и порядок обновления — в `DEPLOY.md`.
@@ -142,6 +149,7 @@ PROJECT24_FOODDIARY2/
 
 - **BUG-03:** рассинхрон `__drizzle_migrations` — миграции применялись guarded DDL без записи хэша, при следующем деплое drizzle пытался применить их повторно. Исправлено вручную вставкой хэшей.
 - **BUG-06:** `idempotency_keys` на проде не имела колонок `response_status`/`response_body` — миграция считалась применённой по хэшу. Исправлено вручную `ALTER TABLE`.
+- **BUG-11:** число файлов `migrations/*.sql` **не равно** числу применённых миграций — drizzle читает `migrations/meta/_journal.json`, а не каталог. Сравнивать `COUNT(*)` из `__drizzle_migrations` нужно с записями журнала, иначе диагностика даёт ложную тревогу «рассинхрон». Новая миграция без записи в журнале молча не применяется.
 - Если раньше собирали под root — перед `git checkout` нужен `sudo chown -R "$USER:$USER" /srv/foodbot`.
 
 ---

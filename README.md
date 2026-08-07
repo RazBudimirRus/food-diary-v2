@@ -53,7 +53,7 @@
 | Frontend       | React 18 · Vite · TypeScript · Tailwind CSS · shadcn/ui · TanStack Query |
 | Backend        | Node.js 22 · Express · TypeScript · Drizzle ORM · better-sqlite3         |
 | Инфраструктура | Docker Compose · nginx · Ubuntu 24.04                                    |
-| Безопасность   | bcryptjs · JWT · AES-256-GCM · CSRF · EXIF strip · ClamAV                |
+| Безопасность   | bcryptjs · JWT · AES-256-GCM · CSRF · MFA (TOTP) · EXIF strip            |
 | AI             | DeepSeek API (анализ КБЖУ) · chartjs-node-canvas (PDF графики)           |
 | Хранилище      | SQLite (данные) · VK Object Storage / S3 (фото)                          |
 | Мониторинг     | Prometheus · Grafana · Sentry · Pino                                     |

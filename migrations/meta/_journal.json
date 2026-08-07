@@ -64,6 +64,13 @@
       "when": 1783267800000,
       "tag": "0008_add_water_ml_to_meals",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784979838000,
+      "tag": "0009_client_error_log",
+      "breakpoints": true
     }
   ]
 }

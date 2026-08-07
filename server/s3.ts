@@ -140,6 +140,32 @@ export async function uploadPhoto(s3Key: string, buffer: Buffer, _mimeType: stri
 }
 
 /**
+ * Лёгкая проверка живости S3 для `/api/health`: PutObject + DeleteObject
+ * маленького объекта, минуя sharp и антивирусный скан. Возвращает время
+ * round-trip в миллисекундах.
+ *
+ * Для сквозной проверки реального пайплайна фотографий есть `runUploadTest()`
+ * (`POST /api/admin/s3-upload-test`) — она умышленно идёт через `uploadPhoto()`.
+ */
+export async function pingS3(): Promise<number> {
+  const key = `health/probe-${Date.now()}`;
+  const client = getClient();
+  const t = Date.now();
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: Buffer.from("ok"),
+      ContentType: "application/octet-stream",
+    }),
+  );
+  await client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+
+  return Date.now() - t;
+}
+
+/**
  * Скачивает объект из S3 и возвращает буфер.
  */
 export async function downloadPhoto(s3Key: string): Promise<Buffer> {
