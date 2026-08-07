@@ -3774,7 +3774,11 @@ INSERT INTO __drizzle_migrations (hash, created_at) VALUES
 
 **Приоритет:** Средний (безопасность — antivirus не работает, но функциональность не нарушена)
 
-**Статус:** ✅ Исправлено (v2.23.0) — в `docker-compose.prod.yml` добавлен `depends_on: condition: service_healthy` для ClamAV. Остаточная проблема с обновлением вирусных баз вынесена в BUG-08.
+**Статус:** ✅ Исправлено — сокет ClamAV пробрасывается в оба контейнера через shared volume `clamav_sock` (в `api` смонтирован read-only), путь задан через `CLAMAV_SOCKET`, у `clamav` есть healthcheck с `start_period: 300s`.
+
+> **Важно:** в `depends_on` осознанно стоит `condition: service_started`, а **не** `service_healthy` (в v2.23.0 пробовали `service_healthy`, затем вернули). Причина в комментарии `docker-compose.prod.yml`: при первом запуске ClamAV качает ~300 МБ баз, и `service_healthy` заблокировал бы старт API на минуты. Код в `s3.ts` graceful — если сокет недоступен, скан пропускается (fail-open). **Не менять на `service_healthy`** без переоценки этого компромисса.
+
+Остаточная проблема с обновлением вирусных баз вынесена в BUG-08.
 
 ---
 
