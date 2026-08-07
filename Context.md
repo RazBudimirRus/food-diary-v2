@@ -3,8 +3,9 @@
 > **ОБЯЗАТЕЛЬНО ДЛЯ ВСЕХ AI-АГЕНТОВ (Cursor, Perplexity, и др.)**
 >
 > При **каждом** новом чате, задаче или вопросе по этому проекту:
+>
 > 1. **Сначала прочитай этот файл целиком** (`Context.md`).
-> 2. Затем при необходимости — `ROADMAP.md` (план фаз) и `README.md` (установка/API).
+> 2. Затем при необходимости — `ROADMAP.md` (актуальный бэклог — в разделе «Таблица приоритетов фаз» внизу) и `README.md` (установка/API).
 > 3. После выполнения значимых изменений **обнови раздел «Журнал изменений»** внизу этого файла.
 > 4. Не смотри в `.env` (секреты). Используй только `.env.example`.
 >
@@ -14,207 +15,190 @@
 
 ## Проект
 
-| Поле | Значение |
-|------|----------|
-| Название | Food Diary V2 |
-| Назначение | Личный дневник питания + Excel-отчёт для врача/нутрициолога |
-| GitHub | https://github.com/RazBudimirRus/food-diary-v2 |
-| Локальная папка | `APPLICATIONS/PROJECT24_FOODDIARY2` внутри workspace CURSOR |
-| Домен (план) | `fooddiary.razbudimir.com` |
-| VPS | Ubuntu 24.04, wildcard `*.razbudimir.com` |
-| **Прод-сервер (отладка)** | `149.33.12.166` · проект: `/home/razbudimir/food_app` · пользователь: `razbudimir` |
-| Исходная разработка | **Perplexity MAX** (Computer mode), затем доработки в **Cursor** |
+| Поле                | Значение                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| Название            | Food Diary V2                                                                               |
+| Текущая версия      | **2.27.0** (`package.json`)                                                                 |
+| Назначение          | Дневник питания + Excel/PDF-отчёт для врача/нутрициолога                                    |
+| GitHub              | https://github.com/RazBudimirRus/food-diary-v2                                              |
+| Локальная папка     | `APPLICATIONS/PROJECT24_FOODDIARY2` внутри workspace CURSOR                                 |
+| Домен               | `fooddiary.razbudimir.com`                                                                  |
+| **Прод-сервер**     | `149.33.12.166` · Ubuntu 24.04 · wildcard `*.razbudimir.com`                                |
+| Путь на проде       | `/srv/foodbot` — так во всех compose-файлах, `backup.sh`, `preflight-check.sh`, `DEPLOY.md` |
+| Исходная разработка | Perplexity MAX (Computer mode), далее — Cursor Agent                                        |
 
 ---
 
 ## Стек
 
-- **Frontend:** React 18, Vite, Tailwind, shadcn/ui, TanStack Query, wouter (hash routing)
-- **Backend:** Node.js 20, Express 5, TypeScript, Drizzle ORM, SQLite (better-sqlite3)
-- **Auth:** bcrypt (cost 12), JWT (httpOnly cookie, 7d), AES-256-GCM для secrets
-- **AI:** DeepSeek API — расчёт КБЖУ (ключ из env → шифруется в БД, userId=0)
-- **Excel:** exceljs — отчёт врача, 8 колонок (включая КБЖУ)
-- **Deploy:** Docker Compose (`api` + `caddy`), HTTPS на `fooddiary.razbudimir.com` (Phase 6)
-- **Часовой пояс:** МСК (UTC+3), день = 00:00–23:59 MSK
+- **Frontend:** React 18, Vite 7, Tailwind 3, shadcn/ui (Radix), TanStack Query, wouter (hash routing), Recharts
+- **Backend:** Node.js 22, Express 5, TypeScript 5.6, Drizzle ORM, SQLite (better-sqlite3, WAL)
+- **Auth:** bcryptjs (cost 12), access JWT 30 мин в памяти + refresh 7 дней в httpOnly cookie, AES-256-GCM для secrets (ключ через scrypt KDF), MFA TOTP для `doctor`/`admin`
+- **AI:** DeepSeek API (`deepseek-v4-flash`) — расчёт КБЖУ по тексту и по фото
+- **Хранение фото:** VK Object Storage (S3-совместимое) через `@aws-sdk/client-s3`, sharp для EXIF-strip и конвертации
+- **Отчёты:** exceljs (Excel), pdfkit + chartjs-node-canvas (PDF-аналитика с графиками)
+- **Наблюдаемость:** pino (+ request_id), Sentry, `/api/health`, `/metrics` (prom-client)
+- **Deploy:** Docker Compose. `docker-compose.yml` (Caddy + api) или `docker-compose.prod.yml` (внешний nginx + ClamAV)
+- **Часовой пояс:** МСК (UTC+3), день = 00:00–23:59 MSK. Единая логика — `shared/dates.ts`
 
 ---
 
-## Что уже реализовано (v1.x)
+## Архитектура (после Фазы 29, v2.27.0)
 
-- Веб-форма: приёмы пищи, голод/сытость 0–10, контекст, тип приёма
-- Регистрация / логин / logout, изоляция данных по userId
-- Date-picker в форме (запись задним числом, max = сегодня MSK)
-- DeepSeek КБЖУ: кнопка в форме, бейджи на карточках, колонка H в Excel
-- Итоги дня (подъём, отбой, спорт, шаги) — диалог перед первым отчётом
-- `preflight-check.sh`, `DEPLOY.md`, двуязычный `README.md`
-- `ROADMAP.md` v2.2.0 — 11 фаз (0–10) + Phase 11 analytics (planned)
-- **Phase 6 (код):** Caddy в docker-compose, TLS wildcard certs, ufw script, secure cookies, `TRUST_PROXY`
-- **Phase 3 (код):** SQLite WAL mode, `scripts/backup.sh`, `install-backup-cron.sh`, preflight §13
-- **Phase 10 (код):** `refresh_tokens` в SQLite, access JWT 30m в памяти React, refresh 7d в httpOnly cookie, `/api/auth/refresh`, idle timeout 25/30 мин
-- **Phase 2 (код):** Helmet/CSP/HSTS, CORS whitelist, rate-limit login/meals, IDOR fix для day summary, Zod PATCH meals, безопасные API-логи, Dependabot config
-- **Phase 1 (код):** Vitest unit/integration tests, Supertest auth/diary coverage, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, GitHub Actions CI
-- **UX-1 (код):** редактирование приёма пищи в карточке, сохранение через `PATCH /api/meals/:id`, обновление TanStack Query cache, integration + E2E add→edit→verify
-- **Phase 4 foundation (код):** `user/admin` роли, `requireAdmin`, bootstrap через `ADMIN_BOOTSTRAP_USERNAME`, read-only `/api/admin/sessions`, guarded `/#/admin`
-- **Phase 4 sessions (код):** admin revoke конкретной refresh-сессии и revoke всех refresh-сессий пользователя, UI actions в `/#/admin`, integration tests
-- **Phase 4 reset (код):** admin user list, reset password с временным паролем, revoke refresh sessions после сброса, integration tests
-- **Phase 4 usage dashboard (код):** `api_usage`, запись DeepSeek prompt/completion tokens, cost estimate, daily token limit status, dashboard в `/#/admin`
-- **Phase 9 (код):** daily limit guard для DeepSeek — `/api/analyze` возвращает `429`, когда `DEEPSEEK_DAILY_TOKEN_LIMIT` достигнут
-- **Phase 11 (код):** `/api/analytics/summary`, аналитика питания за период, карточки и Recharts графики в `/#/analytics`
-- **UX-2 (код):** логин (`username`) как главный идентификатор в таблицах админ-панели
-- **UX-3 (код):** перенос приёма пищи между днями при редактировании через `PATCH /api/meals/:id` + `date`
-- **UX-4 (код):** явные даты подъёма/отбоя (`wake_date`, `sleep_date`), правила отбоя, Excel date+time, аналитика сна
-- **UX-5 (код):** календарные периоды в аналитике (неделя/месяц/год), пустые дни, навигация prev/next
-- **Phase 5 (код):** самостоятельный сброс пароля по email — `forgot-password`, `reset-password`, `password_reset_tokens`, SMTP/nodemailer, `/#/reset-password`
-
----
-
-## Известные проблемы (code review, ещё не исправлены)
-
-| Проблема | Где | Критичность |
-|----------|-----|-------------|
-| ~~IDOR — нет проверки `day.userId` при сохранении итогов дня~~ | `POST /api/days/:id/summary` | ✅ Закрыто Phase 2 |
-| ~~PATCH `/api/meals/:id` без Zod — mass assignment~~ | `server/routes.ts` | ✅ Закрыто Phase 2 |
-| ~~JWT дублируется в JSON ответа + React state (смысл httpOnly частично теряется)~~ | auth flow | ✅ Закрыто Phase 10 |
-| ~~Нет rate-limit, Helmet, CSP, `secure` на cookie~~ | server | ✅ Закрыто Phase 2/10 |
-| Мёртвый Python-бот `bot/bot.py` вызывает несуществующие `/api/tg/*` | `bot/` | Низкая (legacy) |
-| Много неиспользуемых npm-зависимостей (шаблон Replit) | `package.json` | Низкая |
-| Дублирование схемы БД: raw SQL + Drizzle + ALTER в runtime | `server/storage.ts` | Средняя |
-| README: `DELETE /api/secrets` — эндпоинта нет | docs | Низкая |
-| ~~Логи API пишут полный JSON ответа~~ | `server/index.ts` | ✅ Закрыто Phase 2 |
-| ~~Нет тестов~~ | — | ✅ Закрыто Phase 1 |
-
----
-
-## Структура репозитория (ключевое)
+Это самое важное отличие от старых версий контекста: **монолитов `server/routes.ts` и `server/storage.ts` в прежнем виде больше нет.**
 
 ```
 PROJECT24_FOODDIARY2/
-├── client/src/pages/     # AuthPage.tsx, DiaryPage.tsx (~770 строк)
-├── server/               # index.ts, routes.ts, auth.ts, storage.ts, excel.ts, deepseek.ts
-├── shared/schema.ts      # Drizzle + Zod схемы
-├── bot/                  # Python aiogram — LEGACY, не в docker-compose
-├── ROADMAP.md            # План фаз 0–10
-├── Context.md            # Этот файл
-├── docker-compose.yml    # volume bind → /srv/foodbot/data
-└── preflight-check.sh
+├── client/src/
+│   ├── pages/           # Auth, Diary, Analytics, Admin, Doctor, Catalog, Profile, Privacy, About, ResetPassword
+│   ├── components/
+│   │   ├── diary/       # MealForm, MealCard, MealFields, MealEditSheet, DateCarousel, DaySummary…
+│   │   ├── admin/       # AdminUsersTable, AuditLogTab, ClientErrorsTab, DeepSeekUsagePanel, S3AdminPanel
+│   │   ├── analytics/   # 8 блоков-графиков + AnalyticsPeriodControls
+│   │   ├── doctor/      # PatientsTab, PatientDiaryTab, DoctorHistoryTab
+│   │   ├── catalog/     # AddProductDialog, CatalogItemCard, EditCatalogItemDialog
+│   │   ├── profile/     # AccountInfoCard, MfaCard, DisplayNameCard, PasswordResetCard
+│   │   └── ui/          # shadcn/ui
+│   └── lib/             # auth.tsx, diary-utils.ts, errorReporter.ts, theme-context.ts
+├── server/
+│   ├── app.ts           # createApp(): helmet/CORS/parsers/CSRF/логи/metrics. НЕ открывает БД
+│   ├── index.ts         # boot: миграции → createApp() → routes → listen
+│   ├── db.ts            # единое подключение SQLite
+│   ├── routes/          # 14 файлов: auth, meals, admin, doctor, catalog, photos, reports,
+│   │                    # client-errors, push, helpers, limiters, middleware, upload, index
+│   ├── repositories/    # 9 репозиториев с реальным SQL: user, meal, day, session,
+│   │                    # doctor, catalog, photo, audit, index
+│   ├── storage.ts       # фасад над репозиториями + аналитический SQL. БЕЗ bootstrap DDL
+│   ├── errors.ts        # ApiError { status, code, message, details }
+│   ├── config.ts        # TTL, rate limits, page size, PHOTO_MAX_*
+│   ├── deepseek.ts  excel.ts  analytics-pdf.ts  s3.ts  mfa.ts  csrf.ts  audit.ts
+│   ├── mail.ts  logger.ts  metrics.ts  sentry.ts  openapi.ts  migrate.ts  static.ts  vite.ts
+│   └── __mocks__/       # deepseek mock для тестов
+├── shared/
+│   ├── schema/          # tables.ts, types.ts, validators.ts, index.ts (Drizzle + Zod)
+│   ├── dates.ts         # mskToday, mskNowTime — единственный источник MSK-логики
+│   └── analytics.ts
+├── migrations/          # 0000_baseline … 0009_client_error_log + meta/
+├── test/                # 3 integration + 22 unit + helpers/db.ts
+├── docs/adr/            # ADR-001…004 + template
+├── bot/                 # Python aiogram — LEGACY, не в docker-compose
+└── script/              # build.ts, cold-start-check.ts
 ```
 
----
+### Ключевые архитектурные правила
 
-## Docker / данные
-
-- **Прод:** `/home/razbudimir/food_app` (не `/srv/foodbot` — в compose по умолчанию bind `device: /srv/foodbot/data`; на сервере должен совпадать с реальным путём к `data/`)
-- SQLite: `data.db` внутри mount `/app/data` в контейнере
-- Бэкапы: `scripts/backup.sh` — `DATA_DIR` по умолчанию `/srv/foodbot/data`; на проде задавать: `DATA_DIR=/home/razbudimir/food_app/data bash scripts/backup.sh`
-- Перед продакшеном: `docker compose down` **без** `-v` не удаляет bind mount
-
-### Прод-деплой (2026-06-26) — проверено
-
-- `docker compose ps`: `food_caddy` + `food_diary_api` (healthy)
-- `curl -I https://fooddiary.razbudimir.com/api/now` → **HTTP/2 200**, HSTS present
-- **Phase 6 закрыта** на проде
+1. **Схема БД создаётся только миграциями** (`migrations/` + `runMigrations`). Никакого `CREATE TABLE`/`ALTER TABLE` в `storage.ts`. Guarded DDL в `migrate.ts` остаётся аварийным fallback — не дублировать в нём схему.
+2. **Ошибки в роутах — через `throw ApiError.*()`**, а не `res.status().json()`. Error middleware в `routes/index.ts` маппит их в JSON и пишет 4xx/5xx (кроме 401/403) в `client_errors`.
+3. **SQL живёт в `server/repositories/`.** `storage.ts` — фасад; новый прямой SQL в него не добавлять (исключение — аналитические запросы, которые там уже есть).
+4. **Магические числа — в `server/config.ts`**, не по месту использования.
+5. **Даты MSK — только через `shared/dates.ts`.**
+6. **`createApp()` не открывает SQLite** — это позволяет тестировать boot (`test/unit/app-boot.test.ts`).
+7. Soft-delete приёмов пищи: у `meals` есть `deleted_at`; все выборки и аналитика обязаны его учитывать.
 
 ---
 
-## История работы (Cursor + Perplexity)
+## Состояние на 2026-08-07 (проверено запуском)
 
-### Perplexity MAX (исходный MVP)
-- Собран full-stack из шаблона rest-express / Replit
-- Excel под формат врача, веб-форма, позже auth + DeepSeek
-- Changelog в README: v1.0 → v1.2 (удаление TG из compose, JWT, secrets)
+| Проверка            | Результат                              |
+| ------------------- | -------------------------------------- |
+| `npm run typecheck` | ✅ 0 ошибок                            |
+| `npm run test`      | ✅ 303 теста в 25 файлах               |
+| `npm run lint`      | ✅ 0 ошибок, 3 warning (unused vars)   |
+| Git                 | ✅ `main` == `origin/main` (`ac7aa27`) |
 
-### Cursor (сессии 2026-06-26)
-1. Клонирование в `APPLICATIONS/PROJECT24_FOODDIARY2` (не в корень CURSOR)
-2. Code review качества: оценка 6.5/10, список уязвимостей и legacy
-3. Несколько `git pull` — в основном docs (`ROADMAP.md`, Phase 10 sessions)
-4. Последний известный коммит: `cbd0100` — ROADMAP Phase 10 checklist
-
-### Git (важные коммиты)
-- `66baee9` — date-picker + DeepSeek КБЖУ
-- `5116974` — ширина колонки H в Excel (28→34)
-- `9cb98b8` — ROADMAP v2.0.0
-- `8c73960`, `cbd0100` — ROADMAP v2.1.0, Фаза 10 (сессии)
+Порог coverage в `vitest.config.ts` — **53%** (в ROADMAP исторически фигурирует 55%, был снижен в ходе Фазы 29).
 
 ---
 
-## Порядок реализации (из ROADMAP + уточнения)
+## Открытые задачи
 
-**Официальный порядок в ROADMAP.md:**
-```
-6 → 3 → 10 → 2 → 1 → 4 → 9 → 7 → 5 → 0 → 8
-```
+**Высокий приоритет:**
 
-| Шаг | Фаза | Зачем сейчас |
-|-----|------|--------------|
-| 1 | **6** HTTPS + Caddy + ufw | ✅ в репо — деплой на VPS |
-| 2 | **3** Volume + backup + WAL | ✅ в репо — `backup.sh` + cron на сервере |
-| 3 | **10** Access/refresh + idle timeout | После HTTPS (`secure` cookie); медицинские данные |
-| 4 | **2** Security (Helmet, rate-limit, IDOR fix) | Закрыть дыры из code review |
-| 5 | **1** Тесты + CI | Страховка перед админкой |
-| 6 | **4** Админ-панель | Операционка |
-| 7 | **9** Алертинг DeepSeek | Зависит от админки |
-| 8 | **7** Cloudflare WAF | После HTTPS |
-| 9 | **5** Сброс пароля email | Когда появятся внешние пользователи |
-| 10 | **0** TG stubs (grammy) | Низкий приоритет |
-| 11 | **8** Масштабирование | Только при реальной нагрузке |
+| ID          | Проблема                                                                                 |
+| ----------- | ---------------------------------------------------------------------------------------- |
+| **PERF-01** | Расчёт КБЖУ 5–15 с — `deepseek-v4-flash` генерирует thinking-блок. UX-блокер             |
+| **BUG-10**  | Не грузятся фото с мобильного телефона (вероятно HEIC/HEIF или MIME). Причина не найдена |
 
-**Быстрый hotfix до Фазы 2:** IDOR в `days/:id/summary` + Zod на PATCH meals — можно сделать сразу после Фазы 6.
+**Низкий приоритет:** BUG-08 (ClamAV: Cisco/Talos CDN блокирует IP VK Cloud, freshclam не обновляет базы; clamd работает на старых базах, API не затронут), хвост Фазы 29 (`bot/utils/dates.py`), мёртвый Python-бот `bot/`, неиспользуемые npm-зависимости из шаблона Replit.
+
+**Не начатые фазы:** 19 (AI-советник), 22 (FatSecret), 25 (GigaChat), 32 (лендинг/digest), 33 (DR, k6, Postgres), 36 (Health-платформы), 7 (WAF), 12/13 (Android + RuStore), 0 (TG-бот), 8 (масштабирование).
+
+**Требует проверки:** какая версия развёрнута на проде. Последний задокументированный деплой — preview-ветка `refactor/v2.27.0`; мерж в `main` был позже (2026-08-05), обновление сервера не подтверждено.
 
 ---
 
-## Рекомендации по выбору модели (вместо Auto)
+## Docker / данные / деплой
 
-> **Auto** в Cursor — роутер, удобен для мелочей, но для roadmap-фаз лучше **явно выбирать модель**.
+- Два compose-файла: `docker-compose.yml` (Caddy + api, HTTPS на том же хосте) и `docker-compose.prod.yml` (внешний nginx + ClamAV). На проде используется **prod**-вариант.
+- SQLite `data.db` в bind mount `/srv/foodbot/data` → `/app/data` в контейнере.
+- Бэкапы: `scripts/backup.sh` (hot backup), `install-backup-cron.sh` (03:00 MSK), хранится 30 копий.
+- **Никогда** не запускать `docker compose down -v`.
+- Перед деплоем: `sudo bash preflight-check.sh`. Проверка холодного старта локально: `npx tsx script/cold-start-check.ts`.
+- Подробности и порядок обновления — в `DEPLOY.md`.
 
-| Тип задачи | Модель в Cursor | Почему |
-|------------|-----------------|--------|
-| Инфра: Caddy, docker-compose, bash, backup | **Composer** или **GPT-5.3 Codex** | Быстро, хорошо для конфигов и скриптов |
-| Security: IDOR, auth, refresh tokens, Helmet | **GPT-5.3 Codex** или **GPT-5.5 Medium** | Меньше ошибок в тонкой логике |
-| Фаза 10 (сессии) — полная реализация | **GPT-5.3 Codex** | Чеклист из ROADMAP, много связанных файлов |
-| Тесты Vitest + supertest + Playwright + CI | **GPT-5.5 Medium** | Многофайловая настройка |
-| Админ-панель + дашборды (Фазы 4, 9) | **GPT-5.5 Medium** | UI + API + схема БД |
-| Рефакторинг / чистка зависимостей | **Composer** | Объёмный, но не критичный по безопасности |
-| Code review / security audit | **Bugbot** или **Security Review** (subagent) | Специализированный разбор |
-| Документация, ROADMAP, Context | **Composer** или **Perplexity** | Perplexity — для исследований и планов |
-| Мелкие правки (1 файл, typo, width колонки) | **Composer** / **Gemini Flash** | Дёшево и быстро |
+### Грабли деплоя (реальные инциденты)
 
-**Perplexity MAX** — оставить для: архитектурных решений, сравнения сервисов (Cloudflare vs VK WAF), черновиков ROADMAP. **Код в репозиторий** — через **Cursor Agent** с явной моделью.
-
-**Не использовать быстрые модели для:** auth, refresh tokens, шифрование, IDOR-fix, CSP.
+- **BUG-03:** рассинхрон `__drizzle_migrations` — миграции применялись guarded DDL без записи хэша, при следующем деплое drizzle пытался применить их повторно. Исправлено вручную вставкой хэшей.
+- **BUG-06:** `idempotency_keys` на проде не имела колонок `response_status`/`response_body` — миграция считалась применённой по хэшу. Исправлено вручную `ALTER TABLE`.
+- Если раньше собирали под root — перед `git checkout` нужен `sudo chown -R "$USER:$USER" /srv/foodbot`.
 
 ---
 
 ## Правила для агентов
 
-1. Проект лежит в `APPLICATIONS/PROJECT24_FOODDIARY2`, не в корне CURSOR.
-2. Не коммитить без явной просьбы пользователя.
+1. Проект лежит в `APPLICATIONS/PROJECT24_FOODDIARY2`, **не** в корне CURSOR.
+2. **Не коммитить без явной просьбы пользователя.**
 3. Не читать `.env`.
 4. Минимальный diff — не рефакторить несвязанное.
-5. Согласовывать изменения с `ROADMAP.md` и обновлять `Context.md`.
-6. Windows: `npm run dev` может требовать `cross-env` для `NODE_ENV`.
+5. Согласовывать изменения с `ROADMAP.md`; при закрытии задачи править статус **в двух местах**: в разделе фазы и в таблице приоритетов внизу.
+6. Обновлять «Журнал изменений» в этом файле после значимых изменений.
+7. Перед сдачей работы прогонять `npm run typecheck && npm run test && npm run lint`.
+8. Windows: `npm run dev` использует `cross-env` для `NODE_ENV`.
+9. Схему БД менять только через новую миграцию в `migrations/`, а не правкой существующих.
+
+---
+
+## Рекомендации по выбору модели
+
+| Тип задачи                                      | Модель                              |
+| ----------------------------------------------- | ----------------------------------- |
+| Инфра: Caddy, docker-compose, bash, backup      | Composer / GPT-5.3 Codex            |
+| Security: auth, refresh tokens, CSRF, MFA, IDOR | GPT-5.3 Codex / Opus                |
+| Многофайловые фазы, тесты, админка              | Opus / GPT-5.5 Medium               |
+| Рефакторинг, чистка зависимостей                | Composer                            |
+| Code review / security audit                    | Bugbot / Security Review (subagent) |
+| Документация, ROADMAP, Context                  | Composer / Perplexity               |
+| Мелкие правки (1 файл, typo)                    | Composer / Gemini Flash             |
+
+**Не использовать быстрые модели для:** auth, refresh tokens, шифрование, CSRF/MFA, миграции БД.
+
+---
+
+## История работы
+
+- **Perplexity MAX** — исходный MVP из шаблона rest-express/Replit: веб-форма, Excel под формат врача, позже auth + DeepSeek.
+- **Cursor Agent (июнь 2026)** — Фазы 6, 3, 10, 2, 1, 4, 9, 11, 5; UX-1…UX-5; code review (оценка 6.5/10).
+- **Cursor Agent (июль 2026)** — мобильная оптимизация (14), кабинет врача (15), 152-ФЗ (16), анкета (17), профиль питания (20), каталог (UX-7), S3-фото (23), аудит-лог (24), безопасность второго уровня (28: CSRF, MFA, EXIF, ClamAV, scrypt), наблюдаемость (26/27), расширенные отчёты (21), PDF-аналитика (UX-22/22b), AI по фото (UX-18) и по каталогу (UX-21), волны тестирования (30/35).
+- **Cursor Agent (август 2026)** — Фаза 29: расщепление монолитов, репозитории с реальным SQL, `ApiError`, `createApp()`, удаление bootstrap DDL.
 
 ---
 
 ## Журнал изменений Context.md
 
-| Дата | Кто | Что |
-|------|-----|-----|
-| 2026-06-26 | Прод | Деплой OK: `food_app` на 149.33.12.166, HTTPS HTTP/2 200 + HSTS |
-| 2026-06-27 | Cursor Agent | **Phase 5:** email password reset, SMTP mailer, forgot/reset API, ResetPassword page |
-| 2026-06-27 | Cursor Agent | Revert Phase 7 WAF (отложена) |
-| 2026-06-27 | Cursor Agent | **Phase 11:** analytics summary endpoint, nutrition trends, Recharts dashboard, integration coverage |
-| 2026-06-27 | Cursor Agent | **Phase 9:** DeepSeek daily token limit guard, 429 blocking, admin blocked/allowed status, integration coverage |
-| 2026-06-27 | Cursor Agent | **Phase 4 usage dashboard:** api_usage, DeepSeek token/cost tracking, daily limit status, admin dashboard |
-| 2026-06-27 | Cursor Agent | **Phase 4 reset:** admin user list, one-time temporary password reset, session revoke, integration coverage |
-| 2026-06-27 | Cursor Agent | **Phase 4 sessions:** admin revoke single session / all user sessions, UI actions, integration coverage |
-| 2026-06-27 | Cursor Agent | **Phase 4 foundation:** роли user/admin, requireAdmin, bootstrap admin, read-only active sessions, guarded admin page |
-| 2026-06-27 | Cursor Agent | **UX-1:** редактирование приёма пищи, PATCH save, Query cache update, integration + E2E add→edit→verify |
-| 2026-06-27 | Cursor Agent | **Phase 1:** Vitest/Supertest tests, Playwright E2E smoke, ESLint/Prettier/Husky/lint-staged, CI workflow |
-| 2026-06-26 | Cursor Agent | **Phase 2:** Helmet/CSP/HSTS, CORS whitelist, rate-limit auth/meals, IDOR day summary fix, Zod PATCH meals, API logs без body, Dependabot |
-| 2026-06-26 | Cursor Agent | **Phase 10:** refresh_tokens, access 30m + refresh 7d, `/api/auth/refresh`, access token in-memory, idle timeout 25/30, `.env.example` |
-| 2026-06-26 | Cursor Agent | **Phase 3:** SQLite WAL, backup.sh, install-backup-cron.sh, sqlite3 in image, preflight §13 |
-| 2026-06-26 | Cursor Agent | Создан Context.md: контекст Perplexity+Cursor, code review, roadmap, модели, порядок фаз |
+| Дата       | Кто          | Что                                                                                                                                                                                                                                                                        |
+| ---------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-07 | Cursor Agent | **Полная перезапись под v2.27.0.** Файл был на v2.1 (данные от 27.06) и описывал архитектуру до Фазы 29. Добавлены: реальная структура репозитория, архитектурные правила, статус проверок, открытые задачи, грабли деплоя. Синхронизирована таблица приоритетов в ROADMAP |
+| 2026-08-05 | Cursor Agent | Phase 29 v2.27.0 влита в main: User/Doctor repos, ApiError везде, `createApp()`, migrations-only DDL                                                                                                                                                                       |
+| 2026-08-04 | Cursor Agent | Phase 29 v2.26.0: `db.ts`, Meal/Day/Session/Catalog/Photo/Audit repos, split Admin/Analytics/MealFields                                                                                                                                                                    |
+| 2026-07-27 | Cursor Agent | v2.25.0: фикс DeepSeek, проверка API в админке, серверный лог ошибок, мобильный header                                                                                                                                                                                     |
+| 2026-07-25 | Cursor Agent | v2.24.x: `deepseek-v4-flash`, клиентский лог ошибок, S3-статистика, BUG-09 (КБЖУ из каталога)                                                                                                                                                                              |
+| 2026-07-06 | Cursor Agent | v2.23.0: UX-18/21 (AI по фото и каталогу), UX-22b (PDF с графиками), Node 22, ADR/OpenAPI                                                                                                                                                                                  |
+| 2026-07-05 | Cursor Agent | v2.16.0–v2.22.1: MFA, ClamAV, scrypt, каталог, UX-14/15/16/17/19/20, Фаза 21, PDF, BUG-01/02                                                                                                                                                                               |
+| 2026-07-03 | Cursor Agent | v2.12.0–v2.15.0: волны рефакторинга и тестирования, soft-delete + undo                                                                                                                                                                                                     |
+| 2026-06-28 | Cursor Agent | v2.5.0–v2.7.0: Фаза 14 (мобильная оптимизация), комплит админ-панели                                                                                                                                                                                                       |
+| 2026-06-27 | Cursor Agent | Фазы 1, 4, 5, 9, 11; UX-1…UX-5                                                                                                                                                                                                                                             |
+| 2026-06-26 | Cursor Agent | Создан Context.md; Фазы 2, 3, 10; деплой на прод (HTTPS HTTP/2 200 + HSTS)                                                                                                                                                                                                 |
 
 ---
 
-*Версия Context.md: 2.1 · Синхронизировать с ROADMAP.md v2.3.0*
+_Версия Context.md: 3.0 · Соответствует приложению v2.27.0_
