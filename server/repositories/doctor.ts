@@ -49,11 +49,23 @@ export class DoctorRepository {
       .get();
   }
 
+  isDoctorAssignedToPatient(doctorId: number, patientId: number): boolean {
+    const row = db
+      .select({ id: doctorPatients.id })
+      .from(doctorPatients)
+      .where(and(eq(doctorPatients.doctorId, doctorId), eq(doctorPatients.patientId, patientId)))
+      .get();
+    return Boolean(row);
+  }
+
   getDoctorPatients(doctorId: number): Array<{ user: User; assignedAt: string }> {
+    // Never SELECT password_hash / mfa_secret — API must not leak credentials.
     const rows = sqlite
       .prepare(
         `
-      SELECT u.*, dp.assigned_at
+      SELECT u.id, u.username, u.email, u.display_name, u.role,
+             u.pd_consent_at, u.created_at, u.last_login_at, u.mfa_enabled,
+             dp.assigned_at
       FROM doctor_patients dp
       JOIN users u ON u.id = dp.patient_id
       WHERE dp.doctor_id = ?
@@ -66,14 +78,14 @@ export class DoctorRepository {
         id: r.id as number,
         username: r.username as string,
         email: r.email as string,
-        passwordHash: r.password_hash as string,
+        passwordHash: "",
         displayName: (r.display_name as string | null) ?? null,
         role: r.role as User["role"],
         pdConsentAt: (r.pd_consent_at as string | null) ?? null,
         createdAt: r.created_at as string,
         lastLoginAt: (r.last_login_at as string | null) ?? null,
         mfaEnabled: Boolean(r.mfa_enabled),
-        mfaSecret: (r.mfa_secret as string | null) ?? null,
+        mfaSecret: null,
       },
       assignedAt: r.assigned_at as string,
     }));
@@ -164,6 +176,10 @@ export class DoctorRepository {
       .where(eq(doctorPlans.patientId, patientId))
       .all()
       .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }
+
+  getDoctorPlan(planId: number): DoctorPlan | undefined {
+    return db.select().from(doctorPlans).where(eq(doctorPlans.id, planId)).get();
   }
 
   deleteDoctorPlan(planId: number): void {

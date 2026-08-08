@@ -107,6 +107,38 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d api
 
 ## 11. Обновление
 
+### Обновление на main (v2.28.0+)
+
+Прод использует внешний nginx + `docker-compose.prod.yml`:
+
+```bash
+cd /srv/foodbot
+
+# Если раньше правили/собирали под root — сначала починить владельца
+sudo chown -R "$USER:$USER" /srv/foodbot
+
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+
+# бэкап БД перед обновлением
+mkdir -p /srv/foodbot/data/backups
+sudo cp /srv/foodbot/data/data.db "/srv/foodbot/data/backups/pre-v2.28.0-$(date +%Y%m%d_%H%M%S).db"
+
+# ClamAV убран в v2.27.1 — если контейнер ещё крутится, остановить
+sudo docker compose -f docker-compose.prod.yml stop clamav 2>/dev/null || true
+sudo docker compose -f docker-compose.prod.yml rm -f clamav 2>/dev/null || true
+
+sudo docker compose -f docker-compose.prod.yml up -d --build
+sudo docker compose -f docker-compose.prod.yml ps
+curl -sS https://fooddiary.razbudimir.com/api/health | jq
+curl -sS https://fooddiary.razbudimir.com/api/now
+# логи при проблемах
+sudo docker compose -f docker-compose.prod.yml logs --tail=80 api
+```
+
+Smoke после деплоя: логин, дневник, админка, кабинет врача (assignment-only доступ), экспорт данных без hash.
+
 ### Основной прод (Caddy на том же хосте)
 
 ```bash

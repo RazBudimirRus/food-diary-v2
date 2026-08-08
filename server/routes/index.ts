@@ -8,6 +8,7 @@ import { isS3Configured, pingS3 } from "../s3";
 import { isDeepSeekAvailable } from "../deepseek";
 import { ApiError } from "../errors";
 import { HEALTH_S3_CACHE_MS } from "../config";
+import { errorPayload } from "./helpers";
 import { registerAuthRoutes } from "./auth";
 import { registerMealsRoutes } from "./meals";
 import { registerReportsRoutes } from "./reports";
@@ -69,11 +70,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       }
     }
     if (!res.headersSent) {
-      if (err instanceof ApiError) {
-        res.status(status).json(err.toJSON());
-      } else {
-        res.status(status).json({ error: message });
-      }
+      res.status(status).json(errorPayload(err, status));
     }
   });
 

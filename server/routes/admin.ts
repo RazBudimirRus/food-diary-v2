@@ -312,7 +312,7 @@ export function registerAdminRoutes(app: Express) {
       const updated = storage.setUserRole(userId, role as "user" | "doctor" | "admin");
       if (!updated) throw ApiError.notFound("Пользователь не найден");
       void auditLog(req, "admin.set_role", userId, { role });
-      res.json({ user: updated });
+      res.json({ user: publicUser(updated) });
     } catch (e) {
       next(e);
     }

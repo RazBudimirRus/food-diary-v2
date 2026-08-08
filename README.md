@@ -3,7 +3,7 @@
 > Персональный веб-сервис дневника питания для врачебного наблюдения.
 
 [![CI](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/RazBudimirRus/food-diary-v2/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-2.25.1-blue)
+![Version](https://img.shields.io/badge/version-2.28.0-blue)
 ![Tests](https://img.shields.io/badge/tests-313%20passed-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

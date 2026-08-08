@@ -24,6 +24,8 @@ e2e-test.db
 e2e-test.db-shm
 e2e-test.db-wal
 e2e-test.db-journal
+e2e-test*.db
+e2e-test*.db-*
 *-test.db
 *-test.db-shm
 *-test.db-wal

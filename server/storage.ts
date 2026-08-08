@@ -183,6 +183,7 @@ export interface IStorage {
   getDoctorByUserId(userId: number): Doctor | undefined;
   upsertDoctor(userId: number, data: { fullName: string; phone?: string; telegramUrl?: string }): Doctor;
   getDoctorPatients(doctorId: number): Array<{ user: User; assignedAt: string }>;
+  isDoctorAssignedToPatient(doctorId: number, patientId: number): boolean;
   assignPatient(doctorId: number, patientId: number): DoctorPatient;
   removePatient(doctorId: number, patientId: number): void;
   getPatientDoctor(patientId: number): Doctor | undefined;
@@ -196,6 +197,7 @@ export interface IStorage {
   // Phase 18 — Doctor Plans
   createDoctorPlan(doctorId: number, data: InsertDoctorPlan): DoctorPlan;
   getDoctorPlansForPatient(patientId: number): DoctorPlan[];
+  getDoctorPlan(planId: number): DoctorPlan | undefined;
   deleteDoctorPlan(planId: number): void;
   getActivePlan(patientId: number, date: string): DoctorPlan | undefined;
 
@@ -664,6 +666,10 @@ class SqliteStorage implements IStorage {
     return doctorRepository.getDoctorPatients(doctorId);
   }
 
+  isDoctorAssignedToPatient(doctorId: number, patientId: number): boolean {
+    return doctorRepository.isDoctorAssignedToPatient(doctorId, patientId);
+  }
+
   assignPatient(doctorId: number, patientId: number): DoctorPatient {
     return doctorRepository.assignPatient(doctorId, patientId);
   }
@@ -708,6 +714,10 @@ class SqliteStorage implements IStorage {
 
   getDoctorPlansForPatient(patientId: number): DoctorPlan[] {
     return doctorRepository.getDoctorPlansForPatient(patientId);
+  }
+
+  getDoctorPlan(planId: number): DoctorPlan | undefined {
+    return doctorRepository.getDoctorPlan(planId);
   }
 
   deleteDoctorPlan(planId: number): void {

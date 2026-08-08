@@ -64,6 +64,33 @@ export class UserRepository {
   }
 
   deleteUser(userId: number): void {
+    // FK-safe order for 152-ФЗ full wipe (S3 objects deleted by caller before this).
+    sqlite
+      .prepare("DELETE FROM doctor_meal_notes WHERE meal_id IN (SELECT id FROM meals WHERE user_id = ?)")
+      .run(userId);
+    sqlite
+      .prepare("DELETE FROM doctor_meal_notes WHERE doctor_id IN (SELECT id FROM doctors WHERE user_id = ?)")
+      .run(userId);
+    sqlite.prepare("DELETE FROM photos WHERE user_id = ?").run(userId);
+    sqlite
+      .prepare(
+        `DELETE FROM food_catalog_entries WHERE catalog_item_id IN
+         (SELECT id FROM food_catalog_items WHERE user_id = ?)`,
+      )
+      .run(userId);
+    sqlite.prepare("DELETE FROM food_catalog_items WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM doctor_plans WHERE patient_id = ?").run(userId);
+    sqlite
+      .prepare("DELETE FROM doctor_plans WHERE doctor_id IN (SELECT id FROM doctors WHERE user_id = ?)")
+      .run(userId);
+    sqlite.prepare("DELETE FROM doctor_patients WHERE patient_id = ?").run(userId);
+    sqlite
+      .prepare("DELETE FROM doctor_patients WHERE doctor_id IN (SELECT id FROM doctors WHERE user_id = ?)")
+      .run(userId);
+    sqlite.prepare("DELETE FROM doctors WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM push_subscriptions WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM idempotency_keys WHERE user_id = ?").run(userId);
+    sqlite.prepare("DELETE FROM client_errors WHERE user_id = ?").run(userId);
     sqlite.prepare("DELETE FROM api_usage WHERE user_id = ?").run(userId);
     sqlite.prepare("DELETE FROM refresh_tokens WHERE user_id = ?").run(userId);
     sqlite.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(userId);

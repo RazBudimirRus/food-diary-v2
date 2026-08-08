@@ -18,7 +18,7 @@
 | Поле                | Значение                                                                                    |
 | ------------------- | ------------------------------------------------------------------------------------------- |
 | Название            | Food Diary V2                                                                               |
-| Текущая версия      | **2.27.0** (`package.json`)                                                                 |
+| Текущая версия      | **2.28.0** (`package.json`)                                                                 |
 | Назначение          | Дневник питания + Excel/PDF-отчёт для врача/нутрициолога                                    |
 | GitHub              | https://github.com/RazBudimirRus/food-diary-v2                                              |
 | Локальная папка     | `APPLICATIONS/PROJECT24_FOODDIARY2` внутри workspace CURSOR                                 |
@@ -121,6 +121,15 @@ PROJECT24_FOODDIARY2/
 
 **Низкий приоритет:** хвост Фазы 29 (`bot/utils/dates.py`), мёртвый Python-бот `bot/`, неиспользуемые npm-зависимости из шаблона Replit.
 
+**Закрыто 2026-08-08 (v2.28.0)** — security hotfix по код-ревью:
+
+- Убраны утечки `passwordHash` / `mfaSecret` из doctor patients, admin `set-role` и `/api/user/export`.
+- IDOR: `assertDoctorAssigned` на notes / plans / notify / photos; ownership на meal notes GET и photo `mealId`.
+- Полный cascade `deleteUser` (photos/S3, catalog, doctor\_\*, push, idempotency, client_errors).
+- Prod error sanitizer (`errorPayload`) в routes middleware.
+- `e2e-test3.db*` убраны из git + расширен `.gitignore`.
+- Тесты: `test/unit/security-hotfix.test.ts` (20 кейсов).
+
 **Закрыто 2026-08-07 (v2.27.1)** по итогам диагностики прода:
 
 - **BUG-08** — ClamAV удалён из `docker-compose.prod.yml`. На проде контейнер висел `unhealthy` 8+ дней, сокета не было вовсе, скан не выполнялся (fail-open), а `/api/health` писал ~2900 ошибок в сутки. Код `scanForViruses()` в `s3.ts` **оставлен**: он сам включается при заданном `CLAMAV_SOCKET`, поэтому возврат — правка одного compose-файла.
@@ -130,7 +139,7 @@ PROJECT24_FOODDIARY2/
 
 **Не начатые фазы:** 19 (AI-советник), 22 (FatSecret), 25 (GigaChat), 32 (лендинг/digest), 33 (DR, k6, Postgres), 36 (Health-платформы), 7 (WAF), 12/13 (Android + RuStore), 0 (TG-бот), 8 (масштабирование).
 
-**Прод (проверено 2026-08-07):** развёрнута **v2.27.0**. После v2.27.1 прод отстаёт от `main` — нужен деплой (см. ниже про удаление контейнера ClamAV). `/api/health` → `status: ok`, все проверки зелёные (`db: sqlite ok`, `s3: rw ok ~120ms`, `deepseek: configured`). Фронт отдаётся через `nginx/1.24.0` (Ubuntu), то есть используется `docker-compose.prod.yml`. HSTS и CSP на месте. Uptime на момент проверки ~50 ч → контейнер поднят ~2026-08-05 11:08 MSK, то есть сразу после мержа v2.27.0.
+**Прод (проверено 2026-08-07):** на момент диагностики была **v2.27.0**. Релиз **v2.28.0** (security hotfix) нужно задеплоить через `docker-compose.prod.yml` (см. DEPLOY.md §11).
 
 > Версию прода снаружи можно узнать так: взять имя JS-бандла из `curl -sS https://fooddiary.razbudimir.com/`, затем найти в нём строку версии — она вшивается на этапе сборки через `__APP_VERSION__` (см. `vite.config.ts`).
 
@@ -197,6 +206,7 @@ PROJECT24_FOODDIARY2/
 
 | Дата       | Кто          | Что                                                                                                                                                                                                                                                                        |
 | ---------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-08 | Cursor Agent | **v2.28.0 security hotfix:** strip secrets, doctor assignment IDOR, delete cascade+S3, prod error sanitizer, untrack e2e DB; тесты security-hotfix                                                                                                                         |
 | 2026-08-07 | Cursor Agent | **Полная перезапись под v2.27.0.** Файл был на v2.1 (данные от 27.06) и описывал архитектуру до Фазы 29. Добавлены: реальная структура репозитория, архитектурные правила, статус проверок, открытые задачи, грабли деплоя. Синхронизирована таблица приоритетов в ROADMAP |
 | 2026-08-05 | Cursor Agent | Phase 29 v2.27.0 влита в main: User/Doctor repos, ApiError везде, `createApp()`, migrations-only DDL                                                                                                                                                                       |
 | 2026-08-04 | Cursor Agent | Phase 29 v2.26.0: `db.ts`, Meal/Day/Session/Catalog/Photo/Audit repos, split Admin/Analytics/MealFields                                                                                                                                                                    |
@@ -211,4 +221,4 @@ PROJECT24_FOODDIARY2/
 
 ---
 
-_Версия Context.md: 3.0 · Соответствует приложению v2.27.0_
+_Версия Context.md: 3.1 · Соответствует приложению v2.28.0_

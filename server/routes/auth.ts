@@ -25,6 +25,7 @@ import { setCsrfToken } from "../csrf";
 import { loginLimiter, forgotPasswordLimiter } from "./limiters";
 import {
   publicUser,
+  redactUserForExport,
   paramValue,
   issueSession,
   passwordResetExpiresAt,
@@ -32,6 +33,7 @@ import {
   refreshCookieName,
 } from "./helpers";
 import { ApiError } from "../errors";
+import { deleteFromS3 } from "../s3";
 
 export function registerAuthRoutes(app: Express) {
   /** POST /api/auth/register */
@@ -254,9 +256,18 @@ export function registerAuthRoutes(app: Express) {
   // ── Phase 16: 152-ФЗ ────────────────────────────────────────────────────────
 
   /** DELETE /api/user/me — full account deletion (152-ФЗ) */
-  app.delete("/api/user/me", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
+  app.delete("/api/user/me", requireAuth, async (req: AuthRequest, res, next: NextFunction) => {
     try {
-      storage.deleteUser(req.user!.id);
+      const userId = req.user!.id;
+      const userPhotos = storage.getPhotosByUser(userId);
+      for (const photo of userPhotos) {
+        try {
+          await deleteFromS3(photo.s3Key);
+        } catch {
+          // Best-effort: continue wiping DB even if an S3 object is already gone.
+        }
+      }
+      storage.deleteUser(userId);
       res.clearCookie(refreshCookieName, clearRefreshCookieOptions());
       res.clearCookie("token", clearLegacyAuthCookieOptions());
       res.json({ ok: true, message: "Аккаунт и все данные удалены" });
@@ -269,9 +280,13 @@ export function registerAuthRoutes(app: Express) {
   app.get("/api/user/export", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const data = storage.getUserAllData(req.user!.id);
+      const safe = {
+        ...data,
+        user: data.user ? redactUserForExport(data.user) : undefined,
+      };
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent("my_data.json")}`);
-      res.send(JSON.stringify(data, null, 2));
+      res.send(JSON.stringify(safe, null, 2));
     } catch (e) {
       next(e);
     }

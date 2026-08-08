@@ -6,7 +6,7 @@ import { requireAuth, type AuthRequest } from "../auth";
 import { auditLog } from "../audit";
 import { requireDoctor } from "./middleware";
 import { AUDIT_LOG_PAGE_SIZE } from "../config";
-import { paramValue } from "./helpers";
+import { assertDoctorAssigned, paramValue, publicUser } from "./helpers";
 import { ApiError } from "../errors";
 
 // ── VAPID init (Web Push) ────────────────────────────────────────────────────
@@ -46,7 +46,10 @@ export function registerDoctorRoutes(app: Express) {
     try {
       const doctor = storage.getDoctorByUserId(req.user!.id);
       if (!doctor) return res.json({ patients: [] });
-      const patients = storage.getDoctorPatients(doctor.id);
+      const patients = storage.getDoctorPatients(doctor.id).map((p) => ({
+        ...p,
+        user: publicUser(p.user),
+      }));
       res.json({ patients });
     } catch (e) {
       next(e);
@@ -117,10 +120,7 @@ export function registerDoctorRoutes(app: Express) {
       const doctor = storage.getDoctorByUserId(req.user!.id);
       if (!doctor) throw ApiError.forbidden("Врач не найден");
 
-      // Verify patient is assigned
-      const patients = storage.getDoctorPatients(doctor.id);
-      const assigned = patients.some((p) => p.user.id === patientId);
-      if (!assigned) throw ApiError.forbidden("Пациент не привязан к вам");
+      assertDoctorAssigned(doctor.id, patientId);
 
       const date = (req.query.date as string) || getMskDate();
       const day = storage.getDayByDate(patientId, date);
@@ -140,10 +140,14 @@ export function registerDoctorRoutes(app: Express) {
     requireDoctor,
     async (req: AuthRequest, res, next: NextFunction) => {
       try {
+        const patientId = parseInt(paramValue(req.params.id), 10);
+        const doctor = storage.getDoctorByUserId(req.user!.id);
+        if (!doctor) throw ApiError.badRequest("Профиль врача не найден");
+        assertDoctorAssigned(doctor.id, patientId);
+
         if (!process.env.VAPID_PUBLIC_KEY) {
           throw new ApiError(503, "Web Push не настроен", "service_unavailable");
         }
-        const patientId = parseInt(paramValue(req.params.id), 10);
         const { title, body } = req.body;
         if (!title) throw ApiError.badRequest("title обязателен");
 
@@ -179,6 +183,9 @@ export function registerDoctorRoutes(app: Express) {
         const mealId = parseInt(paramValue(req.params.mealId), 10);
         const doctor = storage.getDoctorByUserId(req.user!.id);
         if (!doctor) throw ApiError.badRequest("Профиль врача не найден");
+        const meal = storage.getMeal(mealId);
+        if (!meal) throw ApiError.notFound("Приём пищи не найден");
+        assertDoctorAssigned(doctor.id, meal.userId);
         const { note, suggestedKcal } = req.body;
         const result = storage.addDoctorMealNote({ doctorId: doctor.id, mealId, note, suggestedKcal });
         void auditLog(req, "doctor.add_meal_note", mealId, { note, suggestedKcal });
@@ -203,6 +210,7 @@ export function registerDoctorRoutes(app: Express) {
         const patientId = parseInt(paramValue(req.params.id), 10);
         const doctor = storage.getDoctorByUserId(req.user!.id);
         if (!doctor) throw ApiError.badRequest("Профиль врача не найден");
+        assertDoctorAssigned(doctor.id, patientId);
         const parsed = insertDoctorPlanSchema.safeParse({ ...req.body, patientId });
         if (!parsed.success) throw ApiError.badRequest("Validation failed", parsed.error.flatten());
         const plan = storage.createDoctorPlan(doctor.id, parsed.data);
@@ -218,6 +226,9 @@ export function registerDoctorRoutes(app: Express) {
   app.get("/api/doctor/patients/:id/plans", requireAuth, requireDoctor, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const patientId = parseInt(paramValue(req.params.id), 10);
+      const doctor = storage.getDoctorByUserId(req.user!.id);
+      if (!doctor) throw ApiError.badRequest("Профиль врача не найден");
+      assertDoctorAssigned(doctor.id, patientId);
       const plans = storage.getDoctorPlansForPatient(patientId);
       res.json({ plans });
     } catch (e) {
@@ -229,6 +240,11 @@ export function registerDoctorRoutes(app: Express) {
   app.delete("/api/doctor/plans/:id", requireAuth, requireDoctor, (req: AuthRequest, res, next: NextFunction) => {
     try {
       const planId = parseInt(paramValue(req.params.id), 10);
+      const doctor = storage.getDoctorByUserId(req.user!.id);
+      if (!doctor) throw ApiError.badRequest("Профиль врача не найден");
+      const plan = storage.getDoctorPlan(planId);
+      if (!plan) throw ApiError.notFound("План не найден");
+      if (plan.doctorId !== doctor.id) throw ApiError.forbidden("Нет доступа к этому плану");
       storage.deleteDoctorPlan(planId);
       void auditLog(req, "doctor.delete_plan", planId);
       res.json({ ok: true });

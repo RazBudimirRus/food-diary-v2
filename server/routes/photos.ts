@@ -4,7 +4,7 @@ import { storage } from "../storage";
 import { requireAuth, type AuthRequest } from "../auth";
 import { uploadPhoto, downloadPhoto, deleteFromS3, buildPhotoKey, isS3Configured, PHOTO_MAX_PER_USER } from "../s3";
 import { upload } from "./upload";
-import { paramValue } from "./helpers";
+import { assertDoctorAssigned, paramValue } from "./helpers";
 import { ApiError } from "../errors";
 
 export function registerPhotosRoutes(app: Express) {
@@ -25,6 +25,12 @@ export function registerPhotosRoutes(app: Express) {
       try {
         if (!isS3Configured()) throw new ApiError(503, "S3 хранилище не настроено", "service_unavailable");
         if (!req.file) throw ApiError.badRequest("Файл не передан");
+
+        if (mealId != null && !Number.isNaN(mealId)) {
+          const meal = storage.getMeal(mealId);
+          if (!meal) throw ApiError.notFound("Приём пищи не найден");
+          if (meal.userId !== req.user!.id) throw ApiError.forbidden("Нет доступа");
+        }
 
         // Проверяем лимит фотографий пользователя
         const count = storage.countUserPhotos(req.user!.id);
@@ -81,9 +87,9 @@ export function registerPhotosRoutes(app: Express) {
       const photo = storage.getPhoto(paramValue(req.params.photo_id));
       if (!photo) throw ApiError.notFound("Фото не найдено");
       if (photo.userId !== req.user!.id) {
-        // Врач тоже может просматривать
         const doctor = storage.getDoctorByUserId(req.user!.id);
         if (!doctor) throw ApiError.forbidden("Нет доступа");
+        assertDoctorAssigned(doctor.id, photo.userId);
       }
       const buf = await downloadPhoto(photo.s3Key);
       res.setHeader("Content-Type", "image/webp");

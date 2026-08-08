@@ -12,6 +12,8 @@ import {
 } from "../auth";
 import { storage } from "../storage";
 import { PASSWORD_RESET_TTL_SECONDS } from "../config";
+import { ApiError } from "../errors";
+import type { Meal, User } from "@shared/schema";
 
 export const refreshCookieName = getRefreshCookieName();
 
@@ -23,6 +25,8 @@ export function publicUser(user: {
   role: string;
   createdAt?: string;
   lastLoginAt?: string | null;
+  pdConsentAt?: string | null;
+  mfaEnabled?: boolean;
 }) {
   return {
     id: user.id,
@@ -33,6 +37,47 @@ export function publicUser(user: {
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };
+}
+
+/** Export DTO without password/MFA secrets (152-ФЗ). */
+export function redactUserForExport(user: User) {
+  return {
+    ...publicUser(user),
+    pdConsentAt: user.pdConsentAt ?? null,
+    mfaEnabled: Boolean(user.mfaEnabled),
+  };
+}
+
+/** Throws 403 unless doctorId is assigned to patientId. */
+export function assertDoctorAssigned(doctorId: number, patientId: number): void {
+  if (!storage.isDoctorAssignedToPatient(doctorId, patientId)) {
+    throw ApiError.forbidden("Пациент не привязан к вам");
+  }
+}
+
+/**
+ * Meal read access: owner, or a doctor assigned to the meal owner.
+ * Returns the doctor profile when access is via doctor assignment.
+ */
+export function assertCanAccessMeal(reqUser: User, meal: Meal): void {
+  if (meal.userId === reqUser.id) return;
+  const doctor = storage.getDoctorByUserId(reqUser.id);
+  if (!doctor) throw ApiError.forbidden("Нет доступа");
+  assertDoctorAssigned(doctor.id, meal.userId);
+}
+
+/** Sanitize non-ApiError 5xx bodies in production. */
+export function errorPayload(
+  err: unknown,
+  status: number,
+  nodeEnv = process.env.NODE_ENV,
+): { error: string; code?: string; details?: unknown } {
+  if (err instanceof ApiError) return err.toJSON();
+  const message = err instanceof Error ? err.message : "Internal Server Error";
+  if (nodeEnv === "production" && status >= 500) {
+    return { error: "Internal server error" };
+  }
+  return { error: message };
 }
 
 export function paramValue(value: string | string[] | undefined): string {

@@ -4,7 +4,14 @@ import { addMealSchema, daySummarySchema, analyzeSchema, updateMealSchema, type 
 import { requireAuth, type AuthRequest } from "../auth";
 import { analyzeNutrition, isDeepSeekAvailable } from "../deepseek";
 import { mealCreateLimiter } from "./limiters";
-import { paramValue, isDateString, daysBetween, deepseekDailyLimitStatus } from "./helpers";
+import {
+  paramValue,
+  isDateString,
+  daysBetween,
+  deepseekDailyLimitStatus,
+  assertCanAccessMeal,
+  assertDoctorAssigned,
+} from "./helpers";
 import { mealWaterMl } from "../utils/liquid";
 import { ApiError } from "../errors";
 
@@ -306,24 +313,35 @@ export function registerMealsRoutes(app: Express) {
   });
 
   /** GET /api/meals/:id/notes */
-  app.get("/api/meals/:id/notes", requireAuth, (req: AuthRequest, res) => {
-    const mealId = parseInt(paramValue(req.params.id), 10);
-    const notes = storage.getDoctorMealNotes(mealId);
-    res.json({ notes });
+  app.get("/api/meals/:id/notes", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
+    try {
+      const mealId = parseInt(paramValue(req.params.id), 10);
+      const meal = storage.getMeal(mealId);
+      if (!meal) throw ApiError.notFound("Приём пищи не найден");
+      assertCanAccessMeal(req.user!, meal);
+      const notes = storage.getDoctorMealNotes(mealId);
+      res.json({ notes });
+    } catch (e) {
+      next(e);
+    }
   });
 
   /** GET /api/meals/:id/photos */
-  app.get("/api/meals/:id/photos", requireAuth, (req: AuthRequest, res) => {
-    const mealId = parseInt(paramValue(req.params.id), 10);
-    const meal = storage.getMeal(mealId);
-    if (!meal) throw ApiError.notFound("Приём пищи не найден");
-    // Доступ: пользователь или врач пациента
-    if (meal.userId !== req.user!.id) {
-      const doctor = storage.getDoctorByUserId(req.user!.id);
-      if (!doctor) throw ApiError.forbidden("Нет доступа");
+  app.get("/api/meals/:id/photos", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
+    try {
+      const mealId = parseInt(paramValue(req.params.id), 10);
+      const meal = storage.getMeal(mealId);
+      if (!meal) throw ApiError.notFound("Приём пищи не найден");
+      if (meal.userId !== req.user!.id) {
+        const doctor = storage.getDoctorByUserId(req.user!.id);
+        if (!doctor) throw ApiError.forbidden("Нет доступа");
+        assertDoctorAssigned(doctor.id, meal.userId);
+      }
+      const photos = storage.getPhotosByMeal(mealId);
+      res.json({ photos });
+    } catch (e) {
+      next(e);
     }
-    const photos = storage.getPhotosByMeal(mealId);
-    res.json({ photos });
   });
 
   /** GET /api/user/active-plan */
