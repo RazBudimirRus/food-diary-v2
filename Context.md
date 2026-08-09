@@ -131,7 +131,7 @@ PROJECT24_FOODDIARY2/
 
 **Закрыто 2026-08-09 (v2.28.1):**
 
-- **PERF-01** — thinking mode у `deepseek-v4-flash` включён по умолчанию и был прямой причиной ожидания 5–15 с. Добавлено `thinking: { type: "disabled" }` + `response_format: { type: "json_object" }` в `server/deepseek.ts`. Откат без пересборки: `DEEPSEEK_THINKING=enabled`. Побочный эффект: в thinking-режиме `temperature` игнорировался, теперь `temperature: 0.1` реально работает. Проверка на проде — `reasoning_tokens` в логе `[deepseek] analyze ok` должен быть `0`. **Фактическую задержку ещё нужно снять из лога после деплоя.**
+- **PERF-01** — thinking mode у `deepseek-v4-flash` включён по умолчанию и был прямой причиной ожидания 5–15 с. Добавлено `thinking: { type: "disabled" }` + `response_format: { type: "json_object" }` в `server/deepseek.ts`. Откат без пересборки: `DEEPSEEK_THINKING=enabled`. Побочный эффект: в thinking-режиме `temperature` игнорировался, теперь `temperature: 0.1` реально работает. **Замерено на проде: 1826 мс** против 5–15 с, `reasoning_tokens=0`. Контрольное значение — если `reasoning_tokens` в логе `[deepseek] analyze ok` станет ненулевым, задержка вернулась.
 
 **Закрыто 2026-08-07 (v2.27.1)** по итогам диагностики прода:
 
@@ -142,7 +142,7 @@ PROJECT24_FOODDIARY2/
 
 **Не начатые фазы:** 19 (AI-советник), 22 (FatSecret), 25 (GigaChat), 32 (лендинг/digest), 33 (DR, k6, Postgres), 36 (Health-платформы), 7 (WAF), 12/13 (Android + RuStore), 0 (TG-бот), 8 (масштабирование).
 
-**Прод (проверено 2026-08-09):** развёрнута **v2.28.0** — security hotfix уже задеплоен (контейнер поднят 2026-08-08 ~12:50 MSK, через 12 минут после коммита). `/api/health` → `status: ok`, `s3: rw ok 29ms` — то есть лёгкий кэшируемый `pingS3()` из v2.27.1 работает. После **v2.28.1** прод отстаёт на одну версию, нужен деплой (см. DEPLOY.md §11).
+**Прод (проверено 2026-08-09):** развёрнута **v2.28.1** — синхронно с `main`, деплоить нечего. `/api/health` → `status: ok`, `s3: rw ok 29ms` (лёгкий кэшируемый `pingS3()` из v2.27.1 работает). В `docker ps` только `food_diary_api` — контейнер ClamAV удалён, лог больше не засоряется. Расчёт КБЖУ — 1826 мс.
 
 > Версию прода снаружи можно узнать так: взять имя JS-бандла из `curl -sS https://fooddiary.razbudimir.com/`, затем найти в нём строку версии — она вшивается на этапе сборки через `__APP_VERSION__` (см. `vite.config.ts`).
 
