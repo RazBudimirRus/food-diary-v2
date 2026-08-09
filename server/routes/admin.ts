@@ -268,6 +268,9 @@ export function registerAdminRoutes(app: Express) {
         const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
         const { decryptSecret } = await import("../auth");
         const { storage: st } = await import("../storage");
+        // Mirror the production request options, otherwise this diagnostic reports
+        // behaviour the real КБЖУ path no longer has (PERF-01).
+        const { DEEPSEEK_MODEL, DEEPSEEK_THINKING } = await import("../deepseek");
         const secret = st.getSecret(0, "__deepseek_api_key__");
         if (!secret) throw ApiError.badRequest("DEEPSEEK_API_KEY не настроен");
         let apiKey: string;
@@ -276,11 +279,12 @@ export function registerAdminRoutes(app: Express) {
         } catch {
           throw new ApiError(500, "Ошибка дешифровки ключа", "internal_error");
         }
+        const startedAt = Date.now();
         const r = await fetch(DEEPSEEK_API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            model: "deepseek-v4-flash",
+            model: DEEPSEEK_MODEL,
             messages: [
               { role: "system", content: "You are a nutrition analyst. Respond with ONLY valid JSON." },
               {
@@ -289,12 +293,14 @@ export function registerAdminRoutes(app: Express) {
                   'Estimate: Еда: два чизбургера\nRespond: {"calories": <int>, "protein": <float>, "fat": <float>, "carbs": <float>, "note": "<str>"}',
               },
             ],
+            thinking: { type: DEEPSEEK_THINKING },
+            response_format: { type: "json_object" },
             temperature: 0.1,
             max_tokens: 400,
           }),
         });
         const raw = await r.text();
-        res.json({ httpStatus: r.status, raw });
+        res.json({ httpStatus: r.status, durationMs: Date.now() - startedAt, thinking: DEEPSEEK_THINKING, raw });
       } catch (e) {
         next(e);
       }

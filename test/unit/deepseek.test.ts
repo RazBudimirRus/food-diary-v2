@@ -210,3 +210,74 @@ describe("analyzeNutrition", () => {
     expect(result.note).toBeUndefined();
   });
 });
+
+// ── PERF-01: request options that keep КБЖУ fast ─────────────────────────────
+
+describe("analyzeNutrition — PERF-01 request options", () => {
+  function bodyOfLastCall() {
+    return JSON.parse(mockFetch.mock.calls[0][1].body as string) as {
+      model: string;
+      thinking?: { type: string };
+      response_format?: { type: string };
+      temperature?: number;
+      max_tokens?: number;
+      max_completion_tokens?: number;
+    };
+  }
+
+  beforeEach(() => {
+    mockGetSecret.mockReturnValue(MOCK_SECRET);
+    mockSuccessResponse(JSON.stringify({ calories: 100, protein: 5, fat: 2, carbs: 15 }));
+  });
+
+  it("disables thinking mode — the direct cause of the 5–15s wait", async () => {
+    await analyzeNutrition("Гречка");
+    expect(bodyOfLastCall().thinking).toEqual({ type: "disabled" });
+  });
+
+  it("requests JSON mode so the response needs no salvage parsing", async () => {
+    await analyzeNutrition("Гречка");
+    expect(bodyOfLastCall().response_format).toEqual({ type: "json_object" });
+  });
+
+  it("keeps temperature low — only effective while thinking is disabled", async () => {
+    await analyzeNutrition("Гречка");
+    expect(bodyOfLastCall().temperature).toBe(0.1);
+  });
+
+  it("keeps budgets generous so ignored thinking cannot starve the answer", async () => {
+    await analyzeNutrition("Гречка");
+    const body = bodyOfLastCall();
+    expect(body.max_tokens).toBe(4000);
+    expect(body.max_completion_tokens).toBe(512);
+  });
+
+  it("logs duration and reasoning_tokens for prod verification", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    await analyzeNutrition("Гречка");
+    const logged = infoSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(logged).toContain("thinking=disabled");
+    expect(logged).toContain("reasoning_tokens=0");
+    infoSpy.mockRestore();
+  });
+
+  it("reads reasoning_tokens from completion_tokens_details when present", async () => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ calories: 100 }) } }],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 40,
+          total_tokens: 50,
+          completion_tokens_details: { reasoning_tokens: 128 },
+        },
+      }),
+    });
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    await analyzeNutrition("Гречка");
+    expect(infoSpy.mock.calls.map((c) => String(c[0])).join("\n")).toContain("reasoning_tokens=128");
+    infoSpy.mockRestore();
+  });
+});

@@ -21,6 +21,22 @@ const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 const INPUT_USD_PER_M_TOKENS = Number(process.env.DEEPSEEK_INPUT_USD_PER_M_TOKENS ?? "0.27");
 const OUTPUT_USD_PER_M_TOKENS = Number(process.env.DEEPSEEK_OUTPUT_USD_PER_M_TOKENS ?? "1.10");
 
+export const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+
+/**
+ * PERF-01: thinking mode is ON by default for deepseek-v4-flash, and generating the
+ * reasoning block was the direct cause of the 5–15 s wait on КБЖУ. Estimating calories
+ * does not need a reasoning trace, so we opt out via `thinking: { type: "disabled" }`.
+ *
+ * Set DEEPSEEK_THINKING=enabled to switch it back without a rebuild — a rollback lever
+ * in case answer quality turns out to depend on reasoning.
+ *
+ * Side effect worth knowing: thinking mode silently ignores `temperature` / `top_p`,
+ * so `temperature: 0.1` below only takes effect once thinking is disabled.
+ */
+export const DEEPSEEK_THINKING: "enabled" | "disabled" =
+  process.env.DEEPSEEK_THINKING === "enabled" ? "enabled" : "disabled";
+
 export interface DeepSeekAnalysisResult extends NutritionResult {
   usage?: {
     tokensIn: number;
@@ -102,6 +118,8 @@ Respond with ONLY this JSON (no markdown fences, no extra text before or after):
 
 If exact amounts are unknown, provide a reasonable estimate. Plain water and unsweetened tea/coffee = 0 kcal.`;
 
+  const startedAt = Date.now();
+
   const response = await fetch(DEEPSEEK_API_URL, {
     method: "POST",
     headers: {
@@ -109,12 +127,20 @@ If exact amounts are unknown, provide a reasonable estimate. Plain water and uns
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "deepseek-v4-flash",
+      model: DEEPSEEK_MODEL,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
+      // PERF-01: opt out of the default reasoning block — see DEEPSEEK_THINKING.
+      thinking: { type: DEEPSEEK_THINKING },
+      // Guarantees a parseable object, so the salvage branches below stay unused.
+      response_format: { type: "json_object" },
       temperature: 0.1,
+      // Budgets stay generous on purpose: if `thinking` were ever ignored (proxy,
+      // API change), a tight cap would let reasoning eat the whole budget and
+      // return content: null — the v2.25.1 failure. Latency comes from tokens
+      // actually generated, not from the cap, so a high ceiling costs nothing.
       max_tokens: 4000, // total budget incl. thinking tokens
       max_completion_tokens: 512, // output-only budget (thinking excluded)
     }),
@@ -131,8 +157,20 @@ If exact amounts are unknown, provide a reasonable estimate. Plain water and uns
       prompt_tokens?: number;
       completion_tokens?: number;
       total_tokens?: number;
+      reasoning_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
     };
   };
+
+  // PERF-01 observability: reasoning_tokens must stay 0 while thinking is disabled.
+  // A non-zero value here means the flag stopped taking effect and latency is back.
+  const durationMs = Date.now() - startedAt;
+  const reasoningTokens = Number(
+    data.usage?.completion_tokens_details?.reasoning_tokens ?? data.usage?.reasoning_tokens ?? 0,
+  );
+  console.info(
+    `[deepseek] analyze ok in ${durationMs}ms (thinking=${DEEPSEEK_THINKING}, reasoning_tokens=${reasoningTokens}, out=${data.usage?.completion_tokens ?? 0})`,
+  );
 
   const message = data.choices?.[0]?.message ?? {};
   const msgContent = (message as any).content;
