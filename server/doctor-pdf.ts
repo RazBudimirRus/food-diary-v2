@@ -96,7 +96,7 @@ function getAppVersion(): string {
     const pkgPath = path.join(process.cwd(), "package.json");
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      return pkg.version ?? "2.29.0";
+      return pkg.version ?? "2.29.2";
     }
   } catch {
     /* ignore */
@@ -849,7 +849,18 @@ export async function generateDoctorRangePdf(
   doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
   const done = new Promise<void>((resolve) => doc.on("end", () => resolve()));
 
-  renderRangeReport(doc, daysList, mealsByDay, from, to, options.patientLabel ?? null);
+  const patientLabel = options.patientLabel ?? null;
+  renderRangeReport(doc, daysList, mealsByDay, from, to, patientLabel);
+
+  // Per-day detail pages after the summary. Sort by day.date ascending so the
+  // detail flow matches the summary table order.
+  const daysSorted = [...daysList].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  for (const day of daysSorted) {
+    const meals = mealsByDay.get(day.id) || [];
+    doc.addPage();
+    renderDayPage(doc, day, meals, patientLabel);
+  }
+
   paintFootersOnAllPages(doc, /* legendOnLastOnly */ true);
 
   doc.end();
