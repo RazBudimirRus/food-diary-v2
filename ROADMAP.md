@@ -1,7 +1,7 @@
 # 🗺 Food Diary V2 — RoadMap
 
-**Версия приложения:** 2.27.0  
-**Дата обновления:** 7 августа 2026  
+**Версия приложения:** 2.29.0  
+**Дата обновления:** 15 августа 2026  
 **Проект:** Food Diary V2 — веб-сервис дневника питания для врачебного наблюдения  
 **Стек:** React 18 + Vite · Node.js 22 + Express 5 + TypeScript + SQLite (Drizzle) · Docker Compose · bcrypt + JWT + AES-256-GCM · DeepSeek API  
 **Сервер:** Ubuntu 24.04 VPS · `fooddiary.razbudimir.com` · wildcard `*.razbudimir.com`
@@ -60,6 +60,7 @@
 | v2.27.1 · 2026-08-07 | Гигиена прода по итогам диагностики | ✅ В main | BUG-08: ClamAV удалён (Вариант Б); BUG-11: миграция 0009 внесена в `_journal.json`; `data/` в `.gitignore`; S3-проверка в `/api/health` кэшируется |
 | v2.28.0 · 2026-08-08 | Security hotfix | ✅ В main | IDOR у врача (привязка пациента), утечка `passwordHash`/`mfaSecret` в ответах, каскадное удаление по 152-ФЗ + очистка S3, санитизация 5xx |
 | v2.28.1 · 2026-08-09 | PERF-01: быстрый КБЖУ | ✅ В main | `thinking: {type: disabled}` + JSON-mode + `DEEPSEEK_MODEL`/`DEEPSEEK_THINKING` + лог задержки и `reasoning_tokens` |
+| v2.29.0 · 2026-08-15 | NEW-PDF-1: Doctor PDF | ✅ В main | Компактный A4-PDF-отчёт для врача (день/неделя/месяц/диапазон); 4 новых `/api/report/*/pdf` маршрута; тумблер PDF/Excel в UI с `localStorage`; шрифты Inter, авто-подгонка размеров, футер "Стр. N из M"; +15 integration + 6 unit тестов |
 
 > Прод-сервер может отставать от `main`: после коммитов Phase 10/2/1 нужен отдельный деплой на VPS.
 

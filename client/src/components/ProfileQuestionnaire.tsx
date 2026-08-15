@@ -377,10 +377,16 @@ export function ProfileQuestionnaire({ open, onClose }: ProfileQuestionnaireProp
         </div>
 
         <div className="flex gap-3 mt-2">
-          <Button variant="outline" onClick={handleSkip} disabled={pending || loading} className="flex-1">
+          <Button
+            variant="outline"
+            onClick={handleSkip}
+            disabled={pending || loading}
+            className="flex-1"
+            data-testid="btn-profile-skip"
+          >
             Пропустить
           </Button>
-          <Button onClick={handleSave} disabled={pending || loading} className="flex-1">
+          <Button onClick={handleSave} disabled={pending || loading} className="flex-1" data-testid="btn-profile-save">
             {pending ? "Сохраняю..." : "Сохранить"}
           </Button>
         </div>

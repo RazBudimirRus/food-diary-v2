@@ -8,6 +8,22 @@
  */
 import { expect, test, type Page } from "@playwright/test";
 
+/** Dismiss the profile questionnaire that opens after first registration.
+ *  The questionnaire opens via a useEffect after GET /api/user/profile resolves,
+ *  which can race with page-ready assertions. We poll for up to 10s. */
+async function dismissProfile(page: Page) {
+  const skip = page.getByTestId("btn-profile-skip");
+  const start = Date.now();
+  while (Date.now() - start < 10_000) {
+    if (await skip.isVisible().catch(() => false)) {
+      await skip.click();
+      await skip.waitFor({ state: "hidden", timeout: 5000 }).catch(() => undefined);
+      return;
+    }
+    await page.waitForTimeout(200);
+  }
+}
+
 /** Dismiss the onboarding tour if it appears (fires on first login). */
 async function dismissTour(page: Page) {
   const skip = page.getByTestId("btn-onboarding-skip");
@@ -40,6 +56,7 @@ async function registerAndLogin(
   await page.getByTestId("input-reg-pdconsent").click();
   await page.getByTestId("btn-register").click();
   await expect(page.getByTestId("btn-add-meal")).toBeVisible({ timeout: 15_000 });
+  await dismissProfile(page);
   await dismissTour(page);
 
   return { username, email, password };
