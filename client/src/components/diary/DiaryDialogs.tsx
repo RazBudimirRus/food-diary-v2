@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface DeleteMealDialogProps {
   open: boolean;
@@ -42,6 +43,8 @@ interface ReportRangeDialogProps {
   onFromChange: (v: string) => void;
   onToChange: (v: string) => void;
   onDownload: () => void;
+  reportFormat: "pdf" | "xlsx";
+  onChangeReportFormat: (f: "pdf" | "xlsx") => void;
 }
 
 export function ReportRangeDialog({
@@ -52,6 +55,8 @@ export function ReportRangeDialog({
   onFromChange,
   onToChange,
   onDownload,
+  reportFormat,
+  onChangeReportFormat,
 }: ReportRangeDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,6 +73,24 @@ export function ReportRangeDialog({
             <Label className="text-xs">По</Label>
             <Input type="date" value={to} onChange={(e) => onToChange(e.target.value)} />
           </div>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Формат</Label>
+          <ToggleGroup
+            type="single"
+            value={reportFormat}
+            onValueChange={(v) => v && onChangeReportFormat(v as "pdf" | "xlsx")}
+            size="sm"
+            variant="outline"
+            className="justify-start"
+          >
+            <ToggleGroupItem value="pdf" aria-label="PDF" data-testid="dialog-toggle-format-pdf">
+              PDF
+            </ToggleGroupItem>
+            <ToggleGroupItem value="xlsx" aria-label="Excel" data-testid="dialog-toggle-format-xlsx">
+              Excel
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>

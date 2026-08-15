@@ -51,6 +51,22 @@ export default function DiaryPage() {
   const [rangeFrom, setRangeFrom] = useState<string>(mskToday());
   const [rangeTo, setRangeTo] = useState<string>(mskToday());
 
+  // v2.29.0: PDF/Excel toggle for report downloads (persisted; default PDF)
+  const REPORT_FORMAT_STORAGE_KEY = "report:format:v1";
+  const [reportFormat, setReportFormatState] = useState<"pdf" | "xlsx">(() => {
+    if (typeof window === "undefined") return "pdf";
+    const stored = window.localStorage.getItem(REPORT_FORMAT_STORAGE_KEY);
+    return stored === "xlsx" ? "xlsx" : "pdf";
+  });
+  const setReportFormat = useCallback((f: "pdf" | "xlsx") => {
+    setReportFormatState(f);
+    try {
+      window.localStorage.setItem(REPORT_FORMAT_STORAGE_KEY, f);
+    } catch {
+      // localStorage may be unavailable (private mode); ignore silently
+    }
+  }, []);
+
   // Profile questionnaire (Phase 17)
   const [showProfileDialog, setShowProfileDialog] = useState(false);
 
@@ -151,8 +167,11 @@ export default function DiaryPage() {
   }
 
   // ── Reports ────────────────────────────────────────────────────────────────
+  const reportExt = reportFormat; // "pdf" | "xlsx"
+  const reportPathSuffix = reportFormat === "pdf" ? "/pdf" : "";
+
   async function downloadReport(date: string, force = false) {
-    const res = await apiRequest("GET", `/api/report/${date}${force ? "?force=1" : ""}`);
+    const res = await apiRequest("GET", `/api/report/${date}${reportPathSuffix}${force ? "?force=1" : ""}`);
     if (res.status === 202) {
       toast({ title: "Заполните итоги дня перед скачиванием отчёта", variant: "destructive" });
       return;
@@ -164,7 +183,7 @@ export default function DiaryPage() {
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `Дневник_питания_${date}.xlsx`;
+    a.download = `Дневник_питания_${date}.${reportExt}`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast({ title: "Файл загружен" });
@@ -175,7 +194,7 @@ export default function DiaryPage() {
       toast({ title: "Ошибка", description: "Дата начала позже даты окончания", variant: "destructive" });
       return;
     }
-    const res = await apiRequest("GET", `/api/report/range?from=${from}&to=${to}`);
+    const res = await apiRequest("GET", `/api/report/range${reportPathSuffix}?from=${from}&to=${to}`);
     if (!res.ok) {
       const d = await res.json().catch(() => ({}) as any);
       toast({ title: "Ошибка", description: d.error || "Не удалось сформировать отчёт", variant: "destructive" });
@@ -184,7 +203,7 @@ export default function DiaryPage() {
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `Дневник_питания_${from}_${to}.xlsx`;
+    a.download = `Дневник_питания_${from}_${to}.${reportExt}`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast({ title: "Файл загружен" });
@@ -274,6 +293,8 @@ export default function DiaryPage() {
           setRangeTo(activeDate);
           setShowRangeDialog(true);
         }}
+        reportFormat={reportFormat}
+        onChangeReportFormat={setReportFormat}
       />
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24 sm:pb-4">
@@ -412,6 +433,8 @@ export default function DiaryPage() {
         onFromChange={setRangeFrom}
         onToChange={setRangeTo}
         onDownload={() => downloadRangeReport(rangeFrom, rangeTo)}
+        reportFormat={reportFormat}
+        onChangeReportFormat={setReportFormat}
       />
 
       <ProfileQuestionnaire open={showProfileDialog} onClose={() => setShowProfileDialog(false)} />

@@ -245,3 +245,195 @@ describe("GET /api/report/range (regression)", () => {
     expect(res.headers["content-type"]).toContain("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   });
 });
+
+// v2.29.0 Doctor PDF routes (NEW-PDF-1)
+
+function bufferParser() {
+  return (res: any, callback: (err: Error | null, body: Buffer) => void) => {
+    const chunks: Buffer[] = [];
+    res.on("data", (chunk: Buffer) => chunks.push(chunk));
+    res.on("end", () => callback(null, Buffer.concat(chunks)));
+  };
+}
+
+describe("GET /api/report/:date/pdf (doctor PDF, single day)", () => {
+  const DAY = "2026-07-10";
+
+  beforeAll(async () => {
+    await seedMeal(DAY);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await request(app).get(`/api/report/${DAY}/pdf`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for invalid date format", async () => {
+    const res = await request(app).get("/api/report/not-a-date/pdf").set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for a day without records", async () => {
+    const res = await request(app).get("/api/report/2019-02-14/pdf").set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 202 when day summary is not filled and force is absent", async () => {
+    const res = await request(app).get(`/api/report/${DAY}/pdf`).set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(202);
+    expect(res.body).toHaveProperty("needsSummary", true);
+  });
+
+  it("returns a valid PDF with force=1", async () => {
+    const res = await request(app)
+      .get(`/api/report/${DAY}/pdf?force=1`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .buffer(true)
+      .parse(bufferParser());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    const cd = decodeURIComponent(res.headers["content-disposition"]);
+    expect(cd).toContain(`Дневник_питания_${DAY}.pdf`);
+    const buf = res.body as Buffer;
+    expect(buf.slice(0, 4).toString()).toBe("%PDF");
+    expect(buf.length).toBeLessThan(500_000);
+  });
+});
+
+describe("GET /api/report/week/pdf (doctor PDF, week)", () => {
+  const DAY = "2026-08-05";
+
+  beforeAll(async () => {
+    await seedMeal(DAY);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await request(app).get(`/api/report/week/pdf?date=${DAY}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for invalid date", async () => {
+    const res = await request(app).get("/api/report/week/pdf?date=nope").set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for empty week", async () => {
+    const res = await request(app)
+      .get("/api/report/week/pdf?date=2020-02-03")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns a valid PDF for a week with data", async () => {
+    const res = await request(app)
+      .get(`/api/report/week/pdf?date=${DAY}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .buffer(true)
+      .parse(bufferParser());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    const cd = decodeURIComponent(res.headers["content-disposition"]);
+    expect(cd).toContain("неделя_");
+    expect(cd).toContain(".pdf");
+    const buf = res.body as Buffer;
+    expect(buf.slice(0, 4).toString()).toBe("%PDF");
+  });
+});
+
+describe("GET /api/report/month/pdf (doctor PDF, month)", () => {
+  const DAY = "2026-09-14";
+
+  beforeAll(async () => {
+    await seedMeal(DAY);
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await request(app).get(`/api/report/month/pdf?date=${DAY}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for invalid date", async () => {
+    const res = await request(app).get("/api/report/month/pdf?date=bad").set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for an empty month", async () => {
+    const res = await request(app)
+      .get("/api/report/month/pdf?date=2019-04-01")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns a valid PDF for a month with data", async () => {
+    const res = await request(app)
+      .get(`/api/report/month/pdf?date=${DAY}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .buffer(true)
+      .parse(bufferParser());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    const cd = decodeURIComponent(res.headers["content-disposition"]);
+    expect(cd).toContain("2026-09.pdf");
+    const buf = res.body as Buffer;
+    expect(buf.slice(0, 4).toString()).toBe("%PDF");
+  });
+});
+
+describe("GET /api/report/range/pdf (doctor PDF, custom range)", () => {
+  const FROM = "2026-10-01";
+  const TO = "2026-10-10";
+
+  beforeAll(async () => {
+    await seedMeal("2026-10-03");
+    await seedMeal("2026-10-08");
+  });
+
+  it("returns 401 without auth", async () => {
+    const res = await request(app).get(`/api/report/range/pdf?from=${FROM}&to=${TO}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for invalid dates", async () => {
+    const res1 = await request(app)
+      .get("/api/report/range/pdf?from=bad&to=2026-10-10")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res1.status).toBe(400);
+
+    const res2 = await request(app)
+      .get("/api/report/range/pdf?from=2026-10-15&to=2026-10-01")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res2.status).toBe(400);
+  });
+
+  it("returns 400 when range exceeds 90 days", async () => {
+    const res = await request(app)
+      .get("/api/report/range/pdf?from=2025-01-01&to=2025-12-31")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 for empty range", async () => {
+    const res = await request(app)
+      .get("/api/report/range/pdf?from=2019-01-01&to=2019-01-31")
+      .set("Authorization", `Bearer ${accessToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it("returns a valid PDF for a range with data", async () => {
+    const res = await request(app)
+      .get(`/api/report/range/pdf?from=${FROM}&to=${TO}`)
+      .set("Authorization", `Bearer ${accessToken}`)
+      .buffer(true)
+      .parse(bufferParser());
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    const cd = decodeURIComponent(res.headers["content-disposition"]);
+    expect(cd).toContain(`Дневник_питания_${FROM}_${TO}.pdf`);
+    const buf = res.body as Buffer;
+    expect(buf.slice(0, 4).toString()).toBe("%PDF");
+  });
+});

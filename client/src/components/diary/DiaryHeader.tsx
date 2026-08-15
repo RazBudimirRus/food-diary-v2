@@ -7,8 +7,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Download,
   LogOut,
@@ -41,6 +44,8 @@ interface DiaryHeaderProps {
   onDownloadWeek: () => void;
   onDownloadMonth: () => void;
   onOpenRangeDialog: () => void;
+  reportFormat: "pdf" | "xlsx";
+  onChangeReportFormat: (f: "pdf" | "xlsx") => void;
 }
 
 export function DiaryHeader({
@@ -59,7 +64,30 @@ export function DiaryHeader({
   onDownloadWeek,
   onDownloadMonth,
   onOpenRangeDialog,
+  reportFormat,
+  onChangeReportFormat,
 }: DiaryHeaderProps) {
+  // v2.29.0: shared toggle used inside both desktop and mobile menus.
+  const FormatToggle = (
+    <div className="px-2 py-1.5">
+      <div className="text-xs text-muted-foreground mb-1">Формат</div>
+      <ToggleGroup
+        type="single"
+        value={reportFormat}
+        onValueChange={(v) => v && onChangeReportFormat(v as "pdf" | "xlsx")}
+        size="sm"
+        variant="outline"
+        className="justify-start"
+      >
+        <ToggleGroupItem value="pdf" aria-label="PDF" data-testid="toggle-format-pdf">
+          PDF
+        </ToggleGroupItem>
+        <ToggleGroupItem value="xlsx" aria-label="Excel" data-testid="toggle-format-xlsx">
+          Excel
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </div>
+  );
   return (
     <header className="sticky top-0 z-10 border-b bg-card/90 backdrop-blur">
       <div className="max-w-2xl mx-auto px-4 py-2 flex flex-col gap-1">
@@ -136,6 +164,8 @@ export function DiaryHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {FormatToggle}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onDownloadDay}>За день ({formatDate(activeDate)})</DropdownMenuItem>
                 <DropdownMenuItem onClick={onDownloadWeek}>За текущую неделю</DropdownMenuItem>
                 <DropdownMenuItem onClick={onDownloadMonth}>За текущий месяц</DropdownMenuItem>
@@ -189,6 +219,8 @@ export function DiaryHeader({
                     </a>
                   </DropdownMenuItem>
                 )}
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Отчёт</DropdownMenuLabel>
+                {FormatToggle}
                 <DropdownMenuItem onClick={onDownloadDay} className="flex items-center gap-2">
                   <Download className="h-4 w-4" /> Отчёт за день
                 </DropdownMenuItem>
