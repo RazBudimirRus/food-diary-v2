@@ -428,6 +428,34 @@ function drawTableHeader(doc: PDFDoc, cols: Column[], y: number, fontSize: numbe
   return y + rowH;
 }
 
+/**
+ * Measure the natural rendered height of a data row so wrapping cell text is
+ * fully visible. The returned value already includes 3pt top and 3pt bottom
+ * padding matching the drawing code below.
+ */
+function measureRowHeight(
+  doc: PDFDoc,
+  cols: Column[],
+  row: Record<string, string>,
+  fontSize: number,
+  minRowH: number,
+): number {
+  useFont(doc);
+  doc.fontSize(fontSize);
+  let maxH = 0;
+  for (const c of cols) {
+    const text = row[c.key] ?? "";
+    if (!text) continue;
+    const h = doc.heightOfString(text, {
+      width: c.width - 8,
+      align: c.align ?? "left",
+    });
+    if (h > maxH) maxH = h;
+  }
+  // 3pt top + 3pt bottom padding
+  return Math.max(minRowH, maxH + 6);
+}
+
 function drawTableRow(
   doc: PDFDoc,
   cols: Column[],
@@ -446,11 +474,11 @@ function drawTableRow(
   useFont(doc);
   doc.fillColor(DARK).fontSize(fontSize);
   for (const c of cols) {
+    // No `height` clip and no `ellipsis` — let text wrap naturally within
+    // the column width. Row height was pre-measured to fit the tallest cell.
     doc.text(row[c.key] ?? "", x + 4, y + 3, {
       width: c.width - 8,
       align: c.align ?? "left",
-      height: rowH - 4,
-      ellipsis: true,
     });
     x += c.width;
   }
@@ -504,47 +532,52 @@ function renderDayPage(doc: PDFDoc, day: Day, meals: Meal[], patientLabel: strin
     y += 14;
   }
   if (day.dayComment) {
-    // Draw label + body without pdfkit `continued: true` chaining, to keep the
-    // paragraph flow control in our own hands and avoid an accidental new page
-    // when the comment is long.
+    // Comment renders as a label + wrapped paragraph. Height is measured
+    // dynamically so long comments never bleed into the meals table.
+    // Comments longer than ~8 lines are soft-clipped to keep A4 layout sane.
+    const LABEL = "Комментарий дня: ";
+    const labelW = 96;
+    const bodyX = MARGIN + labelW;
+    const bodyW = CONTENT_WIDTH - labelW;
+    const commentFont = 8.5;
+    const maxLines = 8;
+
+    useFont(doc);
+    doc.fontSize(commentFont);
+    const oneLineH = doc.heightOfString("Ag", { width: bodyW });
+    const commentH = doc.heightOfString(day.dayComment, { width: bodyW });
+    const clip = commentH > oneLineH * maxLines;
+    const drawH = clip ? oneLineH * maxLines : commentH;
+
     useFont(doc, true);
-    doc.fillColor(DARK).fontSize(8.5).text("Комментарий дня: ", MARGIN, y, {
-      width: 90,
+    doc.fillColor(DARK).fontSize(commentFont).text(LABEL, MARGIN, y, {
+      width: labelW,
       lineBreak: false,
-      ellipsis: true,
     });
     useFont(doc);
-    doc
-      .fillColor(DARK)
-      .fontSize(8.5)
-      .text(truncate(day.dayComment, 220), MARGIN + 92, y, {
-        width: CONTENT_WIDTH - 92,
-        lineBreak: false,
-        ellipsis: true,
-      });
-    y += 14;
+    doc.fillColor(DARK).fontSize(commentFont).text(day.dayComment, bodyX, y, {
+      width: bodyW,
+      height: drawH,
+      ellipsis: clip,
+    });
+    y += drawH + 6;
   }
 
   // Meals table
   const sortedMeals = [...meals].sort((a, b) => (a.tsStart || "").localeCompare(b.tsStart || ""));
   const cols: Column[] = [
-    { header: "Время", key: "time", width: 40 },
-    { header: "Тип", key: "type", width: 56 },
-    { header: "Еда", key: "food", width: 155 },
-    { header: "Напитки / вода", key: "drink", width: 88 },
-    { header: "Голод → Сыт.", key: "hs", width: 56, align: "center" },
-    { header: "Ккал", key: "kcal", width: 32, align: "right" },
-    { header: "Б/Ж/У", key: "kbju", width: 58, align: "right" },
-    { header: "Заметка", key: "ctx", width: CONTENT_WIDTH - (40 + 56 + 155 + 88 + 56 + 32 + 58) },
+    { header: "Время", key: "time", width: 38 },
+    { header: "Тип", key: "type", width: 50 },
+    { header: "Еда", key: "food", width: 130 },
+    { header: "Напитки / вода", key: "drink", width: 80 },
+    { header: "Голод → Сыт.", key: "hs", width: 52, align: "center" },
+    { header: "Ккал", key: "kcal", width: 30, align: "right" },
+    { header: "Б/Ж/У", key: "kbju", width: 54, align: "right" },
+    { header: "Заметка", key: "ctx", width: CONTENT_WIDTH - (38 + 50 + 130 + 80 + 52 + 30 + 54) },
   ];
 
-  // Estimate row height based on how many meals: keep to 1 page A4
-  const availableH = PAGE_HEIGHT - y - 40 /* footer */ - 14; /* table header */
-  const nRows = Math.max(1, sortedMeals.length);
-  const idealRowH = 20;
-  const minRowH = 12;
-  const rowH = Math.max(minRowH, Math.min(idealRowH, Math.floor(availableH / nRows)));
-  const fontSize = rowH >= 18 ? 8.5 : rowH >= 15 ? 7.5 : 6.8;
+  const fontSize = 8.5;
+  const minRowH = 18;
 
   y = drawTableHeader(doc, cols, y, fontSize);
 
@@ -559,31 +592,37 @@ function renderDayPage(doc: PDFDoc, day: Day, meals: Meal[], patientLabel: strin
       });
   } else {
     sortedMeals.forEach((m, i) => {
-      const foodChars = fontSize >= 8 ? 42 : fontSize >= 7.5 ? 46 : 54;
-      const ctxChars = fontSize >= 8 ? 30 : fontSize >= 7.5 ? 34 : 40;
       const kbju = `${fmt0(m.protein)}/${fmt0(m.fat)}/${fmt0(m.carbs)}`;
       const water = mealWaterMl(m);
       const drink = [m.drinkText || "", water ? `${Math.round(water)} мл` : ""].filter(Boolean).join(" · ");
       const hb = m.hungerBefore ?? "—";
       const sa = m.satietyAfter ?? "—";
-      drawTableRow(
-        doc,
-        cols,
-        {
-          time: fmtTimeHM(m.tsStart),
-          type: MEAL_TYPE_RU[m.mealType] ?? m.mealType,
-          food: truncate(m.foodText, foodChars),
-          drink: truncate(drink, 22),
-          hs: `${hb} → ${sa}`,
-          kcal: fmt0(m.calories),
-          kbju,
-          ctx: truncate(m.contextNote, ctxChars),
-        },
-        y,
-        rowH,
-        fontSize,
-        i % 2 === 1,
-      );
+      const row: Record<string, string> = {
+        time: fmtTimeHM(m.tsStart),
+        type: MEAL_TYPE_RU[m.mealType] ?? m.mealType,
+        food: m.foodText || "",
+        drink,
+        hs: `${hb} → ${sa}`,
+        kcal: fmt0(m.calories),
+        kbju,
+        ctx: m.contextNote || "",
+      };
+      const rowH = measureRowHeight(doc, cols, row, fontSize, minRowH);
+
+      // Page break if this row would collide with the footer.
+      const footerReserve = 40;
+      if (y + rowH > PAGE_HEIGHT - footerReserve) {
+        doc.addPage();
+        y = drawHeader(
+          doc,
+          "Дневник питания — отчёт врачу",
+          `За ${fmtDate(day.date)} (${dayOfWeekShort(day.date)}) · продолжение`,
+          patientLabel,
+        );
+        y = drawTableHeader(doc, cols, y + 4, fontSize);
+      }
+
+      drawTableRow(doc, cols, row, y, rowH, fontSize, i % 2 === 1);
       y += rowH;
     });
   }
