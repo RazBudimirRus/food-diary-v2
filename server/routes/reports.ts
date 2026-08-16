@@ -2,11 +2,33 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { generateDayReport, generateRangeReport } from "../excel";
 import { generateAnalyticsPdf } from "../analytics-pdf";
-import { generateDoctorDayPdf, generateDoctorRangePdf } from "../doctor-pdf";
+import { generateDoctorDayPdf, generateDoctorRangePdf, type DoctorPdfOptions } from "../doctor-pdf";
 import { requireAuth, type AuthRequest } from "../auth";
 import { ANALYTICS_MAX_DAYS } from "../config";
 import { paramValue, isDateString, daysBetween } from "./helpers";
 import { getCalendarWeekRange, getCalendarMonthRange, mskToday } from "../../shared/dates";
+
+/**
+ * Build the shared PDF options for the current user: patient FIO from
+ * users.displayName (fallback to username) and personal KBJU norm from
+ * user_profiles (nullable — the PDF renderer handles missing targets).
+ */
+function buildDoctorPdfOptions(userId: number): DoctorPdfOptions {
+  const user = storage.getUserById(userId);
+  const profile = storage.getUserProfile(userId);
+  const patientLabel = user ? user.displayName?.trim() || user.username : null;
+  return {
+    patientLabel,
+    targets: profile
+      ? {
+          kcal: profile.targetKcal ?? null,
+          protein: profile.targetProtein ?? null,
+          fat: profile.targetFat ?? null,
+          carbs: profile.targetCarbs ?? null,
+        }
+      : null,
+  };
+}
 
 export function registerReportsRoutes(app: Express) {
   // ── Phase 21: Расширенные отчёты ────────────────────────────────────────────
@@ -173,7 +195,7 @@ export function registerReportsRoutes(app: Express) {
         mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
       }
 
-      const buf = await generateDoctorRangePdf(days, mealsByDayId, from, to);
+      const buf = await generateDoctorRangePdf(days, mealsByDayId, from, to, buildDoctorPdfOptions(req.user!.id));
       const filename = `Дневник_питания_неделя_${from}_${to}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -206,7 +228,7 @@ export function registerReportsRoutes(app: Express) {
         mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
       }
 
-      const buf = await generateDoctorRangePdf(days, mealsByDayId, from, to);
+      const buf = await generateDoctorRangePdf(days, mealsByDayId, from, to, buildDoctorPdfOptions(req.user!.id));
       const filename = `Дневник_питания_${anchor.slice(0, 7)}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -241,7 +263,7 @@ export function registerReportsRoutes(app: Express) {
         mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
       }
 
-      const buf = await generateDoctorRangePdf(days, mealsByDayId, from, to);
+      const buf = await generateDoctorRangePdf(days, mealsByDayId, from, to, buildDoctorPdfOptions(req.user!.id));
       const filename = `Дневник_питания_${from}_${to}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -269,7 +291,7 @@ export function registerReportsRoutes(app: Express) {
       }
 
       const mealsData = storage.getMealsByDay(day.id);
-      const buf = await generateDoctorDayPdf(day, mealsData);
+      const buf = await generateDoctorDayPdf(day, mealsData, buildDoctorPdfOptions(req.user!.id));
       const filename = `Дневник_питания_${date}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);

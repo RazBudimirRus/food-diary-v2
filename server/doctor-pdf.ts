@@ -83,11 +83,16 @@ const MARGIN = 32;
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
 
 const TEAL = "#01696F";
+const TEAL_LIGHT = "#E6F1F1"; // subtle teal tint for callout backgrounds
 const DARK = "#28251D";
 const MUTED = "#7A7974";
 const BORDER = "#D4D1CA";
 const BG_ROW = "#F7F6F2";
 const WHITE = "#FFFFFF";
+const BAR_BG = "#EEECE6";
+const BAR_OK = "#4A9E5A"; // green — within ±10% of target
+const BAR_WARN = "#E0A64B"; // amber — 10-30% deviation
+const BAR_OVER = "#C25B4A"; // red — >30% over target
 
 const APP_VERSION = getAppVersion();
 
@@ -96,7 +101,7 @@ function getAppVersion(): string {
     const pkgPath = path.join(process.cwd(), "package.json");
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      return pkg.version ?? "2.29.2";
+      return pkg.version ?? "2.29.3";
     }
   } catch {
     /* ignore */
@@ -387,6 +392,229 @@ function truncate(s: string | null | undefined, maxChars: number): string {
   return s.slice(0, Math.max(0, maxChars - 1)).trimEnd() + "…";
 }
 
+// ── KBJU progress bars ───────────────────────────────────────────────────────
+
+interface KbjuBarSpec {
+  label: string;
+  actual: number;
+  target: number | null | undefined;
+  unit: string;
+}
+
+/**
+ * Draw a compact horizontal bar for one KBJU metric.
+ * - If target is null/0 → only the actual value is shown (no bar), so the block
+ *   still renders on profiles with an empty daily norm.
+ * - Otherwise: filled portion = min(actual, target*1.4) / (target*1.4) so a
+ *   large overshoot still visually fits inside the bar.
+ */
+function drawKbjuBar(doc: PDFDoc, x: number, y: number, width: number, spec: KbjuBarSpec): number {
+  const rowH = 24;
+  const labelW = 56;
+  const valueW = 96;
+  const barX = x + labelW;
+  const barW = width - labelW - valueW - 4;
+  const barH = 6;
+  const barY = y + 12;
+
+  // Label (Ккал / Б / Ж / У)
+  useFont(doc, true);
+  doc
+    .fillColor(DARK)
+    .fontSize(8.5)
+    .text(spec.label, x, y + 2, {
+      width: labelW,
+      lineBreak: false,
+    });
+
+  if (spec.target && spec.target > 0) {
+    const pct = spec.actual / spec.target;
+    // Bar fill scaled so overshoots stay visible up to 140% of target.
+    const capped = Math.min(spec.actual, spec.target * 1.4);
+    const fillW = Math.max(1, Math.round((capped / (spec.target * 1.4)) * barW));
+    // Colour by deviation from target.
+    const dev = Math.abs(pct - 1);
+    const color = pct > 1.3 ? BAR_OVER : dev > 0.1 ? BAR_WARN : BAR_OK;
+
+    doc.save();
+    doc.roundedRect(barX, barY, barW, barH, 3).fill(BAR_BG);
+    doc.roundedRect(barX, barY, fillW, barH, 3).fill(color);
+    // Target marker: thin vertical line at target = 100 %.
+    const targetX = barX + Math.round((1 / 1.4) * barW);
+    doc.rect(targetX - 0.5, barY - 2, 1, barH + 4).fill(DARK);
+    doc.restore();
+
+    useFont(doc);
+    doc
+      .fillColor(DARK)
+      .fontSize(8.5)
+      .text(
+        `${fmt0(spec.actual)}/${fmt0(spec.target)} ${spec.unit}  ${Math.round(pct * 100)}%`,
+        x + labelW + barW + 4,
+        y + 2,
+        { width: valueW, lineBreak: false },
+      );
+  } else {
+    // No target configured — show the actual value only, no bar drawn.
+    useFont(doc);
+    doc
+      .fillColor(MUTED)
+      .fontSize(8.5)
+      .text(`${fmt0(spec.actual)} ${spec.unit}  · норма не задана`, barX, y + 2, {
+        width: barW + valueW,
+        lineBreak: false,
+      });
+  }
+
+  return rowH;
+}
+
+/**
+ * Draw the whole KBJU vs target block: 4 bars in a 2×2 grid + a heading.
+ * Returns the y-position after the block.
+ */
+function drawKbjuTargets(
+  doc: PDFDoc,
+  y: number,
+  actual: { kcal: number; protein: number; fat: number; carbs: number },
+  targets: KbjuTargets | null,
+): number {
+  const specs: KbjuBarSpec[] = [
+    { label: "Ккал", actual: actual.kcal, target: targets?.kcal ?? null, unit: "ккал" },
+    { label: "Белки", actual: actual.protein, target: targets?.protein ?? null, unit: "г" },
+    { label: "Жиры", actual: actual.fat, target: targets?.fat ?? null, unit: "г" },
+    { label: "Углеводы", actual: actual.carbs, target: targets?.carbs ?? null, unit: "г" },
+  ];
+
+  // Heading line
+  useFont(doc, true);
+  doc.fillColor(TEAL).fontSize(9).text("Норма КБЖУ vs факт", MARGIN, y, {
+    width: CONTENT_WIDTH,
+    lineBreak: false,
+  });
+  y += 12;
+
+  // 2×2 grid, gap 8pt
+  const colW = (CONTENT_WIDTH - 8) / 2;
+  const leftX = MARGIN;
+  const rightX = MARGIN + colW + 8;
+
+  const rowH1 = Math.max(drawKbjuBar(doc, leftX, y, colW, specs[0]), drawKbjuBar(doc, rightX, y, colW, specs[1]));
+  y += rowH1;
+  const rowH2 = Math.max(drawKbjuBar(doc, leftX, y, colW, specs[2]), drawKbjuBar(doc, rightX, y, colW, specs[3]));
+  y += rowH2 + 4;
+
+  return y;
+}
+
+/**
+ * Bold, high-contrast "Подъём / Отбой / Шаги / Активность" line so the doctor
+ * can find sleep/activity context at a glance.
+ */
+function drawDayMetaLine(doc: PDFDoc, y: number, day: Day): number {
+  const parts: Array<{ label: string; value: string }> = [];
+  if (day.wakeTime) {
+    parts.push({
+      label: "Подъём",
+      value: `${day.wakeTime}${day.wakeDate ? ` (${fmtDate(day.wakeDate)})` : ""}`,
+    });
+  }
+  if (day.sleepTime) {
+    parts.push({
+      label: "Отбой",
+      value: `${day.sleepTime}${day.sleepDate ? ` (${fmtDate(day.sleepDate)})` : ""}`,
+    });
+  }
+  if (day.steps != null) parts.push({ label: "Шаги", value: String(day.steps) });
+  if (day.sportActivity) parts.push({ label: "Активность", value: truncate(day.sportActivity, 60) });
+
+  if (!parts.length) return y;
+
+  const fontSize = 9;
+  const rowH = fontSize + 8;
+
+  // Background stripe for legibility (very subtle teal tint).
+  doc.save();
+  doc.rect(MARGIN, y - 3, CONTENT_WIDTH, rowH).fill(TEAL_LIGHT);
+  doc.restore();
+
+  let x = MARGIN + 6;
+  parts.forEach((p, idx) => {
+    if (idx > 0) {
+      useFont(doc);
+      doc
+        .fillColor(MUTED)
+        .fontSize(fontSize)
+        .text("  ·  ", x, y + 1, { lineBreak: false });
+      x += doc.widthOfString("  ·  ");
+    }
+    useFont(doc, true);
+    doc
+      .fillColor(TEAL)
+      .fontSize(fontSize)
+      .text(`${p.label}: `, x, y + 1, { lineBreak: false });
+    x += doc.widthOfString(`${p.label}: `);
+    useFont(doc, true);
+    doc
+      .fillColor(DARK)
+      .fontSize(fontSize)
+      .text(p.value, x, y + 1, { lineBreak: false });
+    x += doc.widthOfString(p.value);
+  });
+
+  return y + rowH + 2;
+}
+
+/**
+ * Render "Комментарий дня" as a bordered callout box so it visually pops out
+ * of the summary/meta area.
+ */
+function drawCommentBox(doc: PDFDoc, y: number, comment: string): number {
+  const commentFont = 8.5;
+  const paddingX = 10;
+  const paddingY = 8;
+  const labelH = 12;
+  const bodyW = CONTENT_WIDTH - paddingX * 2;
+  const maxLines = 8;
+
+  useFont(doc);
+  doc.fontSize(commentFont);
+  const oneLineH = doc.heightOfString("Ag", { width: bodyW });
+  const rawH = doc.heightOfString(comment, { width: bodyW });
+  const clip = rawH > oneLineH * maxLines;
+  const bodyH = clip ? oneLineH * maxLines : rawH;
+  const boxH = paddingY * 2 + labelH + bodyH;
+
+  // Frame
+  doc.save();
+  doc.roundedRect(MARGIN, y, CONTENT_WIDTH, boxH, 4).fill(TEAL_LIGHT);
+  doc.lineWidth(0.75).strokeColor(TEAL).roundedRect(MARGIN, y, CONTENT_WIDTH, boxH, 4).stroke();
+  doc.restore();
+
+  // Label
+  useFont(doc, true);
+  doc
+    .fillColor(TEAL)
+    .fontSize(commentFont)
+    .text("Комментарий дня", MARGIN + paddingX, y + paddingY, {
+      width: bodyW,
+      lineBreak: false,
+    });
+
+  // Body
+  useFont(doc);
+  doc
+    .fillColor(DARK)
+    .fontSize(commentFont)
+    .text(comment, MARGIN + paddingX, y + paddingY + labelH, {
+      width: bodyW,
+      height: bodyH,
+      ellipsis: clip,
+    });
+
+  return y + boxH + 6;
+}
+
 // ── Table renderer ───────────────────────────────────────────────────────────
 
 interface Column {
@@ -495,7 +723,13 @@ function drawTableRow(
 
 // ── Day report (single A4 page) ──────────────────────────────────────────────
 
-function renderDayPage(doc: PDFDoc, day: Day, meals: Meal[], patientLabel: string | null): void {
+function renderDayPage(
+  doc: PDFDoc,
+  day: Day,
+  meals: Meal[],
+  patientLabel: string | null,
+  targets: KbjuTargets | null = null,
+): void {
   const title = "Дневник питания — отчёт врачу";
   const subtitle = `За ${fmtDate(day.date)} (${dayOfWeekShort(day.date)})`;
   let y = drawHeader(doc, title, subtitle, patientLabel);
@@ -519,48 +753,16 @@ function renderDayPage(doc: PDFDoc, day: Day, meals: Meal[], patientLabel: strin
     { label: "Сытость (ср.)", value: avgSatiety != null ? fmt1(avgSatiety) : "—", unit: "0–10" },
   ]);
 
-  // Day totals meta (wake/sleep times, steps, sport, comment)
-  y += 4;
-  const metaLines: string[] = [];
-  if (day.wakeTime) metaLines.push(`Подъём: ${day.wakeTime}${day.wakeDate ? ` (${fmtDate(day.wakeDate)})` : ""}`);
-  if (day.sleepTime) metaLines.push(`Отбой: ${day.sleepTime}${day.sleepDate ? ` (${fmtDate(day.sleepDate)})` : ""}`);
-  if (day.steps != null) metaLines.push(`Шаги: ${day.steps}`);
-  if (day.sportActivity) metaLines.push(`Активность: ${truncate(day.sportActivity, 60)}`);
-  if (metaLines.length) {
-    useFont(doc);
-    doc.fillColor(MUTED).fontSize(8.5).text(metaLines.join("  ·  "), MARGIN, y, { width: CONTENT_WIDTH });
-    y += 14;
-  }
+  // KBJU targets vs actual (bars). Renders even when targets is null — in that
+  // case each bar shows only the actual value + "норма не задана".
+  y = drawKbjuTargets(doc, y + 6, { kcal, protein, fat, carbs }, targets);
+
+  // Bold sleep/steps/activity strip so the doctor can read it at a glance.
+  y = drawDayMetaLine(doc, y + 2, day);
+
+  // Day comment as a bordered callout box in the report's teal tone.
   if (day.dayComment) {
-    // Comment renders as a label + wrapped paragraph. Height is measured
-    // dynamically so long comments never bleed into the meals table.
-    // Comments longer than ~8 lines are soft-clipped to keep A4 layout sane.
-    const LABEL = "Комментарий дня: ";
-    const labelW = 96;
-    const bodyX = MARGIN + labelW;
-    const bodyW = CONTENT_WIDTH - labelW;
-    const commentFont = 8.5;
-    const maxLines = 8;
-
-    useFont(doc);
-    doc.fontSize(commentFont);
-    const oneLineH = doc.heightOfString("Ag", { width: bodyW });
-    const commentH = doc.heightOfString(day.dayComment, { width: bodyW });
-    const clip = commentH > oneLineH * maxLines;
-    const drawH = clip ? oneLineH * maxLines : commentH;
-
-    useFont(doc, true);
-    doc.fillColor(DARK).fontSize(commentFont).text(LABEL, MARGIN, y, {
-      width: labelW,
-      lineBreak: false,
-    });
-    useFont(doc);
-    doc.fillColor(DARK).fontSize(commentFont).text(day.dayComment, bodyX, y, {
-      width: bodyW,
-      height: drawH,
-      ellipsis: clip,
-    });
-    y += drawH + 6;
+    y = drawCommentBox(doc, y + 2, day.dayComment);
   }
 
   // Meals table
@@ -675,6 +877,7 @@ function renderRangeReport(
   from: string,
   to: string,
   patientLabel: string | null,
+  targets: KbjuTargets | null = null,
 ): void {
   const rows = computePerDay(daysList, mealsByDay);
   const nDays = rows.length || 1;
@@ -733,6 +936,20 @@ function renderRangeReport(
       { label: "Голод ср.", value: avgHunger != null ? fmt1(avgHunger) : "—", unit: "0–10" },
       { label: "Сытость ср.", value: avgSatiety != null ? fmt1(avgSatiety) : "—", unit: "0–10" },
     ]);
+
+    // Averages vs target: on the range summary we compare the mean daily
+    // intake against the personal daily norm.
+    y = drawKbjuTargets(
+      doc,
+      y + 6,
+      {
+        kcal: totKcal / nDays,
+        protein: totProtein / nDays,
+        fat: totFat / nDays,
+        carbs: totCarbs / nDays,
+      },
+      targets,
+    );
 
     first.headerBlockH = y - MARGIN;
     y += 6;
@@ -817,8 +1034,16 @@ function renderRangeReport(
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
+export interface KbjuTargets {
+  kcal?: number | null;
+  protein?: number | null;
+  fat?: number | null;
+  carbs?: number | null;
+}
+
 export interface DoctorPdfOptions {
   patientLabel?: string | null;
+  targets?: KbjuTargets | null;
 }
 
 /** Compact 1-page A4 PDF report for a single day. */
@@ -828,7 +1053,7 @@ export async function generateDoctorDayPdf(day: Day, meals: Meal[], options: Doc
   doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
   const done = new Promise<void>((resolve) => doc.on("end", () => resolve()));
 
-  renderDayPage(doc, day, meals, options.patientLabel ?? null);
+  renderDayPage(doc, day, meals, options.patientLabel ?? null, options.targets ?? null);
   paintFootersOnAllPages(doc, /* legendOnLastOnly */ false);
 
   doc.end();
@@ -850,7 +1075,8 @@ export async function generateDoctorRangePdf(
   const done = new Promise<void>((resolve) => doc.on("end", () => resolve()));
 
   const patientLabel = options.patientLabel ?? null;
-  renderRangeReport(doc, daysList, mealsByDay, from, to, patientLabel);
+  const targets = options.targets ?? null;
+  renderRangeReport(doc, daysList, mealsByDay, from, to, patientLabel, targets);
 
   // Per-day detail pages after the summary. Sort by day.date ascending so the
   // detail flow matches the summary table order.
@@ -858,7 +1084,7 @@ export async function generateDoctorRangePdf(
   for (const day of daysSorted) {
     const meals = mealsByDay.get(day.id) || [];
     doc.addPage();
-    renderDayPage(doc, day, meals, patientLabel);
+    renderDayPage(doc, day, meals, patientLabel, targets);
   }
 
   paintFootersOnAllPages(doc, /* legendOnLastOnly */ true);
