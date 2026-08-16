@@ -2,33 +2,12 @@ import type { Express } from "express";
 import { storage } from "../storage";
 import { generateDayReport, generateRangeReport } from "../excel";
 import { generateAnalyticsPdf } from "../analytics-pdf";
-import { generateDoctorDayPdf, generateDoctorRangePdf, type DoctorPdfOptions } from "../doctor-pdf";
+import { generateDoctorDayPdf, generateDoctorRangePdf } from "../doctor-pdf";
+import { buildDoctorPdfOptions } from "./doctor-pdf-options";
 import { requireAuth, type AuthRequest } from "../auth";
 import { ANALYTICS_MAX_DAYS } from "../config";
 import { paramValue, isDateString, daysBetween } from "./helpers";
 import { getCalendarWeekRange, getCalendarMonthRange, mskToday } from "../../shared/dates";
-
-/**
- * Build the shared PDF options for the current user: patient FIO from
- * users.displayName (fallback to username) and personal KBJU norm from
- * user_profiles (nullable — the PDF renderer handles missing targets).
- */
-function buildDoctorPdfOptions(userId: number): DoctorPdfOptions {
-  const user = storage.getUserById(userId);
-  const profile = storage.getUserProfile(userId);
-  const patientLabel = user ? user.displayName?.trim() || user.username : null;
-  return {
-    patientLabel,
-    targets: profile
-      ? {
-          kcal: profile.targetKcal ?? null,
-          protein: profile.targetProtein ?? null,
-          fat: profile.targetFat ?? null,
-          carbs: profile.targetCarbs ?? null,
-        }
-      : null,
-  };
-}
 
 export function registerReportsRoutes(app: Express) {
   // ── Phase 21: Расширенные отчёты ────────────────────────────────────────────

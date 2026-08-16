@@ -22,6 +22,7 @@ import {
 import { isSmtpConfigured, sendPasswordResetEmail } from "../mail";
 import { generateMfaSetup, verifyMfaToken } from "../mfa";
 import { setCsrfToken } from "../csrf";
+import { buildDoctorPdfOptions } from "./doctor-pdf-options";
 import { loginLimiter, forgotPasswordLimiter } from "./limiters";
 import {
   publicUser,
