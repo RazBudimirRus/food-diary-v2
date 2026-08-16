@@ -101,7 +101,7 @@ function getAppVersion(): string {
     const pkgPath = path.join(process.cwd(), "package.json");
     if (fs.existsSync(pkgPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      return pkg.version ?? "2.29.3";
+      return pkg.version ?? "2.29.4";
     }
   } catch {
     /* ignore */
@@ -493,6 +493,32 @@ function drawKbjuTargets(
     lineBreak: false,
   });
   y += 12;
+
+  // When every target is missing, render a single explanatory callout instead
+  // of a 2×2 grid full of "норма не задана".
+  if (targets === null) {
+    const boxH = 26;
+    doc.save();
+    doc.roundedRect(MARGIN, y, CONTENT_WIDTH, boxH, 4).fillOpacity(1).fillAndStroke(BAR_BG, BORDER);
+    doc.restore();
+    useFont(doc, true);
+    doc
+      .fillColor(TEAL)
+      .fontSize(9)
+      .text("Нормы КБЖУ не заданы", MARGIN + 8, y + 6, {
+        width: CONTENT_WIDTH - 16,
+        lineBreak: false,
+      });
+    useFont(doc);
+    doc
+      .fillColor(MUTED)
+      .fontSize(8.5)
+      .text("Задайте целевые КБЖУ в анкете, чтобы в отчёте появилась шкала наполнения.", MARGIN + 8, y + 6 + 12, {
+        width: CONTENT_WIDTH - 16,
+        lineBreak: false,
+      });
+    return y + boxH + 4;
+  }
 
   // 2×2 grid, gap 8pt
   const colW = (CONTENT_WIDTH - 8) / 2;
@@ -1046,8 +1072,29 @@ export interface DoctorPdfOptions {
   targets?: KbjuTargets | null;
 }
 
+/**
+ * One-line structured log per generated report so we can verify in prod that
+ * the PDF really sees the user's personal КБЖУ norm.
+ */
+function logDoctorPdfOptions(kind: "day" | "range", options: DoctorPdfOptions, extra?: Record<string, unknown>): void {
+  try {
+    const t = options.targets ?? null;
+    const payload = {
+      kind,
+      patient: options.patientLabel ?? null,
+      targetsPresent: t !== null,
+      targets: t ? { kcal: t.kcal, protein: t.protein, fat: t.fat, carbs: t.carbs } : null,
+      ...extra,
+    };
+    console.info(`[doctor-pdf] ${JSON.stringify(payload)}`);
+  } catch {
+    /* logging must never break rendering */
+  }
+}
+
 /** Compact 1-page A4 PDF report for a single day. */
 export async function generateDoctorDayPdf(day: Day, meals: Meal[], options: DoctorPdfOptions = {}): Promise<Buffer> {
+  logDoctorPdfOptions("day", options);
   const doc = new PDFDocument({ size: "A4", margin: MARGIN, autoFirstPage: true, bufferPages: true });
   const chunks: Buffer[] = [];
   doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
@@ -1069,6 +1116,7 @@ export async function generateDoctorRangePdf(
   to: string,
   options: DoctorPdfOptions = {},
 ): Promise<Buffer> {
+  logDoctorPdfOptions("range", options, { from, to, days: daysList.length });
   const doc = new PDFDocument({ size: "A4", margin: MARGIN, autoFirstPage: true, bufferPages: true });
   const chunks: Buffer[] = [];
   doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
