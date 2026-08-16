@@ -95,6 +95,37 @@ describe("PUT /api/user/profile", () => {
   });
 });
 
+describe("GET /api/user/kbju-targets", () => {
+  it("returns 401 without auth", async () => {
+    await request(app).get("/api/user/kbju-targets").expect(401);
+  });
+
+  it("returns patientLabel and null targets when KBJU norms are unset", async () => {
+    const res = await request(app)
+      .get("/api/user/kbju-targets")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200);
+    expect(res.body.patientLabel).toBe("profileuser");
+    expect(res.body.targets).toBeNull();
+  });
+
+  it("returns the same targets object the PDF generator receives", async () => {
+    await request(app)
+      .put("/api/user/profile")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .set("x-csrf-token", csrfToken)
+      .send({ targetKcal: 2200, targetProtein: 120, targetFat: 70, targetCarbs: 250 })
+      .expect(200);
+
+    const res = await request(app)
+      .get("/api/user/kbju-targets")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200);
+    expect(res.body.patientLabel).toBe("profileuser");
+    expect(res.body.targets).toEqual({ kcal: 2200, protein: 120, fat: 70, carbs: 250 });
+  });
+});
+
 // ─── Dietary Restrictions ────────────────────────────────────────────────────
 
 describe("GET /api/user/dietary-restrictions", () => {

@@ -112,6 +112,9 @@ function getAppVersion(): string {
 // ── Data helpers ─────────────────────────────────────────────────────────────
 
 const DAYS_RU_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+/** Matches `hungerLabel` in client/src/lib/diary-utils.ts — not "0 = отсутствует". */
+export const HUNGER_SATIETY_LEGEND =
+  "Голод/сытость: 0 = экстремальный голод, 10 = экстремальное переедание. Подпись врача: ______________________";
 const MEAL_TYPE_RU: Record<string, string> = {
   breakfast: "Завтрак",
   lunch: "Обед",
@@ -300,7 +303,7 @@ function paintFootersOnAllPages(doc: PDFDoc, legendOnLastOnly: boolean): void {
     useFont(doc);
     doc.fillColor(MUTED).fontSize(8);
     if (!legendOnLastOnly || isLast) {
-      doc.text("Голод/сытость: 0 = отсутствует, 10 = максимум. Подпись врача: ______________________", MARGIN, yLine, {
+      doc.text(HUNGER_SATIETY_LEGEND, MARGIN, yLine, {
         width: CONTENT_WIDTH,
         lineBreak: false,
         ellipsis: true,
@@ -1092,20 +1095,37 @@ function logDoctorPdfOptions(kind: "day" | "range", options: DoctorPdfOptions, e
   }
 }
 
-/** Compact 1-page A4 PDF report for a single day. */
-export async function generateDoctorDayPdf(day: Day, meals: Meal[], options: DoctorPdfOptions = {}): Promise<Buffer> {
-  logDoctorPdfOptions("day", options);
+/** Collect pdfkit output and fail the promise on stream errors (see analytics-pdf.ts). */
+async function renderPdfToBuffer(render: (doc: PDFDoc) => void): Promise<Buffer> {
   const doc = new PDFDocument({ size: "A4", margin: MARGIN, autoFirstPage: true, bufferPages: true });
   const chunks: Buffer[] = [];
   doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-  const done = new Promise<void>((resolve) => doc.on("end", () => resolve()));
+  const done = new Promise<void>((resolve, reject) => {
+    doc.on("end", () => resolve());
+    doc.on("error", reject);
+  });
+  try {
+    render(doc);
+    doc.end();
+    await done;
+    return Buffer.concat(chunks);
+  } catch (err) {
+    try {
+      doc.end();
+    } catch {
+      /* already ended or failed */
+    }
+    throw err;
+  }
+}
 
-  renderDayPage(doc, day, meals, options.patientLabel ?? null, options.targets ?? null);
-  paintFootersOnAllPages(doc, /* legendOnLastOnly */ false);
-
-  doc.end();
-  await done;
-  return Buffer.concat(chunks);
+/** Compact 1-page A4 PDF report for a single day. */
+export async function generateDoctorDayPdf(day: Day, meals: Meal[], options: DoctorPdfOptions = {}): Promise<Buffer> {
+  logDoctorPdfOptions("day", options);
+  return renderPdfToBuffer((doc) => {
+    renderDayPage(doc, day, meals, options.patientLabel ?? null, options.targets ?? null);
+    paintFootersOnAllPages(doc, /* legendOnLastOnly */ false);
+  });
 }
 
 /** Multi-page A4 PDF for a date range (week/month/custom). */
@@ -1117,27 +1137,20 @@ export async function generateDoctorRangePdf(
   options: DoctorPdfOptions = {},
 ): Promise<Buffer> {
   logDoctorPdfOptions("range", options, { from, to, days: daysList.length });
-  const doc = new PDFDocument({ size: "A4", margin: MARGIN, autoFirstPage: true, bufferPages: true });
-  const chunks: Buffer[] = [];
-  doc.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-  const done = new Promise<void>((resolve) => doc.on("end", () => resolve()));
+  return renderPdfToBuffer((doc) => {
+    const patientLabel = options.patientLabel ?? null;
+    const targets = options.targets ?? null;
+    renderRangeReport(doc, daysList, mealsByDay, from, to, patientLabel, targets);
 
-  const patientLabel = options.patientLabel ?? null;
-  const targets = options.targets ?? null;
-  renderRangeReport(doc, daysList, mealsByDay, from, to, patientLabel, targets);
+    // Per-day detail pages after the summary. Sort by day.date ascending so the
+    // detail flow matches the summary table order.
+    const daysSorted = [...daysList].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    for (const day of daysSorted) {
+      const meals = mealsByDay.get(day.id) || [];
+      doc.addPage();
+      renderDayPage(doc, day, meals, patientLabel, targets);
+    }
 
-  // Per-day detail pages after the summary. Sort by day.date ascending so the
-  // detail flow matches the summary table order.
-  const daysSorted = [...daysList].sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  for (const day of daysSorted) {
-    const meals = mealsByDay.get(day.id) || [];
-    doc.addPage();
-    renderDayPage(doc, day, meals, patientLabel, targets);
-  }
-
-  paintFootersOnAllPages(doc, /* legendOnLastOnly */ true);
-
-  doc.end();
-  await done;
-  return Buffer.concat(chunks);
+    paintFootersOnAllPages(doc, /* legendOnLastOnly */ true);
+  });
 }

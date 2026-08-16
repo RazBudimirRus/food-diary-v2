@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Bell, Flame, Clock } from "lucide-react";
+import { Bell, Flame, Clock, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { getCalendarWeekRange, getCalendarMonthRange, mskToday } from "@shared/dates";
 import { apiCall } from "./doctorUtils";
 import type { Meal, Patient } from "./types";
+
+type PdfKind = "day" | "week" | "month";
 
 interface PatientDiaryTabProps {
   selectedPatient: Patient | null;
@@ -31,6 +36,7 @@ export function PatientDiaryTab({
   setNotifyBody,
 }: PatientDiaryTabProps) {
   const { toast } = useToast();
+  const [downloading, setDownloading] = useState<PdfKind | null>(null);
 
   const { data: patientsData } = useQuery<{ patients: Patient[] }>({
     queryKey: ["/api/doctor/patients"],
@@ -52,6 +58,52 @@ export function PatientDiaryTab({
     onSuccess: (d) => toast({ title: `Отправлено: ${d.sent} уведомлений` }),
     onError: (e: Error) => toast({ title: "Ошибка", description: e.message, variant: "destructive" }),
   });
+
+  async function downloadPatientPdf(kind: PdfKind) {
+    if (!selectedPatient || downloading) return;
+    const patientId = selectedPatient.user.id;
+    let path: string;
+    let filename: string;
+    if (kind === "day") {
+      path = `/api/doctor/patients/${patientId}/report/${diaryDate}/pdf`;
+      filename = `Дневник_питания_${diaryDate}.pdf`;
+    } else {
+      const today = mskToday();
+      const range = kind === "week" ? getCalendarWeekRange(diaryDate) : getCalendarMonthRange(diaryDate);
+      const to = range.to > today ? today : range.to;
+      path = `/api/doctor/patients/${patientId}/report/range/pdf?from=${range.from}&to=${to}`;
+      filename = `Дневник_питания_${range.from}_${to}.pdf`;
+    }
+
+    setDownloading(kind);
+    try {
+      const res = await apiRequest("GET", path);
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        toast({
+          title: "Ошибка",
+          description: d.error || "Не удалось сформировать отчёт",
+          variant: "destructive",
+        });
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "PDF загружен" });
+    } catch (e) {
+      toast({
+        title: "Ошибка",
+        description: e instanceof Error ? e.message : "Не удалось сформировать отчёт",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -83,6 +135,43 @@ export function PatientDiaryTab({
 
       {selectedPatient && (
         <>
+          <Card>
+            <CardContent className="px-4 py-3 space-y-2">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <Download className="h-4 w-4" /> PDF-отчёт для врача
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={downloading !== null}
+                  onClick={() => downloadPatientPdf("day")}
+                  data-testid="btn-doctor-pdf-day"
+                >
+                  {downloading === "day" ? "Формирование..." : "За день"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={downloading !== null}
+                  onClick={() => downloadPatientPdf("week")}
+                  data-testid="btn-doctor-pdf-week"
+                >
+                  {downloading === "week" ? "Формирование..." : "За неделю"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={downloading !== null}
+                  onClick={() => downloadPatientPdf("month")}
+                  data-testid="btn-doctor-pdf-month"
+                >
+                  {downloading === "month" ? "Формирование..." : "За месяц"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {diaryLoading && <p className="text-sm text-muted-foreground text-center py-6">Загрузка...</p>}
           {!diaryLoading && !diaryData?.meals?.length && (
             <p className="text-sm text-muted-foreground text-center py-6">Нет записей за этот день</p>

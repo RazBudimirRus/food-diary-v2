@@ -366,3 +366,100 @@ describe("Doctor КБЖУ plans", () => {
     expect(list.body.plans.some((p: { id: number }) => p.id === planId)).toBe(false);
   });
 });
+
+describe("GET /api/doctor/patients/:id/report PDF", () => {
+  const REPORT_DATE = "2026-07-04";
+
+  async function seedPatientMeal(date: string) {
+    const csrf = await getCsrf(patientToken);
+    const res = await request(app)
+      .post("/api/meals")
+      .set("Authorization", `Bearer ${patientToken}`)
+      .set("x-csrf-token", csrf)
+      .send({
+        date,
+        tsStart: "12:30",
+        mealType: "обед",
+        foodText: "Обед пациента для PDF",
+        hungerBefore: 4,
+        satietyAfter: 7,
+        calories: 500,
+        protein: 35,
+        fat: 15,
+        carbs: 45,
+      });
+    expect(res.status).toBe(200);
+  }
+
+  it("returns 401 without auth", async () => {
+    await request(app).get(`/api/doctor/patients/${patientId}/report/${REPORT_DATE}/pdf`).expect(401);
+  });
+
+  it("returns 403 for a regular user", async () => {
+    await request(app)
+      .get(`/api/doctor/patients/${patientId}/report/${REPORT_DATE}/pdf`)
+      .set("Authorization", `Bearer ${patientToken}`)
+      .expect(403);
+  });
+
+  it("returns 403 for an unassigned patient", async () => {
+    const other = await register("pdf_unassigned_patient");
+    await request(app)
+      .get(`/api/doctor/patients/${other.user.id}/report/${REPORT_DATE}/pdf`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .expect(403);
+  });
+
+  it("returns 404 when the assigned patient has no day", async () => {
+    await request(app)
+      .get(`/api/doctor/patients/${patientId}/report/2026-01-01/pdf`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .expect(404);
+  });
+
+  it("returns a PDF for an assigned patient day without requiring summaryFilled", async () => {
+    await seedPatientMeal(REPORT_DATE);
+    const res = await request(app)
+      .get(`/api/doctor/patients/${patientId}/report/${REPORT_DATE}/pdf`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    expect(Buffer.from(res.body).slice(0, 4).toString()).toBe("%PDF");
+  });
+
+  it("returns a range PDF for an assigned patient", async () => {
+    const res = await request(app)
+      .get(`/api/doctor/patients/${patientId}/report/range/pdf?from=2026-07-01&to=2026-07-07`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        res.on("end", () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    expect(Buffer.from(res.body).slice(0, 4).toString()).toBe("%PDF");
+  });
+
+  it("returns 400 for invalid range dates", async () => {
+    await request(app)
+      .get(`/api/doctor/patients/${patientId}/report/range/pdf?from=nope&to=2026-07-07`)
+      .set("Authorization", `Bearer ${doctorToken}`)
+      .expect(400);
+  });
+
+  it("does not let /range/pdf get swallowed by /:date/pdf", async () => {
+    const res = await request(app)
+      .get(`/api/doctor/patients/${patientId}/report/range/pdf?from=2026-07-01&to=2026-07-07`)
+      .set("Authorization", `Bearer ${doctorToken}`);
+    expect(res.status).not.toBe(400);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+  });
+});

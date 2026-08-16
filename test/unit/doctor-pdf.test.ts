@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Day, Meal } from "@shared/schema";
-import { generateDoctorDayPdf, generateDoctorRangePdf } from "../../server/doctor-pdf";
+import { generateDoctorDayPdf, generateDoctorRangePdf, HUNGER_SATIETY_LEGEND } from "../../server/doctor-pdf";
 
 function makeDay(overrides: Partial<Day> = {}): Day {
   return {
@@ -78,6 +78,12 @@ describe("generateDoctorDayPdf", () => {
     const buf = await generateDoctorDayPdf(day, [makeMeal()]);
     const asString = Buffer.from(buf).toString("latin1");
     expect(asString).toContain("Inter");
+  });
+
+  it("uses the diary hunger/satiety scale in the footer legend", () => {
+    expect(HUNGER_SATIETY_LEGEND).toMatch(/экстремальный голод/);
+    expect(HUNGER_SATIETY_LEGEND).toMatch(/экстремальное переедание/);
+    expect(HUNGER_SATIETY_LEGEND).not.toMatch(/отсутствует/);
   });
 
   it("supports patientLabel option", async () => {

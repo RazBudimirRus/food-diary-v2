@@ -1,13 +1,15 @@
-import type { Express, NextFunction } from "express";
+import type { Express, NextFunction, Response } from "express";
 import webpush from "web-push";
 import { storage, getMskDate } from "../storage";
-import { insertDoctorPlanSchema } from "@shared/schema";
+import { insertDoctorPlanSchema, type Meal } from "@shared/schema";
 import { requireAuth, type AuthRequest } from "../auth";
 import { auditLog } from "../audit";
 import { requireDoctor } from "./middleware";
-import { AUDIT_LOG_PAGE_SIZE } from "../config";
-import { assertDoctorAssigned, paramValue, publicUser } from "./helpers";
+import { AUDIT_LOG_PAGE_SIZE, ANALYTICS_MAX_DAYS } from "../config";
+import { assertDoctorAssigned, paramValue, publicUser, isDateString, daysBetween } from "./helpers";
 import { ApiError } from "../errors";
+import { generateDoctorDayPdf, generateDoctorRangePdf } from "../doctor-pdf";
+import { buildDoctorPdfOptions } from "./doctor-pdf-options";
 
 // ── VAPID init (Web Push) ────────────────────────────────────────────────────
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -132,6 +134,93 @@ export function registerDoctorRoutes(app: Express) {
       next(e);
     }
   });
+
+  // ── v2.29.x: doctor PDF export for an assigned patient ──────────────────────
+  // Range must be registered BEFORE /report/:date/pdf (BUG-01).
+  // Doctors are not gated on summaryFilled — they need the diary even if
+  // the patient skipped «Итоги дня».
+
+  function mealsByDayMap(days: { id: number }[]): Map<number, Meal[]> {
+    const mealsByDayId = new Map<number, Meal[]>();
+    for (const day of days) {
+      mealsByDayId.set(day.id, storage.getMealsByDay(day.id));
+    }
+    return mealsByDayId;
+  }
+
+  function sendPdf(res: Response, buf: Buffer, filename: string): void {
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(buf);
+  }
+
+  /**
+   * GET /api/doctor/patients/:id/report/range/pdf?from=YYYY-MM-DD&to=YYYY-MM-DD
+   */
+  app.get(
+    "/api/doctor/patients/:id/report/range/pdf",
+    requireAuth,
+    requireDoctor,
+    async (req: AuthRequest, res, next: NextFunction) => {
+      try {
+        const patientId = parseInt(paramValue(req.params.id), 10);
+        const doctor = storage.getDoctorByUserId(req.user!.id);
+        if (!doctor) throw ApiError.forbidden("Врач не найден");
+        assertDoctorAssigned(doctor.id, patientId);
+
+        const from = paramValue(req.query.from as string);
+        const to = paramValue(req.query.to as string);
+        if (!isDateString(from) || !isDateString(to)) {
+          throw ApiError.badRequest("Некорректные даты. Формат: YYYY-MM-DD");
+        }
+        if (from > to) throw ApiError.badRequest("Дата начала позже даты окончания");
+        if (daysBetween(from, to) > ANALYTICS_MAX_DAYS) {
+          throw ApiError.badRequest(`Максимальный период для отчёта — ${ANALYTICS_MAX_DAYS} дней`);
+        }
+
+        const days = storage.getDaysInRange(patientId, from, to);
+        if (!days.length) throw ApiError.notFound("За указанный период записей нет");
+
+        const buf = await generateDoctorRangePdf(days, mealsByDayMap(days), from, to, buildDoctorPdfOptions(patientId));
+        void auditLog(req, "doctor.download_report", patientId, { from, to });
+        sendPdf(res, buf, `Дневник_питания_${from}_${to}.pdf`);
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+
+  /**
+   * GET /api/doctor/patients/:id/report/:date/pdf
+   * Always generates even if summaryFilled is false (unlike the patient's own day route).
+   */
+  app.get(
+    "/api/doctor/patients/:id/report/:date/pdf",
+    requireAuth,
+    requireDoctor,
+    async (req: AuthRequest, res, next: NextFunction) => {
+      try {
+        const patientId = parseInt(paramValue(req.params.id), 10);
+        const doctor = storage.getDoctorByUserId(req.user!.id);
+        if (!doctor) throw ApiError.forbidden("Врач не найден");
+        assertDoctorAssigned(doctor.id, patientId);
+
+        const date = paramValue(req.params.date);
+        if (!isDateString(date)) {
+          throw ApiError.badRequest("Некорректная дата. Формат: YYYY-MM-DD");
+        }
+        const day = storage.getDayByDate(patientId, date);
+        if (!day) throw ApiError.notFound("День не найден");
+
+        const mealsData = storage.getMealsByDay(day.id);
+        const buf = await generateDoctorDayPdf(day, mealsData, buildDoctorPdfOptions(patientId));
+        void auditLog(req, "doctor.download_report", patientId, { date });
+        sendPdf(res, buf, `Дневник_питания_${date}.pdf`);
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
 
   /** POST /api/doctor/patients/:id/notify (Web Push) */
   app.post(

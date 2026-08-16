@@ -306,6 +306,18 @@ export function registerAuthRoutes(app: Express) {
   });
 
   /**
+   * GET /api/user/kbju-targets
+   * Diagnostic: the exact `{ patientLabel, targets }` object the doctor PDF generator receives.
+   */
+  app.get("/api/user/kbju-targets", requireAuth, (req: AuthRequest, res, next: NextFunction) => {
+    try {
+      res.json(buildDoctorPdfOptions(req.user!.id));
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /**
    * UX-20: Формула Миффлина-Сан Жеор — серверный пересчёт КБЖУ.
    * Используется, когда антропометрические поля меняются и kbjuManual === false.
    */
